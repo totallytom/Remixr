@@ -25,3 +25,14 @@ dist-ssr
 
 .env
 .env.local
+
+# Hidden from GitHub
+.claude/
+.cursor/
+api/
+docs/
+sql/
+scripts/
+supabase/
+DINO.png
+LITTLE PRINCE.png
