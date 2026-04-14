@@ -1,0 +1,4 @@
+# Remixr UI Standards
+- Prefer unified, intelligent components over multi-tab layouts.
+- Use 'Progressive Disclosure': only show album fields when multiple files are detected.
+- Maintain the 'SlothUI' layout: Sidebar on left, Main content in a padded white container, Form fields on the right.
