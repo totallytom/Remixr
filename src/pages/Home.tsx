@@ -64,10 +64,10 @@ const Home: React.FC = () => {
           { data: playHistory, error: playHistoryError },
           { data: publishedData, error: publishedError },
         ] = await Promise.all([
-          supabase.from('tracks').select('id, title, artist, album, cover, genre, audio_url, duration, price, bpm, created_at').limit(8).order('created_at', { ascending: false }),
-          supabase.from('tracks').select('id, title, artist, album, cover, genre, audio_url, duration, price, bpm, created_at').order('play_count', { ascending: false }).limit(4),
-          supabase.from('tracks').select('id, title, artist, album, cover, genre, audio_url, duration, price, likes, liked_by').order('likes', { ascending: false, nullsFirst: false }).limit(10),
-          supabase.from('tracks').select('id, title, artist, album, cover, genre, audio_url, duration, price, bpm, created_at').order('created_at', { ascending: false }).limit(12),
+            supabase.from('tracks').select('id, title, artist, album, cover, genre, audio_url, duration, price, created_at').limit(8).order('created_at', { ascending: false }),
+            supabase.rpc('get_popular_tracks', { limit_count: 4 }),
+            supabase.from('tracks').select('id, title, artist, album, cover, genre, audio_url, duration, price, likes, liked_by').order('likes', { ascending: false, nullsFirst: false }).limit(10),
+            supabase.from('tracks').select('id, title, artist, album, cover, genre, audio_url, duration, price, created_at').order('created_at', { ascending: false }).limit(12),
           user
             ? supabase.from('user_play_history').select(`played_at, tracks:track_id (id, title, artist, album, cover, genre, audio_url, duration)`).eq('user_id', user.id).order('played_at', { ascending: false }).limit(50)
             : Promise.resolve({ data: null, error: null }),
@@ -95,7 +95,6 @@ const Home: React.FC = () => {
             price: t.price || 0,
             boosted: false,
             createdAt: t.created_at ? new Date(t.created_at) : undefined,
-            bpm: t.bpm != null ? Number(t.bpm) : undefined,
           })));
         }
 
@@ -116,7 +115,6 @@ const Home: React.FC = () => {
             price: t.price || 0,
             boosted: false,
             createdAt: t.created_at ? new Date(t.created_at) : undefined,
-            bpm: t.bpm != null ? Number(t.bpm) : undefined,
           })));
         }
 
@@ -164,7 +162,6 @@ const Home: React.FC = () => {
             price: t.price || 0,
             boosted: false,
             createdAt: t.created_at ? new Date(t.created_at) : undefined,
-            bpm: t.bpm != null ? Number(t.bpm) : undefined,
           })));
         }
 

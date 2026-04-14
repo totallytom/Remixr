@@ -5,7 +5,7 @@ import ThemeProvider from './components/ThemeProvider';
 import { AlertProvider } from './contexts/AlertContext';
 import AlertToast from './components/AlertToast';
 import {BrowserRouter as Router, Routes, Route} from 'react-router-dom';
-import { motion, AnimatePresence } from 'framer-motion';
+import { AnimatePresence, motion } from 'framer-motion';
 import Sidebar from './components/layout/Sidebar';
 
 // Lazy-loaded pages (code splitting: each route loads on demand)
@@ -30,12 +30,10 @@ function App() {
   const store = useStore() || {};
 
   const {
-    isAuthenticated = false,
-    user = null,
+    isAuthInitialized = false,
     setChats = () => {},
     sidebarOpen = false,
     isSettingsOpen = false,
-    setSettingsOpen = () => {},
 
     player = {
       isPlaying: false,
@@ -46,8 +44,6 @@ function App() {
     },
 
     initializeAudio = () => {},
-    playTrack = () => {},
-    setCurrentTrack = () => {},
     pauseTrack = () => {},
     resumeTrack = () => {},
     skipToNext = () => {},
@@ -58,8 +54,6 @@ function App() {
 
     checkAuth = () => {},
     initializeAuth = () => () => {},
-
-    setQueue = () => {},
 
     theme = {
       customBackgroundColor: null
@@ -104,6 +98,22 @@ function App() {
   const handleSeek = (time) => {
     seekTo(time);
   };
+
+  if (!isAuthInitialized) {
+    return (
+      <ThemeProvider>
+        <div className="flex h-screen bg-dark-900 items-center justify-center">
+          <div className="flex items-center space-x-2 text-white/60">
+            <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24" fill="none">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/>
+            </svg>
+            <span className="text-sm">Loading...</span>
+          </div>
+        </div>
+      </ThemeProvider>
+    );
+  }
 
   return (
     <ThemeProvider>

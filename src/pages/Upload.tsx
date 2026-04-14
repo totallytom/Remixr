@@ -19,8 +19,8 @@ import { useAlerts } from '../contexts/AlertContext';
 import { supabase } from '../services/supabase';
 import { checkCopyright } from '../services/copyrightService';
 import { removeUploadedFilesFromStorage } from '../services/copyrightCleanup';
-import dinoImg from '../../DINO.png';
-import littlePrinceImg from '../../LITTLE PRINCE.png';
+import dinoImg from '../../public/logo/DINO.png';
+import littlePrinceImg from '../../public/logo/LITTLE PRINCE.png';
 import { SnippetEditor } from '../components/music/SnippetEditor';
 import { transcodeWavOrAiffToM4a, shouldTranscodeToM4a } from '../utils/transcodeAudio';
 

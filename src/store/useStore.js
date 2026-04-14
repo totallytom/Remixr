@@ -9,6 +9,7 @@ export const useStore = create((set, get) => ({
   // --------------------
   user: null,
   isAuthenticated: false,
+  isAuthInitialized: false,
 
   player: {
     currentTrack: null,
@@ -332,7 +333,7 @@ export const useStore = create((set, get) => ({
       lastUserId = incomingId;
       clearTimeout(timer);
       timer = setTimeout(() => {
-        set({ user, isAuthenticated: !!user });
+        set({ user, isAuthenticated: !!user, isAuthInitialized: true });
       }, 50);
     });
 

@@ -472,7 +472,7 @@ export class AuthService {
         return;
       }
 
-      if (event === 'SIGNED_OUT') {
+      if (event === 'SIGNED_OUT' || (event === 'INITIAL_SESSION' && !session)) {
         callback(null);
       }
 
