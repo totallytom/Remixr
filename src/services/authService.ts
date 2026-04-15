@@ -2,6 +2,7 @@ import { supabase } from './supabase';
 import { User } from '../store/useStore';
 import { DEFAULT_AVATAR_URL } from '../utils/avatar';
 
+console.log("!!! AUTH SERVICE FILE LOADED !!!");
 export interface AuthError {
   message: string;
   status?: number;
@@ -21,9 +22,34 @@ export interface LoginData {
   password: string;
 }
 
+const PROFILE_CACHE_KEY = 'sypher_cached_profile';
+
 export class AuthService {
   private static now(): number {
     return typeof performance !== 'undefined' ? performance.now() : Date.now();
+  }
+
+  private static getCachedProfile(userId: string): User | null {
+    try {
+      const raw = localStorage.getItem(PROFILE_CACHE_KEY);
+      if (!raw) return null;
+      const cached = JSON.parse(raw) as User;
+      return cached?.id === userId ? cached : null;
+    } catch {
+      return null;
+    }
+  }
+
+  private static setCachedProfile(user: User): void {
+    try {
+      localStorage.setItem(PROFILE_CACHE_KEY, JSON.stringify(user));
+    } catch {}
+  }
+
+  private static clearCachedProfile(): void {
+    try {
+      localStorage.removeItem(PROFILE_CACHE_KEY);
+    } catch {}
   }
 
   private static logDuration(label: string, start: number) {
@@ -437,47 +463,85 @@ export class AuthService {
 
   static onAuthStateChange(callback: (user: User | null) => void) {
     return supabase.auth.onAuthStateChange(async (event, session) => {
+      console.log(`[AUTH] Event: ${event} | Session: ${!!session} | Time: ${new Date().toLocaleTimeString()}`);
       console.log('Auth state change:', event, session?.user?.id);
       
       const shouldFetchProfile =
-        (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'INITIAL_SESSION') &&
+        (event === 'SIGNED_IN' || event === 'INITIAL_SESSION') &&
         session?.user;
 
       if (shouldFetchProfile) {
-        const profileFetchStart = this.now();
-        try {
-          const { data: profileData, error } = await supabase
-            .from('users')
-            .select('*')
-            .eq('id', session.user.id)
-            .maybeSingle();
-          this.logDuration(`auth ${event} fetch profile`, profileFetchStart);
-
-          if (error) {
-            console.error('Error getting user profile:', error);
-            callback(null);
-            return;
-          }
-
-          if (profileData) {
-            callback(this.transformUser(profileData));
-          } else {
-            console.log('User profile not found in database');
-            callback(null);
-          }
-        } catch (error) {
-          console.error('Error getting user profile:', error);
-          callback(null);
+        // 1. Show cached profile instantly so the UI is never blocked
+        const cached = this.getCachedProfile(session.user.id);
+        if (cached) {
+          console.log('[AUTH] Serving cached profile immediately');
+          callback(cached);
         }
+
+        // 2. Use setTimeout(0) to break the "Supabase Deadlock"
+        // This lets the Auth listener finish its execution before starting the DB fetch
+        setTimeout(async () => {
+          const profileFetchStart = this.now();
+          try {
+            console.log('[AUTH] Background fetch starting for:', session.user.id);
+            const { data: profileData, error } = await supabase
+              .from('users')
+              .select('*')
+              .eq('id', session.user.id)
+              .maybeSingle();
+
+            this.logDuration(`auth ${event} background fetch`, profileFetchStart);
+
+            if (error || !profileData) {
+              console.warn('Background profile fetch failed:', error);
+              if (!cached) callback(null);
+              return;
+            }
+
+            const freshUser = this.transformUser(profileData);
+            this.setCachedProfile(freshUser);
+
+            // 3. Only update UI if the data is actually different
+            if (!cached || JSON.stringify(freshUser) !== JSON.stringify(cached)) {
+              console.log('[AUTH] Profile updated from background fetch');
+              callback(freshUser);
+            }
+          } catch (error) {
+            console.error('Background profile fetch threw error:', error);
+            if (!cached) callback(null);
+          }
+        }, 0);
+
         return;
       }
 
-      if (event === 'SIGNED_OUT' || (event === 'INITIAL_SESSION' && !session)) {
+      if (event === 'SIGNED_OUT') {
+        this.clearCachedProfile();
         callback(null);
+        return;
+      }
+
+      if (event === 'INITIAL_SESSION' && !session) {
+        // Don't nuke the cache here — Supabase may fire INITIAL_SESSION before it has
+        // finished hydrating the session from storage (cold-boot race condition).
+        // Only clear on an explicit SIGNED_OUT above.
+        try {
+          const raw = localStorage.getItem(PROFILE_CACHE_KEY);
+          if (raw) {
+            const cached = JSON.parse(raw) as User;
+            if (cached?.id) {
+              console.log('[AUTH] No active session on init, serving cached profile while session resolves');
+              callback(cached);
+              return;
+            }
+          }
+        } catch {}
+        callback(null);
+        return;
       }
 
       if (event === 'TOKEN_REFRESH_FAILED') {
-        // Stale/invalid session — clear it so the app doesn't hang waiting for a refresh that will never succeed
+        this.clearCachedProfile();
         await supabase.auth.signOut();
         callback(null);
       }

@@ -9,7 +9,7 @@ export const useStore = create((set, get) => ({
   // --------------------
   user: null,
   isAuthenticated: false,
-  isAuthInitialized: false,
+  isAuthInitialized: true,
 
   player: {
     currentTrack: null,
@@ -324,21 +324,17 @@ export const useStore = create((set, get) => ({
   },
 
   initializeAuth: () => {
-    let timer;
     let lastUserId = undefined;
+
     const { data } = AuthService.onAuthStateChange((user) => {
       // Skip duplicate events for the same user (Supabase fires SIGNED_IN twice)
       const incomingId = user?.id ?? null;
       if (incomingId === lastUserId) return;
       lastUserId = incomingId;
-      clearTimeout(timer);
-      timer = setTimeout(() => {
-        set({ user, isAuthenticated: !!user, isAuthInitialized: true });
-      }, 50);
+      set({ user, isAuthenticated: !!user, isAuthInitialized: true });
     });
 
     return () => {
-      clearTimeout(timer);
       data?.subscription?.unsubscribe();
     };
   },

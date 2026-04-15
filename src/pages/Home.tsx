@@ -40,7 +40,7 @@ const Home: React.FC = () => {
   const [isLoadingAlbums, setIsLoadingAlbums] = useState(false);
   const navigate = useNavigate();
 
-  // Load recommendations and recent tracks
+  // Load public data once on mount (does not depend on auth state)
   useEffect(() => {
     let cancelled = false;
 
@@ -49,31 +49,21 @@ const Home: React.FC = () => {
       if (!cancelled) setIsLoading(false);
     }, 12000);
 
-    const loadHomeData = async () => {
+    const loadPublicData = async () => {
       try {
         setIsLoadingRecommendations(true);
-        setIsLoadingPublished(true);
         setIsLoadingTopCharts(true);
 
-        // Fire all queries in parallel
         const [
           { data: recommendedData, error: recommendedError },
           { data: popularData, error: popularError },
           { data: topChartsData, error: topChartsError },
           { data: publicData, error: publicErr },
-          { data: playHistory, error: playHistoryError },
-          { data: publishedData, error: publishedError },
         ] = await Promise.all([
-            supabase.from('tracks').select('id, title, artist, album, cover, genre, audio_url, duration, price, created_at').limit(8).order('created_at', { ascending: false }),
-            supabase.rpc('get_popular_tracks', { limit_count: 4 }),
-            supabase.from('tracks').select('id, title, artist, album, cover, genre, audio_url, duration, price, likes, liked_by').order('likes', { ascending: false, nullsFirst: false }).limit(10),
-            supabase.from('tracks').select('id, title, artist, album, cover, genre, audio_url, duration, price, created_at').order('created_at', { ascending: false }).limit(12),
-          user
-            ? supabase.from('user_play_history').select(`played_at, tracks:track_id (id, title, artist, album, cover, genre, audio_url, duration)`).eq('user_id', user.id).order('played_at', { ascending: false }).limit(50)
-            : Promise.resolve({ data: null, error: null }),
-          user
-            ? supabase.from('tracks').select('id, title, artist, album, cover, genre, audio_url, duration, price').eq('user_id', user.id).order('created_at', { ascending: false }).limit(4)
-            : Promise.resolve({ data: null, error: null }),
+          supabase.from('tracks').select('id, title, artist, album, cover, genre, audio_url, duration, price, created_at').limit(8).order('created_at', { ascending: false }),
+          supabase.rpc('get_popular_tracks', { limit_count: 4 }),
+          supabase.from('tracks').select('id, title, artist, album, cover, genre, audio_url, duration, price, likes, liked_by').order('likes', { ascending: false, nullsFirst: false }).limit(10),
+          supabase.from('tracks').select('id, title, artist, album, cover, genre, audio_url, duration, price, created_at').order('created_at', { ascending: false }).limit(12),
         ]);
 
         if (cancelled) return;
@@ -164,18 +154,86 @@ const Home: React.FC = () => {
             createdAt: t.created_at ? new Date(t.created_at) : undefined,
           })));
         }
+      } catch (error) {
+        console.error('Failed to load home data:', error);
+        setRecommendedTracks([]);
+        setPopularTracks([]);
+      } finally {
+        setIsLoadingRecommendations(false);
+        setIsLoadingTopCharts(false);
+        setIsLoading(false);
+      }
+    };
 
-        // Play history (user only)
-        if (user) {
-          if (playHistoryError) {
-            console.error('Error fetching playHistory:', playHistoryError);
-          } else {
-            let uniqueRecent: { track: Track, playedAt: string }[] = [];
-            const seen = new Set();
-            for (const entry of playHistory || []) {
-              const t = entry.tracks;
-              if (t && !seen.has(t.id)) {
-                uniqueRecent.push({
+    loadPublicData();
+    return () => {
+      cancelled = true;
+      clearTimeout(safetyTimeout);
+    };
+  }, []);
+
+  // Load user-specific data when the logged-in user changes
+  useEffect(() => {
+    if (!user) {
+      setRecentTracks([]);
+      setMostPlayedTracks([]);
+      setPublishedTracks([]);
+      setIsLoadingPublished(false);
+      return;
+    }
+
+    let cancelled = false;
+
+    const loadUserData = async () => {
+      try {
+        setIsLoadingPublished(true);
+
+        const [
+          { data: playHistory, error: playHistoryError },
+          { data: publishedData, error: publishedError },
+        ] = await Promise.all([
+          supabase.from('user_play_history').select(`played_at, tracks:track_id (id, title, artist, album, cover, genre, audio_url, duration)`).eq('user_id', user.id).order('played_at', { ascending: false }).limit(50),
+          supabase.from('tracks').select('id, title, artist, album, cover, genre, audio_url, duration, price').eq('user_id', user.id).order('created_at', { ascending: false }).limit(4),
+        ]);
+
+        if (cancelled) return;
+
+        // Play history
+        if (playHistoryError) {
+          console.error('Error fetching playHistory:', playHistoryError);
+        } else {
+          let uniqueRecent: { track: Track, playedAt: string }[] = [];
+          const seen = new Set();
+          for (const entry of playHistory || []) {
+            const t = entry.tracks;
+            if (t && !seen.has(t.id)) {
+              uniqueRecent.push({
+                track: {
+                  id: t.id,
+                  title: t.title,
+                  artist: t.artist,
+                  album: t.album,
+                  duration: t.duration ?? 0,
+                  cover: t.cover,
+                  genre: t.genre,
+                  audioUrl: t.audio_url,
+                  boosted: false
+                },
+                playedAt: entry.played_at,
+              });
+              seen.add(t.id);
+            }
+            if (uniqueRecent.length >= 8) break;
+          }
+          setRecentTracks(uniqueRecent);
+
+          const playCountMap = new Map<string, { track: Track, playCount: number }>();
+          for (const entry of playHistory || []) {
+            const t = entry.tracks;
+            if (t) {
+              const id = t.id;
+              if (!playCountMap.has(id)) {
+                playCountMap.set(id, {
                   track: {
                     id: t.id,
                     title: t.title,
@@ -187,86 +245,49 @@ const Home: React.FC = () => {
                     audioUrl: t.audio_url,
                     boosted: false
                   },
-                  playedAt: entry.played_at,
+                  playCount: 1,
                 });
-                seen.add(t.id);
-              }
-              if (uniqueRecent.length >= 8) break;
-            }
-            setRecentTracks(uniqueRecent);
-
-            const playCountMap = new Map<string, { track: Track, playCount: number }>();
-            for (const entry of playHistory || []) {
-              const t = entry.tracks;
-              if (t) {
-                const id = t.id;
-                if (!playCountMap.has(id)) {
-                  playCountMap.set(id, {
-                    track: {
-                      id: t.id,
-                      title: t.title,
-                      artist: t.artist,
-                      album: t.album,
-                      duration: t.duration ?? 0,
-                      cover: t.cover,
-                      genre: t.genre,
-                      audioUrl: t.audio_url,
-                      boosted: false
-                    },
-                    playCount: 1,
-                  });
-                } else {
-                  playCountMap.get(id)!.playCount += 1;
-                }
+              } else {
+                playCountMap.get(id)!.playCount += 1;
               }
             }
-            setMostPlayedTracks(
-              Array.from(playCountMap.values()).sort((a, b) => b.playCount - a.playCount).slice(0, 8)
-            );
           }
+          setMostPlayedTracks(
+            Array.from(playCountMap.values()).sort((a, b) => b.playCount - a.playCount).slice(0, 8)
+          );
         }
 
-        // Published tracks (user only)
-        if (user) {
-          if (publishedError) {
-            console.error('Error fetching published tracks:', publishedError);
-            setPublishedTracks([]);
-          } else {
-            setPublishedTracks((publishedData || []).map(t => ({
-              id: t.id,
-              title: t.title,
-              artist: t.artist,
-              album: t.album,
-              duration: t.duration || 0,
-              cover: t.cover,
-              genre: t.genre,
-              audioUrl: t.audio_url,
-              price: t.price || 0,
-              boosted: false
-            })));
-          }
+        // Published tracks
+        if (publishedError) {
+          console.error('Error fetching published tracks:', publishedError);
+          setPublishedTracks([]);
+        } else {
+          setPublishedTracks((publishedData || []).map(t => ({
+            id: t.id,
+            title: t.title,
+            artist: t.artist,
+            album: t.album,
+            duration: t.duration || 0,
+            cover: t.cover,
+            genre: t.genre,
+            audioUrl: t.audio_url,
+            price: t.price || 0,
+            boosted: false
+          })));
         }
       } catch (error) {
-        console.error('Failed to load home data:', error);
-        setRecommendedTracks([]);
+        console.error('Failed to load user home data:', error);
         setRecentTracks([]);
-        setPopularTracks([]);
-        setPublishedTracks([]);
         setMostPlayedTracks([]);
+        setPublishedTracks([]);
       } finally {
-        setIsLoadingRecommendations(false);
-        setIsLoadingPublished(false);
-        setIsLoadingTopCharts(false);
-        setIsLoading(false);
+        if (!cancelled) setIsLoadingPublished(false);
       }
     };
 
-    loadHomeData();
-    return () => {
-      cancelled = true;
-      clearTimeout(safetyTimeout);
-    };
-  }, [user]);
+    loadUserData();
+    return () => { cancelled = true; };
+  }, [user?.id]);
 
   // Load current user's albums for Top Album Chart (musicians only)
   useEffect(() => {
@@ -287,7 +308,7 @@ const Home: React.FC = () => {
       }
     };
     loadAlbums();
-  }, [user]);
+  }, [user?.id]);
 
   const handleAlbumClick = (albumId: string) => {
     navigate(`/albums/${albumId}`);
