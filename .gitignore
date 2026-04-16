@@ -29,7 +29,6 @@ dist-ssr
 # Hidden from GitHub
 .claude/
 .cursor/
-api/
 docs/
 sql/
 scripts/
