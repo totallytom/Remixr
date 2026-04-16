@@ -29,7 +29,7 @@ const Login: React.FC = () => {
   const [error, setError] = useState<string>('');
   const [showForgotPassword, setShowForgotPassword] = useState(false);
   const [resetEmailSent, setResetEmailSent] = useState(false);
-  const { login, register, isAuthenticated } = useStore();
+  const { login, register, isAuthenticated, user } = useStore();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const forgotPasswordForm = useForm<{ email: string }>();
@@ -44,11 +44,16 @@ const Login: React.FC = () => {
       setActiveTab('register');
     }
     
-    // If user is already authenticated, redirect to home
+    // If user is already authenticated, redirect based on role.
+    // Note: right after register(), auth state can flip true before the user object is hydrated.
+    // sessionStorage provides a stable hint during that short window.
     if (isAuthenticated) {
-      navigate('/');
+      const hintedRole = sessionStorage.getItem('signup_role');
+      const role = user?.role ?? hintedRole;
+      if (role === 'musician') navigate('/onboarding', { replace: true });
+      else navigate('/', { replace: true });
     }
-  }, [searchParams, isAuthenticated]);
+  }, [searchParams, isAuthenticated, user, navigate]);
 
   const onLoginSubmit = async (data: LoginForm) => {
     setIsLoading(true);
@@ -77,6 +82,8 @@ const Login: React.FC = () => {
     setError('');
     
     try {
+      // Set role hint BEFORE register() — auth listeners may fire mid-await.
+      sessionStorage.setItem('signup_role', data.role);
       const user = await register({
         username: data.username,
         email: data.email,
@@ -94,6 +101,7 @@ const Login: React.FC = () => {
         });
       }
     } catch (error) {
+      sessionStorage.removeItem('signup_role');
       setError(error instanceof Error ? error.message : 'Registration failed');
     } finally {
       setIsLoading(false);

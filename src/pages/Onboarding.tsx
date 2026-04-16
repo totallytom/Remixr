@@ -114,13 +114,16 @@ const Onboarding: React.FC = () => {
 
   // Redirect non-auth users; redirect listeners away from the musician flow
   useEffect(() => {
-    if (user) {
-      if (user.role !== 'musician') navigate('/');
-      return;
-    }
+    // If auth is still hydrating, don't redirect yet.
+    if (isAuthenticated && !user) return;
+
     if (!isAuthenticated) {
       const timer = setTimeout(() => navigate('/signup'), 8000);
       return () => clearTimeout(timer);
+    }
+
+    if (user && user.role !== 'musician') {
+      navigate('/', { replace: true });
     }
   }, [isAuthenticated, user, navigate]);
 

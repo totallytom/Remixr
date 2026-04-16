@@ -6,7 +6,7 @@ import { Mail, Lock, Eye, EyeOff, Mic2, Headphones, ArrowRight, Music2 } from 'l
 import { AuthService } from '../services/authService';
 import { useStore } from '../store/useStore';
 
-type Role = 'Musician' | 'Consumer';
+type Role = 'musician' | 'consumer';
 
 interface SignupForm {
   email: string;
@@ -24,7 +24,7 @@ const ROLE_OPTIONS: {
   activeBg: string;
 }[] = [
   {
-    value: 'Musician',
+    value: 'musician',
     label: 'Musician',
     sublabel: 'I create & share music',
     icon: <Mic2 size={28} strokeWidth={1.5} />,
@@ -34,7 +34,7 @@ const ROLE_OPTIONS: {
     activeBg: 'bg-violet-500/10',
   },
   {
-    value: 'Consumer',
+    value: 'consumer',
     label: 'Listener',
     sublabel: 'I discover & explore music',
     icon: <Headphones size={28} strokeWidth={1.5} />,
@@ -60,7 +60,7 @@ const Signup: React.FC = () => {
     // Route based on role chosen during this signup session.
     // Falls back to home for returning users who visit /signup while logged in.
     const role = sessionStorage.getItem('signup_role');
-    if (role === 'Musician') navigate('/onboarding');
+    if (role === 'musician') navigate('/onboarding');
     else navigate('/');
   }, [isAuthenticated, navigate]);
 
@@ -85,7 +85,7 @@ const Signup: React.FC = () => {
         password: data.password,
         role: selectedRole,
       });
-      navigate(selectedRole === 'Musician' ? '/onboarding' : '/');
+      navigate(selectedRole === 'musician' ? '/onboarding' : '/');
     } catch (err) {
       sessionStorage.removeItem('signup_role');
       setError(err instanceof Error ? err.message : 'Registration failed. Please try again.');

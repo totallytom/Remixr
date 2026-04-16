@@ -190,13 +190,16 @@ const OnboardingLive: React.FC = () => {
 
   // Redirect non-auth and non-musician users
   useEffect(() => {
-    if (user) {
-      if (user.role !== 'musician') navigate('/');
-      return;
-    }
+    // If auth is still hydrating, don't redirect yet.
+    if (isAuthenticated && !user) return;
+
     if (!isAuthenticated) {
       const t = setTimeout(() => navigate('/signup'), 8000);
       return () => clearTimeout(t);
+    }
+
+    if (user && user.role !== 'musician') {
+      navigate('/', { replace: true });
     }
   }, [isAuthenticated, user, navigate]);
 

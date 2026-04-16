@@ -59,6 +59,8 @@ export class AuthService {
 
   static async register(data: RegisterData): Promise<User> {
     try {
+      const desiredRole = (data.role ?? 'consumer').toLowerCase() as 'musician' | 'consumer';
+
       // First, create the user in Supabase Auth with email confirmation disabled
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email: data.email,
@@ -67,7 +69,7 @@ export class AuthService {
           emailRedirectTo: "https://re-mixed.net/onboarding",
           data: {
             username: data.username,
-            role: data.role.toLowerCase(),
+            role: desiredRole,
             artist_name: data.artistName,
             bio: data.bio,
           }
@@ -92,18 +94,18 @@ export class AuthService {
       // Then, create the user profile in our users table
       const { data: profileData, error: profileError } = await supabase
         .from('users')
-        .insert({
+        .upsert({
           id: authData.user.id,
           username: data.username,
           email: data.email,
-          role: data.role.toLowerCase() as 'musician' | 'consumer',
+          role: desiredRole,
           artist_name: data.artistName,
           bio: data.bio,
           avatar: DEFAULT_AVATAR_URL,
           followers: 0,
           following: 0,
           is_verified: true, // Auto-verify for better UX
-        })
+        }, { onConflict: 'id' })
         .select()
         .single();
 
@@ -114,6 +116,23 @@ export class AuthService {
           throw new Error('The Supabase link has been sent to your email');
         }
         throw new Error(profileError.message);
+      }
+
+      // Safety net: if DB triggers/defaults mutate role unexpectedly, force it back.
+      if (profileData?.role && profileData.role !== desiredRole) {
+        console.warn('[register] role mismatch after upsert; correcting', { desiredRole, got: profileData.role });
+        const { data: corrected, error: correctedErr } = await supabase
+          .from('users')
+          .update({ role: desiredRole })
+          .eq('id', authData.user.id)
+          .select()
+          .single();
+        if (!correctedErr && corrected) {
+          const correctedUser = this.transformUser(corrected);
+          this.setCachedProfile(correctedUser);
+          console.log('[register] success (corrected role) — role stored:', correctedUser.role);
+          return correctedUser;
+        }
       }
 
       const newUser = this.transformUser(profileData);
@@ -167,6 +186,14 @@ export class AuthService {
 
       // If profile not found, create one
       const username = authData.user.email?.split('@')[0] || 'new_user';
+      const metaRoleRaw =
+        (authData.user.user_metadata as { role?: unknown } | undefined)?.role ??
+        (authData.user.app_metadata as { role?: unknown } | undefined)?.role;
+      const desiredRole: 'musician' | 'consumer' =
+        metaRoleRaw === 'musician' || metaRoleRaw === 'consumer'
+          ? metaRoleRaw
+          : 'consumer';
+
       const profileCreateStart = this.now();
       const { data: newProfileData, error: newProfileError } = await supabase
         .from('users')
@@ -174,7 +201,7 @@ export class AuthService {
           id: authData.user.id,
           username: username,
           email: authData.user.email ?? 'unknown@example.com',
-          role: 'consumer' as 'musician' | 'consumer',
+          role: desiredRole,
           avatar: DEFAULT_AVATAR_URL,
           followers: 0,
           following: 0,

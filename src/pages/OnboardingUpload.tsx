@@ -163,13 +163,16 @@ const OnboardingUpload: React.FC = () => {
   const coverInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    if (user) {
-      if (user.role !== 'musician') navigate('/');
-      return;
-    }
+    // If auth is still hydrating, don't redirect yet.
+    if (isAuthenticated && !user) return;
+
     if (!isAuthenticated) {
       const t = setTimeout(() => navigate('/signup'), 8000);
       return () => clearTimeout(t);
+    }
+
+    if (user && user.role !== 'musician') {
+      navigate('/', { replace: true });
     }
   }, [isAuthenticated, user, navigate]);
 
