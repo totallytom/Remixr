@@ -1208,7 +1208,8 @@ const Profile: React.FC = () => {
         </div>
       )}
 
-      {/* Tab Navigation */}
+      {/* Tab Navigation — sticky on mobile so tabs stay visible while scrolling content */}
+      <div className="lg:sticky top-0 z-10 bg-dark-900/95 backdrop-blur-sm border-b border-dark-700/60 -mx-3 lg:mx-0 px-3 lg:px-0 py-2 lg:py-0 mb-2 lg:mb-0">
       <div className="flex flex-wrap space-x-1 bg-dark-800 rounded-lg p-1 overflow-x-auto">
         <button
           onClick={() => setActiveTab('music')}
@@ -1281,6 +1282,7 @@ const Profile: React.FC = () => {
           </button>
         )}
       </div>
+      </div>{/* end sticky tab wrapper */}
 
       {/* Tab Content */}
       {(!isProfilePrivate || isCurrentUser || followStats.isFollowing) ? (
@@ -1453,7 +1455,7 @@ const Profile: React.FC = () => {
                         <div className="bg-dark-800 rounded-lg p-4 border border-dark-700 min-w-[200px]">
                           <div className="space-y-4">
                             <div>
-                              <label className="block text-black font-medium mb-2 text-sm">Album Title</label>
+                              <label className="block text-dark-200 font-medium mb-2 text-sm">Album Title</label>
                               <input
                                 type="text"
                                 value={albumForm.title}
@@ -1463,7 +1465,7 @@ const Profile: React.FC = () => {
                               />
                             </div>
                             <div>
-                              <label className="block text-black font-medium mb-2 text-sm">Artist</label>
+                              <label className="block text-dark-200 font-medium mb-2 text-sm">Artist</label>
                               <input
                                 type="text"
                                 value={albumForm.artist}
@@ -1473,7 +1475,7 @@ const Profile: React.FC = () => {
                               />
                             </div>
                             <div>
-                              <label className="block text-black font-medium mb-2 text-sm">Genre</label>
+                              <label className="block text-dark-200 font-medium mb-2 text-sm">Genre</label>
                               <input
                                 type="text"
                                 value={albumForm.genre}
@@ -1483,7 +1485,7 @@ const Profile: React.FC = () => {
                               />
                             </div>
                             <div>
-                              <label className="block text-black font-medium mb-2 text-sm">Price (optional)</label>
+                              <label className="block text-dark-200 font-medium mb-2 text-sm">Price (optional)</label>
                               <input
                                 type="number"
                                 value={albumForm.price}
@@ -1495,7 +1497,7 @@ const Profile: React.FC = () => {
                               />
                             </div>
                             <div>
-                              <label className="block text-black font-medium mb-2 text-sm">Description</label>
+                              <label className="block text-dark-200 font-medium mb-2 text-sm">Description</label>
                               <textarea
                                 value={albumForm.description}
                                 onChange={(e) => setAlbumForm(prev => ({ ...prev, description: e.target.value }))}
@@ -1580,7 +1582,7 @@ const Profile: React.FC = () => {
                         <div className="space-y-4">
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <div>
-                              <label className="block text-black font-medium mb-2">Concert Title</label>
+                              <label className="block text-dark-200 font-medium mb-2">Concert Title</label>
                               <input
                                 type="text"
                                 value={concertForm.title}
@@ -1590,7 +1592,7 @@ const Profile: React.FC = () => {
                               />
                             </div>
                             <div>
-                              <label className="block text-black font-medium mb-2">Date</label>
+                              <label className="block text-dark-200 font-medium mb-2">Date</label>
                               <input
                                 type="date"
                                 value={concertForm.date}
@@ -1599,7 +1601,7 @@ const Profile: React.FC = () => {
                               />
                             </div>
                             <div>
-                              <label className="block text-black font-medium mb-2">Venue</label>
+                              <label className="block text-dark-200 font-medium mb-2">Venue</label>
                               <input
                                 type="text"
                                 value={concertForm.venue}
@@ -1609,7 +1611,7 @@ const Profile: React.FC = () => {
                               />
                             </div>
                             <div>
-                              <label className="block text-black font-medium mb-2">Location</label>
+                              <label className="block text-dark-200 font-medium mb-2">Location</label>
                               <input
                                 type="text"
                                 value={concertForm.location}
@@ -1619,7 +1621,7 @@ const Profile: React.FC = () => {
                               />
                             </div>
                             <div>
-                              <label className="block text-black font-medium mb-2">Ticket Price</label>
+                              <label className="block text-dark-200 font-medium mb-2">Ticket Price</label>
                               <input
                                 type="number"
                                 value={concertForm.ticketPrice}
@@ -1629,7 +1631,7 @@ const Profile: React.FC = () => {
                               />
                             </div>
                             <div>
-                              <label className="block text-black font-medium mb-2">Ticket URL</label>
+                              <label className="block text-dark-200 font-medium mb-2">Ticket URL</label>
                               <input
                                 type="url"
                                 value={concertForm.ticketUrl}
@@ -1640,7 +1642,7 @@ const Profile: React.FC = () => {
                             </div>
                           </div>
                           <div>
-                            <label className="block text-black font-medium mb-2">Description</label>
+                            <label className="block text-dark-200 font-medium mb-2">Description</label>
                             <textarea
                               value={concertForm.description}
                               onChange={(e) => setConcertForm(prev => ({ ...prev, description: e.target.value }))}
@@ -1735,7 +1737,7 @@ const Profile: React.FC = () => {
                       <div className="space-y-4">
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                           <div>
-                            <label className="block text-black font-medium mb-2">Concert Title</label>
+                            <label className="block text-dark-200 font-medium mb-2">Concert Title</label>
                             <input
                               type="text"
                               value={concertForm.title}
@@ -1745,7 +1747,7 @@ const Profile: React.FC = () => {
                             />
                           </div>
                           <div>
-                            <label className="block text-black font-medium mb-2">Date</label>
+                            <label className="block text-dark-200 font-medium mb-2">Date</label>
                             <input
                               type="date"
                               value={concertForm.date}
@@ -1754,7 +1756,7 @@ const Profile: React.FC = () => {
                             />
                           </div>
                           <div>
-                            <label className="block text-black font-medium mb-2">Venue</label>
+                            <label className="block text-dark-200 font-medium mb-2">Venue</label>
                             <input
                               type="text"
                               value={concertForm.venue}
@@ -1764,7 +1766,7 @@ const Profile: React.FC = () => {
                             />
                           </div>
                           <div>
-                            <label className="block text-black font-medium mb-2">Location</label>
+                            <label className="block text-dark-200 font-medium mb-2">Location</label>
                             <input
                               type="text"
                               value={concertForm.location}
@@ -1774,7 +1776,7 @@ const Profile: React.FC = () => {
                             />
                           </div>
                           <div>
-                            <label className="block text-black font-medium mb-2">Ticket Price</label>
+                            <label className="block text-dark-200 font-medium mb-2">Ticket Price</label>
                             <input
                               type="number"
                               value={concertForm.ticketPrice}
@@ -1784,7 +1786,7 @@ const Profile: React.FC = () => {
                             />
                           </div>
                           <div>
-                            <label className="block text-black font-medium mb-2">Ticket URL</label>
+                            <label className="block text-dark-200 font-medium mb-2">Ticket URL</label>
                             <input
                               type="url"
                               value={concertForm.ticketUrl}
@@ -1795,7 +1797,7 @@ const Profile: React.FC = () => {
                           </div>
                         </div>
                         <div>
-                          <label className="block text-black font-medium mb-2">Description</label>
+                          <label className="block text-dark-200 font-medium mb-2">Description</label>
                           <textarea
                             value={concertForm.description}
                             onChange={(e) => setConcertForm(prev => ({ ...prev, description: e.target.value }))}

@@ -449,14 +449,44 @@ const Home: React.FC = () => {
 
   return (
     <div className="px-3 py-4 sm:px-5 sm:py-5 md:px-6 md:py-6 lg:px-8 space-y-6 sm:space-y-7 md:space-y-8 w-full min-w-0 box-border">
-      {/* Header */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="text-center mb-8"
-      >
-  
-      </motion.div>
+      {/* Now Playing hero — mobile only, shown when a track is active */}
+      {player.currentTrack && (
+        <motion.section
+          initial={{ opacity: 0, y: -8 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="lg:hidden rounded-2xl overflow-hidden relative border border-dark-700"
+        >
+          {/* Blurred album art background */}
+          <div
+            className="absolute inset-0"
+            style={{
+              backgroundImage: `url(${player.currentTrack.cover || 'https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?w=400&h=400&fit=crop'})`,
+              backgroundSize: 'cover',
+              backgroundPosition: 'center',
+              filter: 'blur(20px) brightness(0.3)',
+            }}
+          />
+          <div className="relative flex items-center gap-4 p-4">
+            <button
+              onClick={() => playTrack(player.currentTrack!)}
+              className="flex-shrink-0 w-16 h-16 rounded-xl overflow-hidden shadow-lg ring-2 ring-white/20 active:scale-95 transition-transform"
+            >
+              <img
+                src={player.currentTrack.cover || 'https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?w=400&h=400&fit=crop'}
+                alt={player.currentTrack.title}
+                className="w-full h-full object-cover"
+              />
+            </button>
+            <div className="flex-1 min-w-0">
+              <p className="text-[10px] font-semibold text-white/50 uppercase tracking-widest mb-0.5">
+                {player.isPlaying ? 'Now Playing' : 'Paused'}
+              </p>
+              <p className="text-white font-bold truncate">{player.currentTrack.title}</p>
+              <p className="text-white/60 text-sm truncate">{player.currentTrack.artist}</p>
+            </div>
+          </div>
+        </motion.section>
+      )}
 
       {/* Recent Drops - horizontal scroll at top */}
       <motion.section

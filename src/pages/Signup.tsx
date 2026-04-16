@@ -85,7 +85,7 @@ const Signup: React.FC = () => {
         password: data.password,
         role: selectedRole,
       });
-      navigate(selectedRole === 'musician' ? '/onboarding' : '/');
+      navigate(selectedRole === 'Musician' ? '/onboarding' : '/');
     } catch (err) {
       sessionStorage.removeItem('signup_role');
       setError(err instanceof Error ? err.message : 'Registration failed. Please try again.');
@@ -210,13 +210,6 @@ const Signup: React.FC = () => {
                           }
                         `}
                       >
-                        {/* Gradient glow when active */}
-                        {active && (
-                          <motion.div
-                            layoutId="role-glow"
-                            className={`absolute inset-0 rounded-[10px] bg-gradient-to-br ${opt.gradient} opacity-[0.08] pointer-events-none`}
-                          />
-                        )}
 
                         {/* Icon */}
                         <div className={`transition-colors ${active ? 'text-white' : 'text-dark-400'}`}>

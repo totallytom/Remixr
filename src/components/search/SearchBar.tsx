@@ -68,7 +68,7 @@ const SearchBar: React.FC<SearchBarProps> = ({
         </button>
         {dropdownOpen && (
           <div
-            className="search-bar-dropdown-menu absolute top-full left-0 mt-1 w-52 py-1.5 bg-white border border-dark-500 rounded-lg shadow-xl z-[200] min-w-[10rem] !text-white"
+            className="search-bar-dropdown-menu absolute top-full left-0 mt-1 w-52 py-1.5 bg-dark-800 border border-dark-600 rounded-lg shadow-xl z-[200] min-w-[10rem]"
             role="listbox"
           >
             {CATEGORY_OPTIONS.map((opt) => {
@@ -83,7 +83,7 @@ const SearchBar: React.FC<SearchBarProps> = ({
                     onCategoryChange(opt.value);
                     setDropdownOpen(false);
                   }}
-                  className={`w-full flex items-center gap-2 px-3 py-2.5 text-sm text-left transition-colors !text-white ${
+                  className={`w-full flex items-center gap-2 px-3 py-2.5 text-sm text-left text-white transition-colors ${
                     category === opt.value
                       ? 'bg-lime-400/25'
                       : 'hover:bg-dark-700'

@@ -438,6 +438,7 @@ const TrackCard: React.FC<TrackCardProps> = ({
 
   if (compactGrid) {
     return (
+      <>
       <div className="trackcard-hover trackcard-theme rounded-lg border-2 overflow-hidden group text-black w-full max-w-full bg-[var(--color-surface)] border-[var(--color-border)] flex flex-col min-h-0">
         {/* Square image box: padding-bottom ratio works consistently in Chrome and Firefox */}
         <div className="relative w-full flex-shrink-0 bg-gradient-to-br from-var(--color-card-white) to-var(--color-card-grey) border-b border-[var(--color-border)]" style={{ paddingBottom: '100%' }}>
@@ -466,6 +467,59 @@ const TrackCard: React.FC<TrackCardProps> = ({
               {isCurrentlyPlaying ? <Pause size={24} className="text-black" /> : <Play size={24} className="text-black" />}
             </div>
           </button>
+          {/* Action buttons overlay — always visible on touch (mobile), hover-only on pointer devices */}
+          {showActions && isAuthenticated && (
+            <div className="absolute top-2 right-2 flex flex-wrap items-center justify-end gap-1 sm:opacity-0 sm:group-hover:opacity-100 opacity-100 transition-opacity duration-200">
+              <button
+                onClick={(e) => { e.stopPropagation(); setShowPlaylistModal(true); }}
+                className="w-7 h-7 bg-white/90 hover:bg-white rounded-full flex items-center justify-center shadow-sm"
+                title="Add to playlist"
+              >
+                <Plus size={13} className="text-gray-700" />
+              </button>
+              <button
+                onClick={(e) => { e.stopPropagation(); handleLike(); }}
+                className={`w-7 h-7 rounded-full flex items-center justify-center shadow-sm ${
+                  isLiked ? 'bg-blue-400 text-white' : 'bg-white/90 hover:bg-white text-gray-700'
+                }`}
+                title={isLiked ? 'Remove bookmark' : 'Bookmark track'}
+              >
+                <Bookmark size={13} fill={isLiked ? 'currentColor' : 'none'} />
+              </button>
+              <button
+                onClick={(e) => { e.stopPropagation(); handleAddToQueue(); }}
+                className="w-7 h-7 bg-white/90 hover:bg-white rounded-full flex items-center justify-center shadow-sm text-gray-700"
+                title="Add to Queue"
+              >
+                <List size={13} />
+              </button>
+              <button
+                onClick={(e) => { e.stopPropagation(); setShowMessageModal(true); loadAllUsers(); }}
+                className="w-7 h-7 bg-white/90 hover:bg-white rounded-full flex items-center justify-center shadow-sm text-gray-700"
+                title="Send to User"
+              >
+                <MessageCircle size={13} />
+              </button>
+              {/* Remix button — to be implemented
+              <button
+                onClick={(e) => { e.stopPropagation(); navigate(`/remix/${track.id}`); }}
+                className="w-7 h-7 bg-white/90 hover:bg-white rounded-full flex items-center justify-center shadow-sm text-gray-700"
+                title="Open in Remix"
+              >
+                <RefreshCw size={13} />
+              </button>
+              */}
+              {onDelete && (
+                <button
+                  onClick={(e) => { e.stopPropagation(); onDelete(track); }}
+                  className="w-7 h-7 bg-white/90 hover:bg-red-500 hover:text-white rounded-full flex items-center justify-center shadow-sm text-gray-700"
+                  title="Delete track"
+                >
+                  <X size={13} />
+                </button>
+              )}
+            </div>
+          )}
         </div>
         <div className="p-2.5 flex flex-col min-w-0 flex-shrink-0">
           <div className="font-semibold text-sm truncate" style={{ fontFamily: 'Inter, sans-serif' }}>{track.title}</div>
@@ -495,6 +549,180 @@ const TrackCard: React.FC<TrackCardProps> = ({
           ) : null}
         </div>
       </div>
+
+      {/* Add to Playlist Modal (Portal) */}
+      {showPlaylistModal && createPortal(
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-60">
+          <div className="bg-white rounded-lg shadow-2xl p-6 w-full max-w-md relative">
+            <button
+              onClick={() => {
+                setShowPlaylistModal(false);
+                setShowCreatePlaylistForm(false);
+                setCreatePlaylistForm({ name: '', isPublic: true });
+              }}
+              className="absolute top-3 right-3 p-1 rounded-full bg-dark-700 hover:text-gray-400 transition-colors"
+              title="Close"
+            >
+              <X size={20} />
+            </button>
+            <div className="text-lg font-bold text-primary-500 mb-4">Add to Playlist</div>
+            {showCreatePlaylistForm ? (
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-black font-medium mb-2 text-sm">Playlist Name</label>
+                  <input
+                    type="text"
+                    value={createPlaylistForm.name}
+                    onChange={(e) => setCreatePlaylistForm(prev => ({ ...prev, name: e.target.value }))}
+                    className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-black focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm"
+                    placeholder="Enter playlist name"
+                    autoFocus
+                  />
+                </div>
+                <div className="flex items-center space-x-2">
+                  <input
+                    type="checkbox"
+                    id="isPublicGrid"
+                    checked={createPlaylistForm.isPublic}
+                    onChange={(e) => setCreatePlaylistForm(prev => ({ ...prev, isPublic: e.target.checked }))}
+                    className="w-4 h-4 text-primary-600 bg-white border-gray-300 rounded focus:ring-primary-500"
+                  />
+                  <label htmlFor="isPublicGrid" className="text-sm text-black">Make playlist public</label>
+                </div>
+                <div className="flex space-x-3">
+                  <button
+                    onClick={handleCreatePlaylist}
+                    disabled={isCreatingPlaylist || !createPlaylistForm.name.trim()}
+                    className="flex-1 bg-primary-600 text-white px-4 py-2 rounded-lg hover:bg-primary-700 transition-colors disabled:opacity-50 text-sm"
+                  >
+                    {isCreatingPlaylist ? 'Creating...' : 'Create & Add Track'}
+                  </button>
+                  <button
+                    onClick={() => { setShowCreatePlaylistForm(false); setCreatePlaylistForm({ name: '', isPublic: true }); }}
+                    className="flex-1 bg-gray-200 text-black px-4 py-2 rounded-lg hover:bg-gray-300 transition-colors text-sm"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <>
+                <div className="max-h-80 overflow-y-auto space-y-2 mb-3">
+                  {playlists.length === 0 ? (
+                    <p className="text-dark-400 text-center py-4">No playlists available</p>
+                  ) : (
+                    playlists.map(playlist => {
+                      const isShared = (playlist as any).isShared;
+                      const isTrackInPlaylist = playlist.tracks?.some(t => t.id === track.id);
+                      return (
+                        <button
+                          key={playlist.id}
+                          onClick={async () => {
+                            if (isTrackInPlaylist) { alert('This track is already in the playlist'); return; }
+                            try {
+                              await MusicService.addTrackToPlaylist(playlist.id, track.id);
+                              setShowPlaylistModal(false);
+                              window.dispatchEvent(new CustomEvent('playlistsChanged', { detail: { playlistId: playlist.id, userId: user?.id } }));
+                            } catch (error) {
+                              alert(`Failed to add track to playlist: ${error instanceof Error ? error.message : 'Unknown error'}`);
+                            }
+                          }}
+                          disabled={isTrackInPlaylist}
+                          className={`w-full flex items-center justify-between px-4 py-3 rounded-lg text-white text-left transition-colors ${
+                            isTrackInPlaylist ? 'bg-dark-700 opacity-50 cursor-not-allowed' : isShared ? 'bg-blue-900 hover:bg-blue-800 border border-blue-700' : 'bg-dark-800 hover:bg-primary-600'
+                          }`}
+                        >
+                          <div className="flex items-center space-x-3 flex-1 min-w-0">
+                            <Music size={18} />
+                            <span className="truncate font-medium">{playlist.name}</span>
+                            {isShared && (
+                              <span className="flex-shrink-0 px-2 py-0.5 bg-blue-600 text-white text-xs rounded-full flex items-center space-x-1">
+                                <Share2 size={10} /><span>SharePlay</span>
+                              </span>
+                            )}
+                          </div>
+                          {isTrackInPlaylist && <span className="text-xs text-gray-400 flex-shrink-0 ml-2">Already added</span>}
+                        </button>
+                      );
+                    })
+                  )}
+                </div>
+                <button
+                  onClick={() => setShowCreatePlaylistForm(true)}
+                  className="w-full flex items-center justify-center space-x-2 px-4 py-3 rounded-lg bg-primary-600 hover:bg-primary-700 text-white transition-colors"
+                >
+                  <Plus size={18} /><span className="font-medium">Create New Playlist</span>
+                </button>
+              </>
+            )}
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* Send track to user Modal (Portal) */}
+      {showMessageModal && createPortal(
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-60">
+          <div className="bg-white rounded-lg shadow-2xl p-6 w-full max-w-md relative">
+            <div className="flex items-start justify-between mb-4">
+              <div className="text-lg font-bold text-black">Send Track to User</div>
+              <button
+                onClick={() => { setShowMessageModal(false); setSearchQuery(''); setSearchResults([]); setAllUsers([]); setMessageError(null); }}
+                className="p-1 rounded-full bg-dark-700 hover:text-gray-400 transition-colors"
+                title="Close"
+              >
+                <X size={20} />
+              </button>
+            </div>
+            <div className="mb-4 p-3 bg-dark-800 rounded-lg">
+              <div className="flex items-center space-x-3">
+                <div className="w-12 h-12 rounded overflow-hidden">
+                  <img src={track.cover || DEFAULT_TRACK_COVER} alt={track.title} className="w-full h-full object-cover" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="font-semibold text-white truncate">{track.title}</div>
+                  <div className="text-sm text-gray-400 truncate">{track.artist}</div>
+                </div>
+              </div>
+            </div>
+            <div className="mb-4">
+              <input
+                type="text"
+                placeholder="Search users..."
+                value={searchQuery}
+                onChange={(e) => { setSearchQuery(e.target.value); filterUsersLocally(e.target.value); }}
+                className="w-full px-3 py-2 bg-dark-800 border border-dark-600 rounded text-white placeholder-gray-400 focus:outline-none focus:border-primary-500"
+              />
+            </div>
+            <div className="max-h-60 overflow-y-auto space-y-2">
+              {messageError && <p className="text-red-500 text-sm text-center">{messageError}</p>}
+              {isSearching && <p className="text-dark-400 text-center text-sm">Loading users...</p>}
+              {!isSearching && searchResults.length === 0 && <p className="text-dark-400 text-center text-sm">No users available</p>}
+              {searchResults.map(u => (
+                <button
+                  key={u.id}
+                  onClick={() => handleMessage(u.id)}
+                  className="w-full flex items-center space-x-3 px-4 py-3 rounded-lg bg-dark-800 hover:bg-primary-600 text-white text-left transition-colors"
+                >
+                  <div className="w-8 h-8 rounded-full bg-dark-700 flex items-center justify-center">
+                    <img src={getAvatarUrl(u.avatar)} alt={u.username} className="w-full h-full rounded-full object-cover" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="font-medium truncate flex items-center gap-1.5">
+                      {u.username}
+                      <VerifiedBadge verified={u.isVerified || u.isVerifiedArtist} size={14} />
+                    </div>
+                    {u.artistName && <div className="text-sm text-gray-400 truncate">{u.artistName}</div>}
+                  </div>
+                  <MessageCircle size={16} className="text-gray-400" />
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+    </>
     );
   }
 
@@ -502,8 +730,12 @@ const TrackCard: React.FC<TrackCardProps> = ({
   return (
     <>
       {/* Mobile: horizontal row layout */}
-      <div className="trackcard-hover trackcard-theme sm:hidden flex items-center gap-3 p-3 rounded-lg border-2 relative overflow-hidden group text-black w-full min-w-0 bg-[var(--color-surface)] border-[var(--color-border)]">
-        <div className="flex-shrink-0 w-14 h-14 rounded-md overflow-hidden border border-[var(--color-border)] bg-gradient-to-br from-var(--color-card-white) to-var(--color-card-grey)">
+      <div className="trackcard-hover trackcard-theme sm:hidden flex items-center gap-3 p-3 rounded-lg border-2 relative overflow-hidden group text-black w-full min-w-0 min-h-[72px] bg-[var(--color-surface)] border-[var(--color-border)]">
+        {/* Album art — tappable to play/pause */}
+        <button
+          onClick={handlePlayPause}
+          className="flex-shrink-0 relative w-16 h-16 rounded-lg overflow-hidden border border-[var(--color-border)] active:scale-95 transition-transform"
+        >
           <img
             src={track.cover || DEFAULT_TRACK_COVER}
             alt={track.title}
@@ -515,13 +747,18 @@ const TrackCard: React.FC<TrackCardProps> = ({
               const parent = target.parentElement;
               if (parent && !parent.querySelector('.fallback-cover-mobile')) {
                 const fallback = document.createElement('div');
-                fallback.className = 'fallback-cover-mobile w-full h-full flex items-center justify-center text-2xl';
+                fallback.className = 'fallback-cover-mobile w-full h-full flex items-center justify-center text-2xl bg-gray-100';
                 fallback.textContent = '🎵';
                 parent.appendChild(fallback);
               }
             }}
           />
-        </div>
+          {isCurrentlyPlaying && (
+            <div className="absolute inset-0 bg-black/20 flex items-center justify-center">
+              <Pause size={20} className="text-white drop-shadow" />
+            </div>
+          )}
+        </button>
         <div className="flex-1 min-w-0 flex flex-col justify-center">
           <div className="font-bold text-sm truncate" style={{ fontFamily: 'Inter, sans-serif' }}>{track.title}</div>
           <div className="text-xs text-gray-500 truncate" style={{ fontFamily: 'Inter, sans-serif' }}>{track.artist}{track.album ? ` • ${track.album}` : ''}</div>
@@ -530,38 +767,30 @@ const TrackCard: React.FC<TrackCardProps> = ({
             {user && (
               <button
                 onClick={handleTrackLike}
-                className="flex items-center text-xs text-gray-400 hover:text-blue-400"
+                className="flex items-center text-xs text-gray-400 hover:text-blue-400 min-h-[44px] px-1"
                 disabled={isLoadingLikes}
               >
-                <ThumbsUp size={12} fill={isLikedByUser ? 'currentColor' : 'none'} />
+                <ThumbsUp size={16} fill={isLikedByUser ? 'currentColor' : 'none'} />
                 <span className="ml-0.5">{likesCount}</span>
               </button>
             )}
           </div>
         </div>
         <div className="flex items-center gap-1 flex-shrink-0">
+          {/* Play/Pause — 44px touch target */}
           <button
             onClick={handlePlayPause}
-            className="p-2.5 rounded-full bg-primary-600 text-white hover:bg-primary-700 flex items-center justify-center"
+            className="w-11 h-11 rounded-full bg-primary-600 text-white hover:bg-primary-700 flex items-center justify-center active:scale-95 transition-transform"
           >
-            {isCurrentlyPlaying ? <Pause size={18} /> : <Play size={18} />}
+            {isCurrentlyPlaying ? <Pause size={20} /> : <Play size={20} />}
           </button>
-          {showActions && (
-            <button
-              onClick={() => navigate(`/remix/${track.id}`)}
-              className="p-2 rounded-full border border-[var(--color-border)] hover:bg-gray-100 dark:hover:bg-dark-700 flex items-center justify-center"
-              title="Open in Remix"
-            >
-              <RefreshCw size={16} />
-            </button>
-          )}
-          {showActions && (
+          {showActions && isAuthenticated && (
             <button
               onClick={() => setShowPlaylistModal(true)}
-              className="p-2 rounded-full border border-[var(--color-border)] hover:bg-gray-100 dark:hover:bg-dark-700 flex items-center justify-center"
+              className="w-11 h-11 rounded-full border border-[var(--color-border)] hover:bg-gray-100 flex items-center justify-center active:bg-gray-200 transition-colors"
               title="Add to playlist"
             >
-              <MoreVertical size={16} />
+              <MoreVertical size={18} />
             </button>
           )}
         </div>
@@ -596,7 +825,7 @@ const TrackCard: React.FC<TrackCardProps> = ({
             </div>
           </button>
           {/* Action buttons overlay (add to playlist, bookmark, queue, message, remix, delete) */}
-          {showActions && (
+          {showActions && isAuthenticated && (
             <div className="absolute top-2 right-2 flex flex-wrap items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
               <button
                 onClick={(e) => { e.stopPropagation(); setShowPlaylistModal(true); }}

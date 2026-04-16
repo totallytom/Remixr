@@ -285,19 +285,18 @@ html, body {
   body {
     padding: 0;
   }
-  
-  /* Ensure main content area has proper spacing */
+
+  /* Top nav removed — main-content fills the full viewport height */
   .main-content {
-    margin-top: 60px;
-    margin-bottom: 80px;
+    margin-top: 0;
+    margin-bottom: 0;
   }
-  
-  /* Mobile page content padding */
+
+  /* Scrollable page area — padding-bottom clears the fixed tab bar + mini player */
   .page-content {
-    padding: 2px;
-    margin: 2px;
-    height: calc(100% - 16px);
-    border-radius: 8px;
+    padding: 12px 16px 132px;  /* 132px = 56px tab + 64px mini player + 12px gap */
+    margin: 0;
+    border-radius: 0;
   }
 }
 
@@ -629,13 +628,7 @@ Pixel Theme Base Styles
       0 0 15px var(--color-glow);
   }
 
-  /* Mobile Music Player Positioning - flush with bottom nav (no gap) */
-  @media (max-width: 1023px) {
-    .music-player {
-      bottom: 70px; /* Match bottom nav height so player sits directly above it */
-      padding: 0.5rem; /* Reduce padding even more on mobile */
-    }
-  }
+  /* Mobile mini player positioning is now handled inline in MusicPlayer.tsx */
 
   /* Sidebar */
   .sidebar {
@@ -703,7 +696,7 @@ Pixel Theme Base Styles
 
   @media (max-width: 640px) {
     .chat-bubble {
-      max-width: calc(100vw - 4rem);
+      max-width: min(calc(100vw - 4rem), 280px);
       padding: 0.5rem 0.75rem;
       font-size: 0.875rem;
     }

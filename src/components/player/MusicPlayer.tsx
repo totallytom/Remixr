@@ -412,7 +412,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
 
   if (!visible) {
     return (
-      <div className="fixed z-50 lg:bottom-4 lg:right-4 bottom-20 right-4">
+      <div className="fixed z-50 lg:bottom-4 lg:right-4 bottom-16 right-4">
         <button
           onClick={onToggleVisibility}
           className="w-12 h-12 bg-white border-2 border-var(--color-warm) flex items-center justify-center hover:bg-var(--color-warm) hover:text-white transition-all duration-300 transform hover:scale-105 rounded-full shadow-lg"
@@ -446,6 +446,96 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
   }
 
   return (
+    <>
+    {/* ── Mobile mini player ── sits directly above the 56px bottom tab bar */}
+    <div
+      className="lg:hidden fixed left-0 right-0 z-40 h-16 bg-white border-t border-gray-200"
+      style={{ bottom: '56px', boxShadow: '0 -2px 12px rgba(0,0,0,0.08)' }}
+    >
+      {/* Thin seekable progress line at the very top edge */}
+      <div className="absolute top-0 left-0 right-0 h-[3px] bg-gray-100">
+        <div
+          className="h-full bg-[var(--color-electric-blue,#0ea5e9)] transition-all duration-100"
+          style={{ width: `${(currentTime / (duration || 1)) * 100}%` }}
+        />
+        <input
+          type="range"
+          min={0}
+          max={duration || 100}
+          value={currentTime}
+          onChange={handleSeek}
+          className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+          style={{ margin: 0, padding: 0 }}
+          aria-label="Seek"
+        />
+      </div>
+
+      <div className="flex items-center h-full px-3 gap-2">
+        {/* Album art — taps to open fullscreen */}
+        <button
+          onClick={() => setShowFullScreen(true)}
+          className="flex-shrink-0 w-12 h-12 rounded-lg overflow-hidden ring-1 ring-black/10 active:scale-95 transition-transform"
+        >
+          <img
+            src={currentTrack.cover || DEFAULT_TRACK_COVER}
+            alt={currentTrack.title}
+            className="w-full h-full object-cover"
+          />
+        </button>
+
+        {/* Track info */}
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-semibold truncate text-black leading-tight">{currentTrack.title}</p>
+          <p className="text-xs text-gray-500 truncate">{currentTrack.artist}</p>
+        </div>
+
+        {/* Previous */}
+        <button
+          onClick={onPrevious}
+          className="w-11 h-11 flex items-center justify-center rounded-full active:bg-gray-100 transition-colors"
+          aria-label="Previous"
+        >
+          <SkipBack size={20} className="text-black" />
+        </button>
+
+        {/* Play / Pause */}
+        <button
+          onClick={onPlayPause}
+          disabled={player.isBuffering}
+          className="w-11 h-11 flex items-center justify-center rounded-full bg-[var(--color-electric-blue,#0ea5e9)] active:scale-95 transition-all disabled:opacity-50"
+          aria-label={isPlaying ? 'Pause' : 'Play'}
+        >
+          {player.isBuffering ? (
+            <Loader2 size={20} className="animate-spin text-white" />
+          ) : isPlaying ? (
+            <Pause size={20} className="text-white" />
+          ) : (
+            <Play size={20} className="text-white ml-0.5" />
+          )}
+        </button>
+
+        {/* Next */}
+        <button
+          onClick={onNext}
+          className="w-11 h-11 flex items-center justify-center rounded-full active:bg-gray-100 transition-colors"
+          aria-label="Next"
+        >
+          <SkipForward size={20} className="text-black" />
+        </button>
+
+        {/* Dismiss / hide player */}
+        <button
+          onClick={onToggleVisibility}
+          className="w-8 h-8 flex items-center justify-center rounded-full active:bg-gray-100 transition-colors flex-shrink-0"
+          aria-label="Hide player"
+        >
+          <ChevronDown size={18} className="text-gray-400" />
+        </button>
+      </div>
+    </div>
+
+    {/* ── Desktop player bar ── hidden on mobile */}
+    <div className="hidden lg:block">
     <div className="music-player glass-effect">
       {/* Cozy Background Pattern */}
       <div className="absolute inset-0 opacity-5">
@@ -802,6 +892,8 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
         </motion.div>
       )}
     </div>
+    </div>{/* end hidden lg:block */}
+    </>
   );
 };
 

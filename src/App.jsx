@@ -17,6 +17,10 @@ const Artist = lazy(() => import('./pages/Artist'));
 const Upload = lazy(() => import('./pages/Upload'));
 const Playlists = lazy(() => import('./pages/Playlists'));
 const Login = lazy(() => import('./pages/Login'));
+const Signup = lazy(() => import('./pages/Signup'));
+const Onboarding = lazy(() => import('./pages/Onboarding'));
+const OnboardingUpload = lazy(() => import('./pages/OnboardingUpload'));
+const OnboardingLive = lazy(() => import('./pages/OnboardingLive'));
 const ResetPassword = lazy(() => import('./pages/ResetPassword'));
 const PlaylistTracksPage = lazy(() => import('./pages/PlaylistTracksPage'));
 const AlbumTracksPage = lazy(() => import('./pages/AlbumTracksPage'));
@@ -102,7 +106,7 @@ function App() {
       <AlertProvider>
       <Router>
         <div
-          className="flex h-screen bg-dark-900 text-white"
+          className="flex h-dvh bg-dark-900 text-white"
           style={
             theme.customBackgroundColor
               ? { backgroundColor: theme.customBackgroundColor }
@@ -156,6 +160,10 @@ function App() {
                   <Route path="/remix/:trackId" element={<Remix />} />
                   <Route path="/admin" element={<Admin />} />
                   <Route path="/login" element={<Login />} />
+                  <Route path="/signup" element={<Signup />} />
+                  <Route path="/onboarding" element={<Onboarding />} />
+                  <Route path="/onboarding/upload" element={<OnboardingUpload />} />
+                  <Route path="/onboarding/live" element={<OnboardingLive />} />
                   <Route path="/reset-password" element={<ResetPassword />} />
                 </Routes>
               </Suspense>

@@ -331,38 +331,44 @@ const Search: React.FC = () => {
 
   return (
     <div className="px-3 py-4 sm:px-5 sm:py-5 md:p-6 space-y-6 sm:space-y-8 max-w-[100vw] overflow-x-hidden">
-      {/* Header */}
-      <div className="flex items-center justify-between mb-4 sm:mb-6">
-        <h1 className="text-2xl sm:text-3xl font-bold gradient-text font-kyobo text-white truncate">Search</h1>
-      </div>
+      {/* Sticky search header — search bar + filter chips stay visible while scrolling results */}
+      <div className="sticky top-0 z-10 bg-dark-900/95 backdrop-blur-sm -mx-3 sm:-mx-5 md:-mx-6 px-3 sm:px-5 md:px-6 py-3 space-y-3 border-b border-dark-700/50">
+        <div className="flex items-center justify-between">
+          <h1 className="text-2xl sm:text-3xl font-bold gradient-text font-kyobo text-white truncate">Search</h1>
+        </div>
 
-      {/* Omni-search bar */}
-      <SearchBar
-        value={search}
-        onChange={setSearch}
-        onClear={clearSearch}
-        category={category}
-        onCategoryChange={setCategory}
-        placeholder="Search for music, people, or events..."
-        isSearching={isSearching}
-        disabled={effectiveView === 'users' && !currentUser}
-      />
+        {/* Omni-search bar */}
+        <SearchBar
+          value={search}
+          onChange={setSearch}
+          onClear={clearSearch}
+          category={category}
+          onCategoryChange={setCategory}
+          placeholder="Search for music, people, or events..."
+          isSearching={isSearching}
+          disabled={effectiveView === 'users' && !currentUser}
+        />
 
-      {/* Filter chips */}
-      <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-thin scrollbar-thumb-dark-600 scrollbar-track-transparent">
-        {visibleChips.map((chip) => (
-          <button
-            key={chip.id}
-            onClick={() => setFilterChip(chip.id)}
-            className={`flex-shrink-0 px-4 py-2 rounded-full text-sm font-medium transition-colors border ${
-              filterChip === chip.id
-                ? 'bg-lime-400/20 text-lime-400 border-lime-400/40'
-                : 'bg-dark-800 text-dark-300 border-dark-600 hover:text-white hover:border-dark-500'
-            }`}
-          >
-            {chip.label}
-          </button>
-        ))}
+        {/* Filter chips with right-edge fade gradient as scroll indicator */}
+        <div className="relative">
+          <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
+            {visibleChips.map((chip) => (
+              <button
+                key={chip.id}
+                onClick={() => setFilterChip(chip.id)}
+                className={`flex-shrink-0 px-4 h-11 rounded-full text-sm font-medium transition-colors border ${
+                  filterChip === chip.id
+                    ? 'bg-lime-400/20 text-lime-400 border-lime-400/40'
+                    : 'bg-dark-800 text-dark-300 border-dark-600 hover:text-white hover:border-dark-500'
+                }`}
+              >
+                {chip.label}
+              </button>
+            ))}
+          </div>
+          {/* Fade gradient — scroll affordance indicator */}
+          <div className="absolute right-0 top-0 bottom-0 w-8 bg-gradient-to-l from-dark-900 to-transparent pointer-events-none" />
+        </div>
       </div>
 
       {/* Content */}
@@ -379,18 +385,33 @@ const Search: React.FC = () => {
               <p className="text-dark-500 text-sm mt-2">Try adjusting your search or filters</p>
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
-              {filteredTracks.map(track => (
-                <TrackCard
-                  key={track.id}
-                  track={track}
-                  onPlay={handlePlayTrack}
-                  onAddToQueue={handleAddToQueue}
-                  isPlaying={player.currentTrack?.id === track.id && player.isPlaying}
-                  compactGrid //Trackcard compact layout
-                />
-              ))}
-            </div>
+            <>
+              {/* Mobile (< sm): compact horizontal row list — more results per screen */}
+              <div className="sm:hidden space-y-2">
+                {filteredTracks.map(track => (
+                  <TrackCard
+                    key={track.id}
+                    track={track}
+                    onPlay={handlePlayTrack}
+                    onAddToQueue={handleAddToQueue}
+                    isPlaying={player.currentTrack?.id === track.id && player.isPlaying}
+                  />
+                ))}
+              </div>
+              {/* Tablet/Desktop (>= sm): square card grid */}
+              <div className="hidden sm:grid sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
+                {filteredTracks.map(track => (
+                  <TrackCard
+                    key={track.id}
+                    track={track}
+                    onPlay={handlePlayTrack}
+                    onAddToQueue={handleAddToQueue}
+                    isPlaying={player.currentTrack?.id === track.id && player.isPlaying}
+                    compactGrid
+                  />
+                ))}
+              </div>
+            </>
           )}
         </section>
       )}

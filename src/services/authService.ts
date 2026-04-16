@@ -64,10 +64,10 @@ export class AuthService {
         email: data.email,
         password: data.password,
         options: {
-          emailRedirectTo: "https://re-mixed.net",
+          emailRedirectTo: "https://re-mixed.net/onboarding",
           data: {
             username: data.username,
-            role: data.role,
+            role: data.role.toLowerCase(),
             artist_name: data.artistName,
             bio: data.bio,
           }
@@ -96,7 +96,7 @@ export class AuthService {
           id: authData.user.id,
           username: data.username,
           email: data.email,
-          role: data.role,
+          role: data.role.toLowerCase() as 'musician' | 'consumer',
           artist_name: data.artistName,
           bio: data.bio,
           avatar: DEFAULT_AVATAR_URL,
@@ -108,6 +108,7 @@ export class AuthService {
         .single();
 
       if (profileError) {
+        console.error('[register] users INSERT failed:', profileError.message, profileError.code);
         // Check if it's the row-level security policy error and replace with user-friendly message
         if (profileError.message && profileError.message.includes('new row violates row-level security policy')) {
           throw new Error('The Supabase link has been sent to your email');
@@ -115,7 +116,12 @@ export class AuthService {
         throw new Error(profileError.message);
       }
 
-      return this.transformUser(profileData);
+      const newUser = this.transformUser(profileData);
+      // Pre-cache so the onAuthStateChange background fetch (which races the INSERT)
+      // finds the profile immediately rather than getting null and clearing auth state.
+      this.setCachedProfile(newUser);
+      console.log('[register] success — role stored:', newUser.role);
+      return newUser;
     } catch (error) {
       // Also check for the RLS error in the general catch block
       if (error instanceof Error && error.message.includes('new row violates row-level security policy')) {

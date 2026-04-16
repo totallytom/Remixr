@@ -86,7 +86,7 @@ const Sidebar: React.FC = () => {
 
   const authItems = [
     { id: 'login', label: 'Sign In', icon: LogIn, path: '/login' },
-    { id: 'register', label: 'Sign Up', icon: UserPlus, path: '/login?tab=register' }, // Will show register tab
+    { id: 'register', label: 'Sign Up', icon: UserPlus, path: '/signup' }, // Will show register tab
   ];
 
   const handleNavigation = (path: string) => {
@@ -230,93 +230,52 @@ const Sidebar: React.FC = () => {
         )}
       </div>
 
-      {/* Mobile top nav */}
-      <div className="lg:hidden fixed top-0 left-0 right-0 z-40 bg-dark-800 border-b border-dark-700 shadow-sm backdrop-blur-sm">
-        <div className="flex items-center justify-around px-2 py-2">
-          {(isAuthenticated
-            ? navigationItems.filter(item => {
-                const base = ['home', 'search', 'discover', 'playlists', 'upload'];
-                if (item.id === 'admin') return user?.isAdmin === true;
-                return base.includes(item.id);
-              })
-            : [
-                ...navigationItems.filter(item => ['home', 'search'].includes(item.id)),
-                ...authItems,
-              ]
-          ).map((item) => {
+      {/* Mobile bottom tab bar — 6 primary tabs, replaces old top + bottom navs */}
+      <nav
+        className="lg:hidden fixed bottom-0 left-0 right-0 z-50 h-14 bg-dark-800/95 border-t border-dark-700 backdrop-blur-md"
+        style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
+      >
+        <div className="flex items-center justify-around h-full px-1">
+          {(isAuthenticated ? [
+            { id: 'home',      label: 'Home',      icon: Home,          path: '/' },
+            { id: 'search',    label: 'Search',    icon: Search,        path: '/search' },
+            { id: 'discover',  label: 'Discover',  icon: RadioReceiver, path: '/discover' },
+            { id: 'playlists', label: 'Playlists', icon: ListMusic,     path: '/playlists' },
+            { id: 'chat',      label: 'Chat',      icon: MessageCircle, path: '/chat' },
+            { id: 'profile',   label: 'Profile',   icon: User,          path: '/profile' },
+          ] : [
+            { id: 'home',     label: 'Home',    icon: Home,    path: '/' },
+            { id: 'search',   label: 'Search',  icon: Search,  path: '/search' },
+            { id: 'login',    label: 'Sign In',  icon: LogIn,   path: '/login' },
+            { id: 'register', label: 'Sign Up',  icon: UserPlus, path: '/signup' },
+          ]).map((item) => {
             const Icon = item.icon;
-            const isActive = location.pathname === item.path;
-            const isUpload = item.id === 'upload';
+            const isActive = item.id === 'home'
+              ? location.pathname === '/'
+              : location.pathname.startsWith(item.path) && item.path !== '/';
             return (
               <button
                 key={item.id}
                 onClick={() => handleNavigation(item.path)}
-                className={`flex flex-col items-center gap-1 px-3 py-2 rounded-xl transition-all duration-200 ${
-                  isUpload
-                    ? 'bg-orange-500/90 hover:bg-orange-500 text-white border border-orange-400/50 shadow-md'
-                    : isActive
-                    ? item.id === 'search'
-                      ? 'text-white bg-lime-400/20'
-                      : 'text-white bg-[var(--sidebar-primary)]/20'
-                    : 'text-white hover:bg-white/10 hover:text-[var(--sidebar-primary)]'
-                }`}
+                className="relative flex flex-col items-center justify-center gap-0.5 flex-1 h-14 rounded-xl transition-all duration-200 active:scale-95"
+                style={{ minWidth: 44, minHeight: 44 }}
               >
-                <Icon size={20} strokeWidth={2} />
-                <span className="text-xs font-medium">{item.label}</span>
+                <Icon
+                  size={20}
+                  strokeWidth={isActive ? 2.5 : 1.8}
+                  className={isActive ? 'text-[var(--sidebar-primary)]' : 'text-white/60'}
+                />
+                <span className={`text-[9px] font-medium ${isActive ? 'text-[var(--sidebar-primary)]' : 'text-white/60'}`}>
+                  {item.label}
+                </span>
+                {isActive && (
+                  <span className="absolute bottom-1 w-1 h-1 rounded-full bg-[var(--sidebar-primary)]" />
+                )}
               </button>
             );
           })}
-          {isAuthenticated && (
-            <button
-              onClick={() => setSettingsOpen(true)}
-              className="flex flex-col items-center gap-1 px-3 py-2 rounded-xl transition-all duration-200 text-white hover:bg-white/10 hover:text-[var(--sidebar-primary)]"
-            >
-              <Settings size={20} strokeWidth={2} />
-              <span className="text-xs font-medium">Settings</span>
-            </button>
-          )}
         </div>
-      </div>
-
-      {/* Mobile bottom nav */}
-      <div className="lg:hidden fixed bottom-0 left-0 right-0 z-50 bg-dark-800 border-t border-dark-700 shadow-lg backdrop-blur-sm">
-        <div className="flex items-center justify-around px-2 py-2">
-          {(isAuthenticated
-            ? navigationItems.filter(item => ['chat', 'profile'].includes(item.id))
-            : []
-          ).map((item) => {
-            const Icon = item.icon;
-            const isActive = location.pathname === item.path;
-            return (
-              <button
-                key={item.id}
-                onClick={() => handleNavigation(item.path)}
-                className={`flex flex-col items-center gap-1 px-3 py-2 rounded-xl transition-all duration-200 ${
-                  isActive
-                    ? item.id === 'search'
-                      ? 'text-white bg-lime-400/20'
-                      : 'text-white bg-[var(--sidebar-primary)]/20'
-                    : 'text-white hover:bg-white/10 hover:text-[var(--sidebar-primary)]'
-                }`}
-              >
-                <Icon size={18} strokeWidth={2} />
-                <span className="text-xs font-medium">{item.label}</span>
-              </button>
-            );
-          })}
-          <button
-            onClick={togglePlayerVisibility}
-            className={`flex flex-col items-center gap-1 px-3 py-2 rounded-xl transition-all duration-200 ${
-              player.visible
-                ? 'text-white bg-[var(--sidebar-primary)]/20'
-                : 'text-white hover:bg-white/10 hover:text-[var(--sidebar-primary)]'
-            }`}
-          >
-            <Music size={18} strokeWidth={2} />
-            <span className="text-xs font-medium">Player</span>
-          </button>
-        </div>
-      </div>
+      </nav>
     </>
   );
 };

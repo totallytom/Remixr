@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { useForm } from 'react-hook-form';
-import { useSearchParams, useNavigate } from 'react-router-dom';
+import { useSearchParams, useNavigate, Link } from 'react-router-dom';
 import { Music, Mail, Lock, Eye, EyeOff, User, Mic, Headphones } from 'lucide-react';
 import { useStore } from '../store/useStore';
 import { AuthService } from '../services/authService';
@@ -160,29 +160,6 @@ const Login: React.FC = () => {
             </motion.div>
           )}
 
-          {/* Tabs */}
-          <div className="flex mb-6 bg-dark-700 rounded-lg p-1">
-            <button
-              onClick={() => switchTab('login')}
-              className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-all ${
-                activeTab === 'login'
-                  ? 'bg-primary-600 text-white'
-                  : 'text-dark-300 hover:text-white'
-              }`}
-            >
-              Sign In
-            </button>
-            <button
-              onClick={() => switchTab('register')}
-              className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-all ${
-                activeTab === 'register'
-                  ? 'bg-primary-600 text-white'
-                  : 'text-dark-300 hover:text-white'
-              }`}
-            >
-              Sign Up
-            </button>
-          </div>
 
           {/* Login Form */}
           {activeTab === 'login' && !showForgotPassword && (
@@ -569,13 +546,24 @@ const Login: React.FC = () => {
           {/* Footer */}
           <div className="mt-6 text-center">
             <p className="text-sm text-dark-400">
-              {activeTab === 'login' ? "Don't have an account? " : "Already have an account? "}
-              <button 
-                onClick={() => switchTab(activeTab === 'login' ? 'register' : 'login')}
-                className="text-primary-400 hover:text-primary-300 transition-colors"
-              >
-                {activeTab === 'login' ? 'Sign up' : 'Sign in'}
-              </button>
+              {activeTab === 'login' ? (
+                <>
+                  Don't have an account?{' '}
+                  <Link to="/signup" className="text-primary-400 hover:text-primary-300 transition-colors">
+                    Sign up
+                  </Link>
+                </>
+              ) : (
+                <>
+                  Already have an account?{' '}
+                  <button
+                    onClick={() => switchTab('login')}
+                    className="text-primary-400 hover:text-primary-300 transition-colors"
+                  >
+                    Sign in
+                  </button>
+                </>
+              )}
             </p>
           </div>
         </motion.div>
