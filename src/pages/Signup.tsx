@@ -57,11 +57,16 @@ const Signup: React.FC = () => {
 
   useEffect(() => {
     if (!isAuthenticated) return;
-    // Route based on role chosen during this signup session.
-    // Falls back to home for returning users who visit /signup while logged in.
+    // Only send to onboarding during an active musician signup on this page.
+    // Stale signup_role alone (e.g. after login) must not trigger onboarding.
     const role = sessionStorage.getItem('signup_role');
-    if (role === 'musician') navigate('/onboarding');
-    else navigate('/');
+    const pendingOnboarding = sessionStorage.getItem('signup_pending_onboarding') === '1';
+    if (role === 'musician' && pendingOnboarding) {
+      navigate('/onboarding');
+      return;
+    }
+    // Logged-in user opened /signup without a fresh signup flow — go home.
+    navigate('/');
   }, [isAuthenticated, navigate]);
 
   const onSubmit = async (data: SignupForm) => {
@@ -77,17 +82,22 @@ const Signup: React.FC = () => {
       // Set role BEFORE register() — Supabase fires SIGNED_IN during the await,
       // which triggers the useEffect redirect. sessionStorage must be ready by then.
       sessionStorage.setItem('signup_role', selectedRole);
+      if (selectedRole === 'musician') {
+        sessionStorage.setItem('signup_pending_onboarding', '1');
+      }
 
       const username = data.email.split('@')[0].replace(/[^a-zA-Z0-9_]/g, '_');
-      await AuthService.register({
+      const registeredUser = await AuthService.register({
         username,
         email: data.email,
         password: data.password,
         role: selectedRole,
       });
+      useStore.getState().applySessionUser(registeredUser);
       navigate(selectedRole === 'musician' ? '/onboarding' : '/');
     } catch (err) {
       sessionStorage.removeItem('signup_role');
+      sessionStorage.removeItem('signup_pending_onboarding');
       setError(err instanceof Error ? err.message : 'Registration failed. Please try again.');
     } finally {
       setIsLoading(false);
@@ -113,7 +123,7 @@ const Signup: React.FC = () => {
               <img src="/logo/logo.png" alt="Remixr" className="w-full h-full object-cover" />
             </motion.div>
             <h1 className="h2 text-gradient-neon mb-1">Join Remixr</h1>
-            <p className="text-sm" style={{ color: 'rgba(255,255,255,0.5)' }}>
+            <p className="text-sm" style={{ color: 'black' }}>
               Create your account in seconds.
             </p>
           </div>

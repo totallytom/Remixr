@@ -1,8 +1,8 @@
 import { supabase } from './supabase';
 import { User } from '../store/useStore';
 import { DEFAULT_AVATAR_URL } from '../utils/avatar';
+import { storage, STORAGE_KEYS } from '../platform/storage';
 
-console.log("!!! AUTH SERVICE FILE LOADED !!!");
 export interface AuthError {
   message: string;
   status?: number;
@@ -22,39 +22,58 @@ export interface LoginData {
   password: string;
 }
 
-const PROFILE_CACHE_KEY = 'sypher_cached_profile';
-
 export class AuthService {
   private static now(): number {
     return typeof performance !== 'undefined' ? performance.now() : Date.now();
   }
 
-  private static getCachedProfile(userId: string): User | null {
-    try {
-      const raw = localStorage.getItem(PROFILE_CACHE_KEY);
-      if (!raw) return null;
-      const cached = JSON.parse(raw) as User;
-      return cached?.id === userId ? cached : null;
-    } catch {
-      return null;
-    }
+  private static async getCachedProfile(userId: string): Promise<User | null> {
+    const cached = await storage.getJSON<User>(STORAGE_KEYS.PROFILE_CACHE);
+    return cached?.id === userId ? cached : null;
   }
 
-  private static setCachedProfile(user: User): void {
-    try {
-      localStorage.setItem(PROFILE_CACHE_KEY, JSON.stringify(user));
-    } catch {}
+  private static async setCachedProfile(user: User): Promise<void> {
+    await storage.setJSON(STORAGE_KEYS.PROFILE_CACHE, user);
   }
 
-  private static clearCachedProfile(): void {
-    try {
-      localStorage.removeItem(PROFILE_CACHE_KEY);
-    } catch {}
+  private static async clearCachedProfile(): Promise<void> {
+    await storage.remove(STORAGE_KEYS.PROFILE_CACHE);
   }
 
   private static logDuration(label: string, start: number) {
     const duration = Math.round(this.now() - start);
-    console.debug(`[auth] ${label} ${duration}ms`);
+  }
+
+  private static normalizeUserRole(role: unknown): 'musician' | 'consumer' {
+    const r = typeof role === 'string' ? role.toLowerCase().trim() : '';
+    return r === 'musician' ? 'musician' : 'consumer';
+  }
+
+  /** Wait for `public.users` row after `signUp` — SIGNED_IN can run before upsert finishes. */
+  private static async fetchProfileForSessionUser(userId: string): Promise<User | null> {
+    const maxAttempts = 12;
+    const delayMs = 120;
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      if (!session?.user || session.user.id !== userId) {
+        return null;
+      }
+      const { data: profileData, error } = await supabase
+        .from('users')
+        .select('*')
+        .eq('id', userId)
+        .maybeSingle();
+      if (!error && profileData) {
+        return this.transformUser(profileData, session.user.email_confirmed_at);
+      }
+      if (error) {
+        console.warn(`[AUTH] profile fetch attempt ${attempt + 1}:`, error.message);
+      }
+      await new Promise((r) => setTimeout(r, delayMs));
+    }
+    return null;
   }
 
   static async register(data: RegisterData): Promise<User> {
@@ -87,8 +106,7 @@ export class AuthService {
       // Auto-confirm the user (for development/production convenience)
       // In production, you might want to keep email confirmation but make it seamless
       if (authData.user.email_confirmed_at === null) {
-        // For now, we'll proceed without email confirmation
-        console.log('User registered successfully. Email confirmation can be enabled later.');
+        // Email confirmation is disabled for now
       }
 
       // Then, create the user profile in our users table
@@ -104,7 +122,6 @@ export class AuthService {
           avatar: DEFAULT_AVATAR_URL,
           followers: 0,
           following: 0,
-          is_verified: true, // Auto-verify for better UX
         }, { onConflict: 'id' })
         .select()
         .single();
@@ -128,18 +145,16 @@ export class AuthService {
           .select()
           .single();
         if (!correctedErr && corrected) {
-          const correctedUser = this.transformUser(corrected);
-          this.setCachedProfile(correctedUser);
-          console.log('[register] success (corrected role) — role stored:', correctedUser.role);
+          const correctedUser = this.transformUser(corrected, authData.user.email_confirmed_at);
+          await this.setCachedProfile(correctedUser);
           return correctedUser;
         }
       }
 
-      const newUser = this.transformUser(profileData);
+      const newUser = this.transformUser(profileData, authData.user.email_confirmed_at);
       // Pre-cache so the onAuthStateChange background fetch (which races the INSERT)
       // finds the profile immediately rather than getting null and clearing auth state.
-      this.setCachedProfile(newUser);
-      console.log('[register] success — role stored:', newUser.role);
+      await this.setCachedProfile(newUser);
       return newUser;
     } catch (error) {
       // Also check for the RLS error in the general catch block
@@ -181,7 +196,7 @@ export class AuthService {
       }
 
       if (profileData) {
-        return this.transformUser(profileData);
+        return this.transformUser(profileData, authData.user.email_confirmed_at);
       }
 
       // If profile not found, create one
@@ -205,7 +220,6 @@ export class AuthService {
           avatar: DEFAULT_AVATAR_URL,
           followers: 0,
           following: 0,
-          is_verified: true, // Auto-verify for better UX
         })
         .select()
         .single();
@@ -219,20 +233,44 @@ export class AuthService {
         throw new Error('User profile not found. Please contact support.');
       }
 
-      return this.transformUser(newProfileData);
+      return this.transformUser(newProfileData, authData.user.email_confirmed_at);
     } catch (error) {
       throw new Error(error instanceof Error ? error.message : 'Login failed');
     }
   }
 
+  /**
+   * Sign out locally and (when a session exists) revoke the refresh token on the server.
+   * The UI can still show a cached profile while Supabase has no session (see INITIAL_SESSION
+   * handler); in that case a global signOut returns 403 / "Auth session missing!" — we always
+   * fall back to a local sign-out so the user can actually log out.
+   */
   static async logout(): Promise<void> {
     try {
-      const { error } = await supabase.auth.signOut();
-      if (error) {
-        throw new Error(error.message);
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      if (session) {
+        const { error } = await supabase.auth.signOut();
+        if (error) {
+          const msg = error.message ?? '';
+          const benign =
+            /session missing|not authenticated|session_not_found/i.test(msg) ||
+            (error as { status?: number }).status === 403;
+          if (!benign) {
+            console.warn('[auth] signOut:', msg);
+          }
+        }
       }
-    } catch (error) {
-      throw new Error(error instanceof Error ? error.message : 'Logout failed');
+    } catch (e) {
+      console.warn('[auth] logout:', e);
+    } finally {
+      try {
+        await supabase.auth.signOut({ scope: 'local' });
+      } catch {
+        /* ignore */
+      }
+      await this.clearCachedProfile();
     }
   }
 
@@ -260,7 +298,9 @@ export class AuthService {
         return null;
       }
 
-      return this.transformUser(profileData);
+      const user = this.transformUser(profileData, session.user.email_confirmed_at);
+      await this.setCachedProfile(user);
+      return user;
     } catch (error) {
       console.error('Error getting current user:', error);
       return null;
@@ -303,7 +343,9 @@ export class AuthService {
       if (updates.genres) updateData.genres = updates.genres;
       if (updates.role) updateData.role = updates.role;
       if (updates.externalLinks !== undefined) updateData.external_links = updates.externalLinks;
-      
+      if (updates.bannerUrl !== undefined) updateData.banner_url = updates.bannerUrl;
+      if (updates.vanityUrl !== undefined) updateData.vanity_url = updates.vanityUrl || null;
+
       updateData.updated_at = new Date().toISOString();
 
       const { data, error } = await supabase
@@ -325,13 +367,17 @@ export class AuthService {
 
   static async changePassword(currentPassword: string, newPassword: string): Promise<void> {
     try {
-      const { error } = await supabase.auth.updateUser({
-        password: newPassword
-      });
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user?.email) throw new Error('No authenticated user');
 
-      if (error) {
-        throw new Error(error.message);
-      }
+      const { error: verifyError } = await supabase.auth.signInWithPassword({
+        email: user.email,
+        password: currentPassword,
+      });
+      if (verifyError) throw new Error('Current password is incorrect');
+
+      const { error } = await supabase.auth.updateUser({ password: newPassword });
+      if (error) throw new Error(error.message);
     } catch (error) {
       throw new Error(error instanceof Error ? error.message : 'Password change failed');
     }
@@ -444,7 +490,7 @@ export class AuthService {
         .select('*')
         .ilike('username', `%${username}%`);
       if (error) throw new Error(error.message);
-      return (data || []).map(this.transformUser);
+      return (data || []).map((u) => this.transformUser(u));
     } catch (error) {
       throw new Error(error instanceof Error ? error.message : 'User search failed');
     }
@@ -460,9 +506,6 @@ export class AuthService {
         },
         body: JSON.stringify({ userId }),
       });
-
-      console.log('Delete account response status:', response.status);
-      console.log('Delete account response headers:', response.headers.get('content-type'));
 
       if (!response.ok) {
         // Check if response is actually JSON before trying to parse
@@ -496,47 +539,32 @@ export class AuthService {
 
   static onAuthStateChange(callback: (user: User | null) => void) {
     return supabase.auth.onAuthStateChange(async (event, session) => {
-      console.log(`[AUTH] Event: ${event} | Session: ${!!session} | Time: ${new Date().toLocaleTimeString()}`);
-      console.log('Auth state change:', event, session?.user?.id);
-      
       const shouldFetchProfile =
         (event === 'SIGNED_IN' || event === 'INITIAL_SESSION') &&
         session?.user;
 
       if (shouldFetchProfile) {
         // 1. Show cached profile instantly so the UI is never blocked
-        const cached = this.getCachedProfile(session.user.id);
-        if (cached) {
-          console.log('[AUTH] Serving cached profile immediately');
-          callback(cached);
-        }
+        const cached = await this.getCachedProfile(session.user.id);
+        if (cached) callback(cached);
 
         // 2. Use setTimeout(0) to break the "Supabase Deadlock"
         // This lets the Auth listener finish its execution before starting the DB fetch
         setTimeout(async () => {
           const profileFetchStart = this.now();
           try {
-            console.log('[AUTH] Background fetch starting for:', session.user.id);
-            const { data: profileData, error } = await supabase
-              .from('users')
-              .select('*')
-              .eq('id', session.user.id)
-              .maybeSingle();
-
+            const freshUser = await this.fetchProfileForSessionUser(session.user.id);
             this.logDuration(`auth ${event} background fetch`, profileFetchStart);
 
-            if (error || !profileData) {
-              console.warn('Background profile fetch failed:', error);
+            if (!freshUser) {
+              console.warn('[AUTH] No profile after retries for:', session.user.id);
               if (!cached) callback(null);
               return;
             }
 
-            const freshUser = this.transformUser(profileData);
-            this.setCachedProfile(freshUser);
+            await this.setCachedProfile(freshUser);
 
-            // 3. Only update UI if the data is actually different
             if (!cached || JSON.stringify(freshUser) !== JSON.stringify(cached)) {
-              console.log('[AUTH] Profile updated from background fetch');
               callback(freshUser);
             }
           } catch (error) {
@@ -549,7 +577,7 @@ export class AuthService {
       }
 
       if (event === 'SIGNED_OUT') {
-        this.clearCachedProfile();
+        await this.clearCachedProfile();
         callback(null);
         return;
       }
@@ -558,30 +586,24 @@ export class AuthService {
         // Don't nuke the cache here — Supabase may fire INITIAL_SESSION before it has
         // finished hydrating the session from storage (cold-boot race condition).
         // Only clear on an explicit SIGNED_OUT above.
-        try {
-          const raw = localStorage.getItem(PROFILE_CACHE_KEY);
-          if (raw) {
-            const cached = JSON.parse(raw) as User;
-            if (cached?.id) {
-              console.log('[AUTH] No active session on init, serving cached profile while session resolves');
-              callback(cached);
-              return;
-            }
-          }
-        } catch {}
+        const cached = await storage.getJSON<User>(STORAGE_KEYS.PROFILE_CACHE);
+        if (cached?.id) {
+          callback(cached);
+          return;
+        }
         callback(null);
         return;
       }
 
       if (event === 'TOKEN_REFRESH_FAILED') {
         this.clearCachedProfile();
-        await supabase.auth.signOut();
+        await supabase.auth.signOut({ scope: 'local' });
         callback(null);
       }
     });
   }
 
-  static transformUser(dbUser: any): User {
+  static transformUser(dbUser: any, emailConfirmedAt?: string | null): User {
     return {
       id: dbUser.id,
       username: dbUser.username,
@@ -589,7 +611,7 @@ export class AuthService {
       avatar: dbUser.avatar,
       followers: dbUser.followers,
       following: dbUser.following,
-      role: dbUser.role,
+      role: this.normalizeUserRole(dbUser.role),
       isVerified: dbUser.is_verified,
       isPrivate: dbUser.is_private,
       isAdmin: dbUser.is_admin ?? false,
@@ -598,6 +620,16 @@ export class AuthService {
       bio: dbUser.bio,
       genres: dbUser.genres,
       externalLinks: dbUser.external_links ?? [],
+      subscriptionTier: dbUser.subscription_tier ?? 'free',
+      stripeCustomerId: dbUser.stripe_customer_id ?? undefined,
+      bannerUrl: dbUser.banner_url ?? undefined,
+      vanityUrl: dbUser.vanity_url ?? undefined,
+      emailConfirmed: !!emailConfirmedAt,
     };
+  }
+
+  static async resendEmailConfirmation(email: string): Promise<void> {
+    const { error } = await supabase.auth.resend({ type: 'signup', email });
+    if (error) throw new Error(error.message);
   }
 } 

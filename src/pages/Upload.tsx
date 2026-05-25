@@ -23,15 +23,19 @@ import dinoImg from '../../public/logo/DINO.png';
 import littlePrinceImg from '../../public/logo/LITTLE PRINCE.png';
 import { SnippetEditor } from '../components/music/SnippetEditor';
 import { transcodeWavOrAiffToM4a, shouldTranscodeToM4a } from '../utils/transcodeAudio';
+import { analyticsService } from '../services/analyticsService';
+import { BoostService } from '../services/boostService';
 
 const GENRES = [
   'Electronic', 'Pop', 'Rock', 'Hip Hop', 'R&B', 'Jazz', 'Classical',
   'Country', 'Folk', 'Alternative', 'Experimental', 'Reggae', 'Blues',
 ];
 
-const ACCEPTED_AUDIO = ['.mp3', '.wav', '.aiff', '.aif', 'audio/mpeg', 'audio/wav', 'audio/x-wav', 'audio/aiff', 'audio/x-aiff'];
+const ACCEPTED_AUDIO = ['.mp3', '.wav', '.aiff', '.aif', '.m4a', 'audio/mpeg', 'audio/wav', 'audio/x-wav', 'audio/aiff', 'audio/x-aiff', 'audio/mp4', 'audio/x-m4a'];
 const MAX_FILE_MB = 50;
 const MAX_TRACKS = 20;
+const FREE_TRACK_LIMIT = 10;
+const FREE_ALBUM_LIMIT = 2;
 
 const getAudioDuration = (file: File): Promise<number> => {
   return new Promise((resolve, reject) => {
@@ -126,6 +130,16 @@ const UnifiedUploadContent: React.FC = () => {
   const [trackObjectUrls, setTrackObjectUrls] = useState<Record<string, string>>({});
   const trackUrlsForCleanupRef = useRef<Record<string, string>>({});
   const [isTranscoding, setIsTranscoding] = useState(false);
+  const [uploadCounts, setUploadCounts] = useState<{ trackCount: number; albumCount: number } | null>(null);
+
+  const isPro = user?.subscriptionTier === 'pro';
+  const atTrackLimit = !isPro && (uploadCounts?.trackCount ?? 0) >= FREE_TRACK_LIMIT;
+  const atAlbumLimit = !isPro && (uploadCounts?.albumCount ?? 0) >= FREE_ALBUM_LIMIT;
+
+  useEffect(() => {
+    if (!user?.id) return;
+    analyticsService.getUploadCounts(user.id).then(setUploadCounts).catch(() => {});
+  }, [user?.id]);
 
   useEffect(() => {
     setArtist(user?.username || '');
@@ -190,8 +204,21 @@ const UnifiedUploadContent: React.FC = () => {
       return;
     }
     if (tracks.length + files.length > MAX_TRACKS) {
-      setDropError(`Maximum ${MAX_TRACKS} tracks allowed.`);
+      setDropError(`Maximum ${MAX_TRACKS} tracks per upload allowed.`);
       return;
+    }
+    if (!isPro) {
+      const alreadyUploaded = uploadCounts?.trackCount ?? 0;
+      const wouldTotal = alreadyUploaded + tracks.length + files.length;
+      if (wouldTotal > FREE_TRACK_LIMIT) {
+        const remaining = Math.max(0, FREE_TRACK_LIMIT - alreadyUploaded - tracks.length);
+        setDropError(
+          remaining === 0
+            ? `You've reached the free plan limit of ${FREE_TRACK_LIMIT} tracks. Upgrade to Pro for unlimited uploads.`
+            : `Adding these files would exceed your free plan limit. You can add ${remaining} more track${remaining === 1 ? '' : 's'}.`
+        );
+        return;
+      }
     }
     const needsTranscode = files.some(shouldTranscodeToM4a);
     if (needsTranscode) setIsTranscoding(true);
@@ -292,6 +319,10 @@ const UnifiedUploadContent: React.FC = () => {
   const submitSingle = async () => {
     if (!user) return;
     if (tracks.length !== 1) return;
+    if (!isPro && (uploadCounts?.trackCount ?? 0) >= FREE_TRACK_LIMIT) {
+      addAlert(`Free plan is limited to ${FREE_TRACK_LIMIT} tracks. Upgrade to Pro for unlimited uploads.`, 'warning', 'Upload limit reached');
+      return;
+    }
     if (!singleTitle.trim() || !artist.trim() || !genre) {
       addAlert('Please fill in Title, Artist, and Genre.', 'warning');
       return;
@@ -342,27 +373,6 @@ const UnifiedUploadContent: React.FC = () => {
   if (audioError || !audioData?.path) {
     throw new Error(audioError ? `Failed to upload audio: ${audioError.message}` : 'Upload succeeded but no path returned');
   }
-  // ACRCloud copyright check via Supabase Edge Function – deletes file from storage if match
-  try {
-    const { data: acrData, error: acrError } = await supabase.functions.invoke('check-copyright-acr', {
-      body: { bucket: 'music-files', path: audioData.path },
-    });
-    if (acrError) {
-      console.warn('ACR copyright check failed:', acrError);
-      // Continue upload if Edge Function unavailable (e.g. not deployed)
-    } else if (acrData?.copyrighted) {
-      clearInterval(uploadInterval);
-      setIsUploading(false);
-      addAlert(
-        acrData.reason || 'This upload was removed because it matches a known copyrighted recording.',
-        'error',
-        'Copyright – track removed'
-      );
-      return;
-    }
-  } catch {
-    // Allow upload if ACR check errors (e.g. function not deployed)
-  }
   const { data: audioUrlData } = supabase.storage.from('music-files').getPublicUrl(audioData.path);
   audioUrl = audioUrlData.publicUrl;
 
@@ -377,7 +387,7 @@ const UnifiedUploadContent: React.FC = () => {
     imageUrl = supabase.storage.from('music-files').getPublicUrl(imageData.path).data.publicUrl;
   }
   const duration = tracks[0]?.duration ?? 0;
-  const { error: trackError } = await supabase
+  const { data: trackData, error: trackError } = await supabase
     .from('tracks')
     .insert({
       title: singleTitle,
@@ -390,13 +400,22 @@ const UnifiedUploadContent: React.FC = () => {
       user_id: user.id,
       preview_start_sec: previewStartSec,
       preview_duration_sec: previewDurationSec,
-    });
+    })
+    .select('id')
+    .single();
   if (trackError) throw new Error(`Failed to save track: ${trackError.message}`);
+
+  // Pro users get their track boosted automatically for priority placement in Discover
+  if (isPro && trackData?.id) {
+    BoostService.boostTrack(trackData.id, user.id).catch(() => {});
+  }
+
   clearInterval(uploadInterval);
   setUploadProgress(100);
   setIsUploading(false);
   addAlert('Your track is now live.', 'success', 'Track uploaded');
   clearAll();
+  if (user?.id) analyticsService.getUploadCounts(user.id).then(setUploadCounts).catch(() => {});
   } catch (error) {
     clearInterval(uploadInterval);
     setIsUploading(false);
@@ -406,6 +425,17 @@ const UnifiedUploadContent: React.FC = () => {
 
   const submitAlbum = async () => {
     if (!user || tracks.length < 2) return;
+    if (!isPro) {
+      if ((uploadCounts?.albumCount ?? 0) >= FREE_ALBUM_LIMIT) {
+        addAlert(`Free plan is limited to ${FREE_ALBUM_LIMIT} albums. Upgrade to Pro for unlimited uploads.`, 'warning', 'Album limit reached');
+        return;
+      }
+      const trackTotal = (uploadCounts?.trackCount ?? 0) + tracks.length;
+      if (trackTotal > FREE_TRACK_LIMIT) {
+        addAlert(`This album would bring your track total over the free plan limit of ${FREE_TRACK_LIMIT}. Upgrade to Pro for unlimited uploads.`, 'warning', 'Track limit reached');
+        return;
+      }
+    }
     if (!albumTitle.trim() || !artist.trim() || !genre) {
       addAlert('Please fill in Album Title, Artist, and Genre.', 'warning');
       return;
@@ -449,31 +479,6 @@ const UnifiedUploadContent: React.FC = () => {
         });
         setUploadProgress(20 + ((i + 1) / sortedTracks.length) * 50);
       }
-      // ACRCloud copyright check for each track – if any match, remove all uploaded files and abort
-      let copyrightReason: string | null = null;
-      for (const t of uploadedTracks) {
-        try {
-          const { data: acrData, error: acrError } = await supabase.functions.invoke('check-copyright-acr', {
-            body: { bucket: 'music-files', path: t.storage_path },
-          });
-          if (!acrError && acrData?.copyrighted) {
-            copyrightReason = acrData.reason ?? 'A track matches a known copyrighted recording.';
-            break;
-          }
-        } catch {
-          // Continue if Edge Function unavailable
-        }
-      }
-      if (copyrightReason) {
-        await removeUploadedFilesFromStorage(supabase, {
-          audioPaths: uploadedTracks.map(t => t.storage_path),
-          coverPath,
-        });
-        clearInterval(uploadInterval);
-        setIsUploading(false);
-        addAlert(copyrightReason, 'error', 'Copyright – album not uploaded');
-        return;
-      }
       const { data: albumData, error: albumError } = await supabase
         .from('albums')
         .insert({
@@ -489,7 +494,7 @@ const UnifiedUploadContent: React.FC = () => {
         .single();
       if (albumError) throw new Error(`Failed to create album: ${albumError.message}`);
       setUploadProgress(70);
-      const { error: tracksError } = await supabase.from('tracks').insert(
+      const { data: insertedTracks, error: tracksError } = await supabase.from('tracks').insert(
         uploadedTracks.map(t => ({
           title: t.title,
           artist,
@@ -505,13 +510,22 @@ const UnifiedUploadContent: React.FC = () => {
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
         }))
-      );
+      ).select('id');
       if (tracksError) throw new Error(`Failed to create tracks: ${tracksError.message}`);
+
+      // Pro users get every album track boosted automatically for priority placement in Discover
+      if (isPro && insertedTracks?.length) {
+        insertedTracks.forEach(t => {
+          BoostService.boostTrack(t.id, user.id).catch(() => {});
+        });
+      }
+
       clearInterval(uploadInterval);
       setUploadProgress(100);
       setIsUploading(false);
       addAlert('Your album is now live.', 'success', 'Album uploaded');
       clearAll();
+      if (user?.id) analyticsService.getUploadCounts(user.id).then(setUploadCounts).catch(() => {});
     } catch (error) {
       clearInterval(uploadInterval);
       setIsUploading(false);
@@ -524,36 +538,79 @@ const UnifiedUploadContent: React.FC = () => {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         {/* Left: Unified dropzone */}
         <section className="rounded-2xl bg-white p-6 shadow-sm border border-gray-200">
-          <h3 className="text-sm font-semibold uppercase tracking-wider text-gray-500 mb-3">Drop files</h3>
-          <div
-            onDrop={onDrop}
-            onDragOver={onDragOver}
-            className={`rounded-xl border-2 border-dashed p-8 text-center transition-colors bg-gray-50/50 ${isTranscoding ? 'border-violet-300 opacity-80' : 'border-gray-300 hover:border-violet-400'}`}
-          >
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept=".mp3,.wav,.aiff,.aif,audio/mpeg,audio/wav,audio/aiff,audio/x-aiff"
-              multiple
-              onChange={onFileInputChange}
-              className="hidden"
-              disabled={isTranscoding}
-            />
-            <CloudUpload size={40} className="mx-auto mb-3 text-gray-400" />
-            <p className="text-gray-700 font-medium mb-1">Select or drop audio files</p>
-            <p className="text-gray-500 text-sm">MP3, WAV, AIFF (GarageBand) · WAV/AIFF → M4A to save space · Max {MAX_FILE_MB}MB · Up to {MAX_TRACKS} tracks</p>
-            {isTranscoding ? (
-              <p className="mt-3 text-violet-600 text-sm font-medium">Converting to M4A…</p>
-            ) : (
-              <button
-                type="button"
-                onClick={() => fileInputRef.current?.click()}
-                className="mt-3 px-4 py-2 rounded-lg bg-violet-500 text-white text-sm font-medium hover:bg-violet-600 transition-colors"
-              >
-                Select File
-              </button>
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-sm font-semibold uppercase tracking-wider text-gray-500">Drop files</h3>
+            {!isPro && uploadCounts && (
+              <div className="flex items-center gap-3 text-xs text-gray-500">
+                <span className={atTrackLimit ? 'text-amber-600 font-medium' : ''}>
+                  {uploadCounts.trackCount}/{FREE_TRACK_LIMIT} tracks
+                </span>
+                <span className="text-gray-300">·</span>
+                <span className={atAlbumLimit ? 'text-amber-600 font-medium' : ''}>
+                  {uploadCounts.albumCount}/{FREE_ALBUM_LIMIT} albums
+                </span>
+                <button
+                  type="button"
+                  onClick={() => navigate('/upgrade')}
+                  className="text-violet-600 font-medium hover:underline"
+                >
+                  Go Pro →
+                </button>
+              </div>
             )}
           </div>
+
+          {atTrackLimit ? (
+            <div className="rounded-xl border-2 border-amber-200 bg-amber-50 p-8 text-center">
+              <Lock size={36} className="mx-auto mb-3 text-amber-500" />
+              <p className="font-semibold text-gray-800 mb-1">Track limit reached</p>
+              <p className="text-sm text-gray-600 mb-4">
+                Free plan is capped at {FREE_TRACK_LIMIT} tracks. Upgrade to Pro for unlimited uploads.
+              </p>
+              <button
+                type="button"
+                onClick={() => navigate('/upgrade')}
+                className="px-5 py-2 rounded-lg bg-violet-500 text-white text-sm font-medium hover:bg-violet-600 transition-colors"
+              >
+                Upgrade to Pro
+              </button>
+            </div>
+          ) : (
+            <div
+              onDrop={onDrop}
+              onDragOver={onDragOver}
+              className={`rounded-xl border-2 border-dashed p-8 text-center transition-colors bg-gray-50/50 ${isTranscoding ? 'border-violet-300 opacity-80' : 'border-gray-300 hover:border-violet-400'}`}
+            >
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".mp3,.wav,.aiff,.aif,.m4a,audio/mpeg,audio/wav,audio/aiff,audio/x-aiff,audio/mp4,audio/x-m4a"
+                multiple
+                onChange={onFileInputChange}
+                className="hidden"
+                disabled={isTranscoding}
+              />
+              <CloudUpload size={40} className="mx-auto mb-3 text-gray-400" />
+              <p className="text-gray-700 font-medium mb-1">Select or drop audio files</p>
+              <p className="text-gray-500 text-sm">
+                MP3, WAV, AIFF, M4A · Max {MAX_FILE_MB}MB
+                {!isPro && uploadCounts
+                  ? ` · ${FREE_TRACK_LIMIT - uploadCounts.trackCount} track${FREE_TRACK_LIMIT - uploadCounts.trackCount === 1 ? '' : 's'} remaining`
+                  : ` · Up to ${MAX_TRACKS} tracks`}
+              </p>
+              {isTranscoding ? (
+                <p className="mt-3 text-violet-600 text-sm font-medium">Converting to M4A…</p>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="mt-3 px-4 py-2 rounded-lg bg-violet-500 text-white text-sm font-medium hover:bg-violet-600 transition-colors"
+                >
+                  Select File
+                </button>
+              )}
+            </div>
+          )}
           {dropError && <p className="mt-2 text-sm text-red-600">{dropError}</p>}
           {tracks.length > 0 && (
             <div className="mt-4 space-y-2">
@@ -569,7 +626,7 @@ const UnifiedUploadContent: React.FC = () => {
             <div className="flex flex-col items-center justify-center py-12 text-center text-gray-500">
               <Music size={48} className="mb-3 text-gray-300" />
               <p className="font-medium text-gray-700">No files yet</p>
-              <p className="text-sm">Drop or select MP3, WAV, or AIFF (e.g. GarageBand) on the left to get started.</p>
+              <p className="text-sm">Drop or select MP3, WAV, AIFF, or M4A (GarageBand) on the left to get started.</p>
             </div>
           )}
 
@@ -729,13 +786,22 @@ const UnifiedUploadContent: React.FC = () => {
                   })}
                 </div>
               </div>
+              {atAlbumLimit && (
+                <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-center">
+                  <p className="text-sm font-medium text-gray-800 mb-1">Album limit reached</p>
+                  <p className="text-xs text-gray-600 mb-2">Free plan is capped at {FREE_ALBUM_LIMIT} albums.</p>
+                  <button type="button" onClick={() => navigate('/upgrade')} className="text-sm text-violet-600 font-medium hover:underline">
+                    Upgrade to Pro →
+                  </button>
+                </div>
+              )}
               {isUploading && (
                 <div className="space-y-2">
                   <div className="flex justify-between text-sm"><span>Uploading album...</span><span>{uploadProgress}%</span></div>
                   <div className="h-2 bg-gray-200 rounded-full overflow-hidden"><motion.div className="h-full bg-violet-500 rounded-full" animate={{ width: `${uploadProgress}%` }} transition={{ duration: 0.2 }} /></div>
                 </div>
               )}
-              <button type="button" onClick={submitAlbum} disabled={isUploading} className="w-full inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-violet-500 text-white font-medium hover:bg-violet-600 disabled:opacity-50">
+              <button type="button" onClick={submitAlbum} disabled={isUploading || atAlbumLimit} className="w-full inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-violet-500 text-white font-medium hover:bg-violet-600 disabled:opacity-50">
                 <Save size={18} /> {isUploading ? 'Uploading...' : 'Upload Album'}
               </button>
             </div>
@@ -801,18 +867,67 @@ const UnifiedUploadContent: React.FC = () => {
 
 // Main Upload Component
 const Upload: React.FC = () => {
-  const { isAuthenticated } = useStore();
+  const { isAuthenticated, user } = useStore();
   const navigate = useNavigate();
+  const [resendStatus, setResendStatus] = React.useState<'idle' | 'sending' | 'sent' | 'error'>('idle');
 
-  // Redirect to login if not authenticated
-  useEffect(() => {
-    if (!isAuthenticated) {
-      navigate('/login');
-    }
-  }, [isAuthenticated, navigate]);
-
-  // Show authentication required message if not authenticated
   if (!isAuthenticated) {
+    return (
+      <div className="min-h-full px-4 py-8 sm:px-6 lg:px-8">
+        <header className="mb-8 text-center">
+          <h1 className="text-4xl font-bold tracking-tight gradient-text font-kyobo sm:text-5xl">Upload</h1>
+          <p className="text-white mt-2 text-sm">Share your music with the world</p>
+        </header>
+        {/* Step preview */}
+        <div className="max-w-xl mx-auto mb-8 space-y-3">
+          {[
+            { icon: '🎵', title: 'Upload your tracks', desc: 'MP3, WAV, AIFF up to 50 MB each' },
+            { icon: '🎨', title: 'Add cover art & metadata', desc: 'Genre, title, album art, pricing' },
+            { icon: '🚀', title: 'Publish & reach listeners', desc: 'Go live instantly on the platform' },
+          ].map((step) => (
+            <div key={step.title} className="flex items-center gap-4 p-4 bg-dark-800/60 rounded-xl border border-dark-700/60 opacity-60">
+              <span className="text-2xl flex-shrink-0">{step.icon}</span>
+              <div>
+                <p className="text-white font-medium text-sm">{step.title}</p>
+                <p className="text-gray-500 text-xs">{step.desc}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+        <div className="flex flex-col items-center gap-3 max-w-xs mx-auto">
+          <p className="text-gray-400 text-sm text-center">Create an account to start uploading your music</p>
+          <button
+            type="button"
+            onClick={() => navigate('/signup')}
+            className="w-full px-6 py-3 rounded-xl bg-primary-500 hover:bg-primary-400 text-white font-semibold transition-colors shadow-md"
+          >
+            Sign Up Free
+          </button>
+          <button
+            type="button"
+            onClick={() => navigate('/login')}
+            className="w-full px-6 py-3 rounded-xl bg-dark-700 hover:bg-dark-600 text-white font-medium transition-colors"
+          >
+            Sign In
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (user && !user.emailConfirmed) {
+    const handleResend = async () => {
+      if (!user.email) return;
+      setResendStatus('sending');
+      try {
+        const { AuthService } = await import('../services/authService');
+        await AuthService.resendEmailConfirmation(user.email);
+        setResendStatus('sent');
+      } catch {
+        setResendStatus('error');
+      }
+    };
+
     return (
       <div className="min-h-full px-4 py-8 sm:px-6 lg:px-8">
         <header className="mb-10 text-center">
@@ -824,16 +939,19 @@ const Upload: React.FC = () => {
           <div className="rounded-2xl bg-dark-700/80 p-6 ring-1 ring-white/5 mb-6">
             <Lock size={48} className="text-primary-400" />
           </div>
-          <h2 className="text-xl font-semibold text-white mb-2">Authentication Required</h2>
-          <p className="text-dark-400 text-center max-w-sm mb-8">
-            Sign in to upload music or albums and manage your releases.
+          <h2 className="text-xl font-semibold text-white mb-2">Confirm your email to upload</h2>
+          <p className="text-dark-400 text-center max-w-sm mb-2">
+            We sent a confirmation link to <span className="text-white font-medium">{user.email}</span>.
+            Click the link in that email to unlock uploads.
           </p>
+          <p className="text-dark-500 text-sm mb-8">Check your spam folder if you don't see it.</p>
           <button
             type="button"
-            onClick={() => navigate('/login')}
-            className="px-6 py-3 rounded-xl bg-primary-500 text-white font-medium hover:bg-primary-600 transition-colors shadow-md"
+            onClick={handleResend}
+            disabled={resendStatus === 'sending' || resendStatus === 'sent'}
+            className="px-6 py-3 rounded-xl bg-primary-500 text-white font-medium hover:bg-primary-600 disabled:opacity-50 transition-colors shadow-md"
           >
-            Sign In
+            {resendStatus === 'sending' ? 'Sending…' : resendStatus === 'sent' ? 'Email sent!' : resendStatus === 'error' ? 'Failed — try again' : 'Resend confirmation email'}
           </button>
         </div>
       </div>

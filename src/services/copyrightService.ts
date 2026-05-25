@@ -44,8 +44,8 @@ export async function checkCopyright(
         artist: metadata.artist?.trim() || '',
       }),
     });
-    // 404 = API not available (e.g. local dev without API server) – allow upload
-    if (res.status === 404) {
+    // 404 or 5xx = API not available or server error – allow upload rather than blocking
+    if (res.status === 404 || res.status >= 500) {
       return { blocked: false };
     }
     if (!res.ok) {

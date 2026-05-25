@@ -1,8 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useStore } from '../store/useStore';
-// import { mockTracks } from '../data/mockData';
-import { Music, User as UserIcon, ListMusic, Mic, Headphones, ArrowLeft, MessageCircle, UserPlus, UserMinus, Edit, Trash2, Settings, Lock, Unlock, MoreVertical, Play, Edit3, Share2, Users, Calendar, MapPin, X, Bookmark, ThumbsUp } from 'lucide-react';
+import { Music, User as UserIcon, ListMusic, Mic, Headphones, ArrowLeft, MessageCircle, UserPlus, UserMinus, Edit, Trash2, Settings, Lock, Unlock, MoreVertical, Play, Edit3, Share2, Users, Calendar, MapPin, X, Bookmark, ThumbsUp, Check, Globe, Camera, AtSign } from 'lucide-react';
 import { ChatService } from '../services/chatService';
 import { FollowService, FollowStats } from '../services/followService';
 import { MusicService } from '../services/musicService';
@@ -20,8 +19,8 @@ import { createDisplayName, useUUIDMasking } from '../utils/debugUtils';
 import { getAvatarUrl } from '../utils/avatar';
 
 const Profile: React.FC = () => {
-  const { userId } = useParams<{ userId: string }>();
-  const { user: currentUser, isAuthenticated, setUser, changeUsername, changeEmail, togglePrivateAccount, updateProfile, playTrack, playQueue, playPlaylist } = useStore();
+  const { userId, handle } = useParams<{ userId: string; handle: string }>();
+  const { user: currentUser, isAuthenticated, setUser, changeUsername, changeEmail, togglePrivateAccount, updateProfile, playTrack, playQueue, playPlaylist, setSettingsOpen } = useStore();
   const [profileUser, setProfileUser] = useState<UserType | null>(null);
   const [userTracks, setUserTracks] = useState<Track[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -47,6 +46,7 @@ const Profile: React.FC = () => {
     isPrivate: false
   });
   const [isSaving, setIsSaving] = useState(false);
+  const [vanityError, setVanityError] = useState<string | null>(null);
   
   // Delete track states
   const [deletingTrackId, setDeletingTrackId] = useState<string | null>(null);
@@ -119,8 +119,29 @@ const Profile: React.FC = () => {
 
   // Links modal (external links to other sites, max 6)
   const [showLinksModal, setShowLinksModal] = useState(false);
-  const [linkInputs, setLinkInputs] = useState<string[]>(['', '', '', '', '', '']);
+  const [linkInputs, setLinkInputs] = useState<string[]>(['', '', '']);
   const [isSavingLinks, setIsSavingLinks] = useState(false);
+
+  const [profileLinkCopied, setProfileLinkCopied] = useState(false);
+  const profileLinkCopyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Avatar upload
+  const avatarInputRef = useRef<HTMLInputElement>(null);
+  const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
+
+  // Banner upload (pro only)
+  const bannerInputRef = useRef<HTMLInputElement>(null);
+  const [isUploadingBanner, setIsUploadingBanner] = useState(false);
+
+  const isCurrentUserPro = currentUser?.subscriptionTier === 'pro';
+  const FREE_CONCERT_LIMIT = 1;
+  const atConcertLimit = !isCurrentUserPro && concerts.length >= FREE_CONCERT_LIMIT;
+
+  useEffect(() => {
+    return () => {
+      if (profileLinkCopyTimerRef.current) clearTimeout(profileLinkCopyTimerRef.current);
+    };
+  }, []);
 
   useEffect(() => {
     const loadPlaylists = async () => {
@@ -217,11 +238,13 @@ const Profile: React.FC = () => {
       // Declare loadedUser at function scope to avoid ReferenceError
       let loadedUser: UserType | null = null;
       
-      if (userId) {
+      if (handle || userId) {
         // Viewing another user's profile – don't treat as private until we've loaded follow stats
         setFollowStatsLoadedForViewer(false);
         try {
-          const user = await ChatService.getUserById(userId);
+          const user = handle
+            ? await ChatService.getProfileByVanityUrl(handle)
+            : await ChatService.getProfileBySlug(userId!);
           if (user) {
             loadedUser = user; // Set loadedUser here too
             setProfileUser(user);
@@ -229,7 +252,7 @@ const Profile: React.FC = () => {
             
             // Load follow stats so we know if viewer is an approved follower (can see private profile)
             if (currentUser) {
-              const stats = await FollowService.getFollowStats(userId, currentUser.id);
+              const stats = await FollowService.getFollowStats(user.id, currentUser.id);
               setFollowStats(stats);
               setFollowStatsLoadedForViewer(true);
             } else {
@@ -273,9 +296,6 @@ const Profile: React.FC = () => {
               // Update the store with the fetched user
               setUser(fetchedUser);
             } else {
-              // #region agent log
-              fetch('http://127.0.0.1:7242/ingest/82f7ead4-f3af-408e-8dd6-0fbbbdf1dc95',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Profile.tsx:loadProfile',message:'fetchedUser is null, setting profileUser to null',data:{},timestamp:Date.now(),sessionId:'debug-session',runId:'run2',hypothesisId:'Q'})}).catch(()=>{});
-              // #endregion
               setProfileUser(null);
             }
           } catch (error) {
@@ -420,12 +440,95 @@ const Profile: React.FC = () => {
         content: '👋',
       });
       
-      // Navigate to chat
-      navigate('/chat');
+      // Navigate to chat and auto-select this conversation
+      navigate('/chat', { state: { openUserId: profileUser.id } });
     } catch (error) {
       console.error('Failed to start chat:', error);
     }
   };
+
+  const handleAvatarChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !currentUser) return;
+    setIsUploadingAvatar(true);
+    try {
+      const { supabase } = await import('../services/supabase');
+      const ext = file.name.split('.').pop() ?? 'jpg';
+      const fileName = `${currentUser.id}_${Date.now()}.${ext}`;
+      const { error: uploadError } = await supabase.storage.from('avatars').upload(fileName, file, { upsert: true });
+      if (uploadError) throw uploadError;
+      const publicUrl = supabase.storage.from('avatars').getPublicUrl(fileName).data.publicUrl;
+      await updateProfile({ avatar: publicUrl });
+      setProfileUser((prev) => prev ? { ...prev, avatar: publicUrl } : prev);
+    } catch (err) {
+      console.error('Failed to upload avatar:', err);
+    } finally {
+      setIsUploadingAvatar(false);
+      if (avatarInputRef.current) avatarInputRef.current.value = '';
+    }
+  };
+
+  const handleBannerChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !currentUser) return;
+    setIsUploadingBanner(true);
+    try {
+      const { supabase } = await import('../services/supabase');
+      const ext = file.name.split('.').pop() ?? 'jpg';
+      const fileName = `banners/${currentUser.id}/${Date.now()}.${ext}`;
+      const { error: uploadError } = await supabase.storage
+        .from('user-content')
+        .upload(fileName, file, { upsert: true });
+      if (uploadError) throw uploadError;
+      const publicUrl = supabase.storage.from('user-content').getPublicUrl(fileName).data.publicUrl;
+      await updateProfile({ bannerUrl: publicUrl } as any);
+      setProfileUser((prev) => prev ? { ...prev, bannerUrl: publicUrl } as any : prev);
+    } catch (err) {
+      console.error('Failed to upload banner:', err);
+    } finally {
+      setIsUploadingBanner(false);
+      if (bannerInputRef.current) bannerInputRef.current.value = '';
+    }
+  };
+
+  const handleCopyProfileLink = useCallback(async () => {
+    if (!profileUser?.id) return;
+    const vanity = (profileUser as any).vanityUrl;
+    const url = vanity
+      ? `${window.location.origin}/@${vanity}`
+      : `${window.location.origin}/profile/${encodeURIComponent(profileUser.username?.trim() || profileUser.id)}`;
+    const markCopied = () => {
+      setProfileLinkCopied(true);
+      if (profileLinkCopyTimerRef.current) clearTimeout(profileLinkCopyTimerRef.current);
+      profileLinkCopyTimerRef.current = setTimeout(() => setProfileLinkCopied(false), 2200);
+    };
+    try {
+      await navigator.clipboard.writeText(url);
+      markCopied();
+    } catch {
+      try {
+        const ta = document.createElement('textarea');
+        ta.value = url;
+        ta.setAttribute('readonly', '');
+        ta.style.position = 'fixed';
+        ta.style.left = '-9999px';
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand('copy');
+        document.body.removeChild(ta);
+        markCopied();
+      } catch {
+        /* ignore */
+      }
+    }
+  }, [profileUser?.id]);
+
+  const openExternalLinksModal = useCallback(() => {
+    const links = (profileUser ?? currentUser) as { externalLinks?: string[] } | null;
+    const existing = (links?.externalLinks ?? []).slice(0, 3);
+    setLinkInputs([...existing, '', '', ''].slice(0, 3));
+    setShowLinksModal(true);
+  }, [profileUser, currentUser]);
 
   const handlePlayAll = () => {
     if (userTracks.length > 0) {
@@ -571,20 +674,35 @@ const Profile: React.FC = () => {
 
   const handleEditProfile = () => {
     if (!profileUser) return;
-    
+
     setEditForm({
       username: profileUser.username,
       email: profileUser.email,
       bio: profileUser.bio || '',
       artistName: profileUser.artistName || '',
       genres: profileUser.genres || [],
-      isPrivate: profileUser.isPrivate || false
+      isPrivate: profileUser.isPrivate || false,
+      vanityUrl: (profileUser as any).vanityUrl || '',
     });
     setIsEditing(true);
   };
 
   const handleSaveProfile = async () => {
     if (!currentUser) return;
+
+    setVanityError(null);
+    const newVanity = ((editForm as any).vanityUrl || '').trim().toLowerCase() || undefined;
+    if (newVanity && newVanity !== (profileUser as any)?.vanityUrl) {
+      if (newVanity.length < 3) {
+        setVanityError('Handle must be at least 3 characters');
+        return;
+      }
+      const available = await ChatService.isVanityUrlAvailable(newVanity, currentUser.id);
+      if (!available) {
+        setVanityError('This handle is already taken');
+        return;
+      }
+    }
 
     setIsSaving(true);
     try {
@@ -594,10 +712,10 @@ const Profile: React.FC = () => {
         bio: editForm.bio,
         artistName: editForm.artistName,
         genres: editForm.genres,
-        isPrivate: editForm.isPrivate
-      });
-      
-      // Update local state
+        isPrivate: editForm.isPrivate,
+        vanityUrl: newVanity,
+      } as any);
+
       setProfileUser(prev => prev ? {
         ...prev,
         username: editForm.username,
@@ -605,8 +723,9 @@ const Profile: React.FC = () => {
         bio: editForm.bio,
         artistName: editForm.artistName,
         genres: editForm.genres,
-        isPrivate: editForm.isPrivate
-      } : null);
+        isPrivate: editForm.isPrivate,
+        vanityUrl: newVanity,
+      } as any : null);
       
       setIsEditing(false);
     } catch (error) {
@@ -648,7 +767,7 @@ const Profile: React.FC = () => {
   const handleSaveLinks = async () => {
     if (!currentUser) return;
     const trimmed = linkInputs.map((u) => u.trim()).filter(Boolean);
-    const externalLinks = trimmed.slice(0, 6);
+    const externalLinks = trimmed.slice(0, 3);
     setIsSavingLinks(true);
     try {
       const updated = await updateProfile({ externalLinks } as Partial<UserType>);
@@ -785,6 +904,7 @@ const Profile: React.FC = () => {
 
   // Concert editing handlers
   const handleAddConcert = () => {
+    if (atConcertLimit) return;
     setConcertForm({
       title: '',
       date: '',
@@ -935,8 +1055,8 @@ const Profile: React.FC = () => {
   const handleCancelAboutEdit = () => {
     setIsEditingAbout(false);
     setAboutForm({
-      bio: '',
-      genres: []
+      bio: profileUser?.bio || '',
+      genres: Array.isArray(profileUser?.genres) ? profileUser.genres : [],
     });
   };
 
@@ -956,22 +1076,35 @@ const Profile: React.FC = () => {
     }));
   };
 
-  // Show authentication required message if not authenticated
-  if (!isAuthenticated) {
+  // Show sign-up CTA only for own profile when not authenticated
+  // (other users' profiles via /profile/:handle or /profile/:userId are allowed)
+  if (!isAuthenticated && !userId && !handle) {
     return (
-      <div className="p-3 lg:p-6 space-y-6 lg:space-y-8">
-        <div className="flex flex-col items-center justify-center min-h-[400px] space-y-4">
-          <Lock size={64} className="text-gray-400" />
-          <h2 className="text-2xl font-bold text-white">Authentication Required</h2>
-          <p className="text-gray-400 text-center max-w-md">
-            You need to sign in to view profiles. Please sign in to continue.
-          </p>
-          <button
-            onClick={() => navigate('/login')}
-            className="px-6 py-3 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
-          >
-            Sign In
-          </button>
+      <div className="p-3 lg:p-6">
+        <div className="flex flex-col items-center justify-center min-h-[400px] gap-5 text-center">
+          <div className="w-24 h-24 bg-dark-800 rounded-full flex items-center justify-center border border-dark-700">
+            <UserIcon size={40} className="text-gray-500" />
+          </div>
+          <div>
+            <h2 className="text-2xl font-bold text-white mb-2">Your Profile</h2>
+            <p className="text-gray-400 max-w-sm text-sm">
+              Create your artist or listener profile to upload music, follow artists, and connect with the community.
+            </p>
+          </div>
+          <div className="flex flex-col sm:flex-row gap-3 w-full max-w-xs">
+            <button
+              onClick={() => navigate('/signup')}
+              className="flex-1 px-5 py-3 bg-primary-600 hover:bg-primary-500 text-white rounded-xl font-semibold transition-colors"
+            >
+              Sign Up Free
+            </button>
+            <button
+              onClick={() => navigate('/login')}
+              className="flex-1 px-5 py-3 bg-dark-700 hover:bg-dark-600 text-white rounded-xl font-semibold transition-colors"
+            >
+              Sign In
+            </button>
+          </div>
         </div>
       </div>
     );
@@ -999,14 +1132,73 @@ const Profile: React.FC = () => {
 
       {/* Profile Header */}
       <div className="relative">
+
+        {/* Banner image — shown when set, or as an upload zone for pro owners */}
+        {((profileUser as any).bannerUrl || (isCurrentUser && isCurrentUserPro)) && (
+          <div className="relative w-full h-32 lg:h-48 rounded-xl overflow-hidden mb-1">
+            {(profileUser as any).bannerUrl ? (
+              <img
+                src={(profileUser as any).bannerUrl}
+                alt="Profile banner"
+                className="w-full h-full object-cover"
+              />
+            ) : (
+              <div
+                className="w-full h-full flex flex-col items-center justify-center gap-2 border-2 border-dashed border-white/20 bg-white/5 cursor-pointer hover:border-violet-400 hover:bg-white/10 transition-colors"
+                onClick={() => bannerInputRef.current?.click()}
+              >
+                <Camera size={22} className="text-white/40" />
+                <span className="text-white/40 text-sm">Add a banner image</span>
+              </div>
+            )}
+            {isCurrentUser && isCurrentUserPro && (profileUser as any).bannerUrl && (
+              <button
+                type="button"
+                onClick={() => bannerInputRef.current?.click()}
+                className="absolute top-3 right-3 flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-black/60 text-white text-xs font-medium hover:bg-black/80 transition-colors backdrop-blur-sm"
+              >
+                {isUploadingBanner
+                  ? <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  : <Camera size={13} />
+                }
+                Change banner
+              </button>
+            )}
+            <input
+              ref={bannerInputRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={handleBannerChange}
+            />
+          </div>
+        )}
+
         <div className="relative flex flex-col lg:flex-row lg:items-end p-4 lg:p-8 space-y-4 lg:space-y-0">
           {/* Profile Picture - Centered on mobile */}
           <div className="flex justify-center lg:justify-start">
-            <img
-              src={getAvatarUrl(profileUser.avatar)}
-              alt={profileUser.username}
-              className="w-24 h-24 lg:w-32 lg:h-32 rounded-full object-cover border-4 border-white shadow-lg"
-            />
+            <div className={`relative ${isCurrentUser ? 'cursor-pointer group' : ''}`} onClick={isCurrentUser ? () => avatarInputRef.current?.click() : undefined}>
+              <img
+                src={getAvatarUrl(profileUser.avatar)}
+                alt={profileUser.username}
+                className="w-24 h-24 lg:w-32 lg:h-32 rounded-full object-cover border-4 border-white shadow-lg"
+              />
+              {isCurrentUser && (
+                <div className="absolute inset-0 rounded-full bg-black/50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                  {isUploadingAvatar
+                    ? <div className="w-6 h-6 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    : <Camera size={24} className="text-white" />
+                  }
+                </div>
+              )}
+              <input
+                ref={avatarInputRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={handleAvatarChange}
+              />
+            </div>
           </div>
           
           {/* Profile Info - Stacked on mobile */}
@@ -1017,6 +1209,11 @@ const Profile: React.FC = () => {
                   <div className="flex items-center justify-center lg:justify-start gap-2 flex-wrap">
                     <h1 className="text-2xl lg:text-3xl font-bold text-white font-kyobo">{profileUser.username}</h1>
                     <VerifiedBadge verified={profileUser.isVerified || (profileUser as { isVerifiedArtist?: boolean }).isVerifiedArtist} size={20} />
+                    {(profileUser as { subscriptionTier?: string }).subscriptionTier === 'pro' && (
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold bg-yellow-500/20 text-yellow-400 border border-yellow-500/30">
+                        PRO
+                      </span>
+                    )}
                   </div>
                   <div className="flex items-center justify-center lg:justify-start space-x-2">
                     {profileUser.isPrivate && (
@@ -1025,9 +1222,35 @@ const Profile: React.FC = () => {
                   </div>
                 </div>
                 
-                <h2 className="text-dark-300 mb-4 text-sm lg:text-base">
+                <h2 className="text-white/70 mb-2 text-sm lg:text-base">
                   {profileUser.bio || (profileUser.role === 'musician' ? 'Musician' : 'Listener')}
                 </h2>
+                {(profileUser as any).vanityUrl && (
+                  <p className="flex items-center gap-1 text-xs text-violet-400 mb-2">
+                    <AtSign size={11} />
+                    {(profileUser as any).vanityUrl}
+                  </p>
+                )}
+                {profileUser.externalLinks && profileUser.externalLinks.length > 0 && (
+                  <div className="flex flex-wrap gap-2 mb-3">
+                    {profileUser.externalLinks.map((link, i) => {
+                      let hostname = link;
+                      try { hostname = new URL(link).hostname.replace(/^www\./, ''); } catch {}
+                      return (
+                        <a
+                          key={i}
+                          href={link}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-center gap-1.5 px-2.5 py-1 bg-white/5 border border-white/10 rounded-lg text-xs text-white/60 hover:text-white hover:bg-white/10 transition-colors"
+                        >
+                          <Globe size={11} />
+                          {hostname}
+                        </a>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
               
               {/* Action buttons - Stacked on mobile */}
@@ -1041,19 +1264,7 @@ const Profile: React.FC = () => {
                       <Edit size={16} />
                       <span>Edit Profile</span>
                     </button>
-                    <button
-                      onClick={() => {
-                        const links = (profileUser ?? currentUser) as { externalLinks?: string[] } | null;
-                        const existing = (links?.externalLinks ?? []).slice(0, 6);
-                        setLinkInputs([...existing, '', '', '', '', '', ''].slice(0, 6));
-                        setShowLinksModal(true);
-                      }}
-                      className="w-full lg:w-auto p-2 rounded-full bg-dark-700 text-white hover:bg-dark-600 transition-colors"
-                      title="Add links to other sites"
-                    >
-                      <Share2 size={20} />
-                    </button>
-                  </>
+</>
                 ) : (
                   <>
                     {profileUser.isPrivate && !followStats.isFollowing ? (
@@ -1091,16 +1302,61 @@ const Profile: React.FC = () => {
                         )}
                       </button>
                     )}
-                    <button 
+                    <button
+                      type="button"
                       onClick={handleStartChat}
                       className="w-full lg:w-auto p-2 rounded-full bg-dark-700 text-white hover:bg-dark-600 transition-colors"
+                      title="Message"
+                      aria-label="Send message"
                     >
-                      <Share2 size={20} />
+                      <MessageCircle size={20} />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleCopyProfileLink}
+                      className="w-full lg:w-auto p-2 rounded-full bg-dark-700 text-white hover:bg-dark-600 transition-colors"
+                      title={profileLinkCopied ? 'Link copied' : 'Copy profile link'}
+                      aria-label={profileLinkCopied ? 'Profile link copied' : 'Copy profile link'}
+                    >
+                      {profileLinkCopied ? <Check size={20} className="text-emerald-400" /> : <Share2 size={20} />}
                     </button>
                   </>
                 )}
               </div>
             </div>
+
+            {/* Icon action circles — above stats, current user only */}
+            {isCurrentUser && (
+              <div className="flex items-center justify-center lg:justify-start space-x-3 mb-4">
+                <button
+                  type="button"
+                  onClick={handleCopyProfileLink}
+                  className="p-2.5 rounded-full bg-dark-700 text-white hover:bg-dark-600 transition-colors"
+                  title={profileLinkCopied ? 'Link copied' : 'Copy profile link'}
+                  aria-label={profileLinkCopied ? 'Profile link copied' : 'Copy profile link'}
+                >
+                  {profileLinkCopied ? <Check size={20} className="text-emerald-400" /> : <Share2 size={20} />}
+                </button>
+                <button
+                  type="button"
+                  onClick={openExternalLinksModal}
+                  className="p-2.5 rounded-full bg-dark-700 text-white hover:bg-dark-600 transition-colors"
+                  title="Website & social links"
+                  aria-label="Edit website and social links"
+                >
+                  <Globe size={20} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSettingsOpen(true)}
+                  className="p-2.5 rounded-full bg-dark-700 text-white hover:bg-dark-600 transition-colors"
+                  title="Settings"
+                  aria-label="Open settings"
+                >
+                  <Settings size={20} />
+                </button>
+              </div>
+            )}
 
             {/* Stats - Clickable to open Followers / Following modals */}
             <div className="flex items-center justify-center lg:justify-start space-x-6 lg:space-x-8">
@@ -1144,6 +1400,33 @@ const Profile: React.FC = () => {
                 </button>
               )}
             </div>
+
+
+            {/* External links — shown to everyone below stats */}
+            {(() => {
+              const links = ((profileUser as unknown as { externalLinks?: string[] }).externalLinks ?? []).filter(Boolean).slice(0, 3);
+              if (links.length === 0) return null;
+              return (
+                <div className="flex flex-wrap items-center justify-center lg:justify-start gap-2 mt-3">
+                  {links.map((url, i) => {
+                    let label = url;
+                    try { label = new URL(url).hostname.replace(/^www\./, ''); } catch {}
+                    return (
+                      <a
+                        key={i}
+                        href={url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-dark-700 text-dark-300 hover:text-white hover:bg-dark-600 transition-colors text-xs font-medium truncate max-w-[160px]"
+                      >
+                        <Globe size={12} className="flex-shrink-0" />
+                        {label}
+                      </a>
+                    );
+                  })}
+                </div>
+              );
+            })()}
           </div>
         </div>
       </div>
@@ -1164,29 +1447,41 @@ const Profile: React.FC = () => {
                   className="w-full px-3 lg:px-4 py-2 bg-white border border-gray-300 rounded-lg text-black focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
                 />
               </div>
-              
-              {/*<div>
-                <label className="block text-black font-medium mb-2">Bio</label>
+
+              {isCurrentUserPro && (
+                <div>
+                  <label className="block text-black font-medium mb-1">
+                    Vanity URL
+                    <span className="ml-2 inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-yellow-100 text-yellow-700">PRO</span>
+                  </label>
+                  <p className="text-xs text-gray-500 mb-2">Your custom handle — lowercase letters, numbers and hyphens only (3–30 chars)</p>
+                  <div className="flex items-center border border-gray-300 rounded-lg overflow-hidden focus-within:ring-2 focus-within:ring-violet-500">
+                    <span className="px-3 py-2 bg-gray-50 text-gray-400 text-sm border-r border-gray-300 select-none">@</span>
+                    <input
+                      type="text"
+                      value={(editForm as any).vanityUrl || ''}
+                      onChange={(e) => {
+                        const v = e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '').slice(0, 30);
+                        setEditForm(prev => ({ ...prev, vanityUrl: v } as any));
+                      }}
+                      placeholder="your-handle"
+                      className="flex-1 px-3 py-2 bg-white text-black text-sm focus:outline-none"
+                    />
+                  </div>
+                  {vanityError && <p className="text-xs text-red-500 mt-1">{vanityError}</p>}
+                </div>
+              )}
+
+              <div>
+                <label className="block text-white font-medium mb-2">Bio</label>
                 <textarea
                   value={editForm.bio}
                   onChange={(e) => setEditForm(prev => ({ ...prev, bio: e.target.value }))}
                   rows={3}
-                  className="w-full px-3 lg:px-4 py-2 bg-white border border-gray-300 rounded-lg text-black focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                  placeholder="Tell people about yourself…"
+                  className="w-full px-3 lg:px-4 py-2 bg-white border border-gray-300 rounded-lg text-black focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm resize-none"
                 />
               </div>
-              
-              <div className="flex items-center space-x-2">
-                <input
-                  type="checkbox"
-                  id="isPrivate"
-                  checked={editForm.isPrivate}
-                  onChange={(e) => setEditForm(prev => ({ ...prev, isPrivate: e.target.checked }))}
-                  className="w-4 h-4 text-primary-600 bg-dark-700 border-dark-600 rounded focus:ring-primary-500"
-                />
-                <label htmlFor="isPrivate" className="text-sm text-white">
-                  Private Account
-                </label>
-              </div>*/}
             </div>
             
             <div className="flex flex-col lg:flex-row space-y-2 lg:space-y-0 lg:space-x-3 mt-6">
@@ -1548,13 +1843,30 @@ const Profile: React.FC = () => {
                   {isCurrentUser ? 'My Concerts' : `${profileUser?.artistName || profileUser?.username || 'User'}'s Concerts`}
                 </h2>
                 {isCurrentUser && (
-                  <button
-                    onClick={handleAddConcert}
-                    className="flex items-center space-x-2 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
-                  >
-                    <Calendar size={16} />
-                    <span>Add Concert</span>
-                  </button>
+                  <div className="flex items-center gap-3">
+                    {!isCurrentUserPro && (
+                      <span className={`text-xs font-medium ${atConcertLimit ? 'text-amber-500' : 'text-dark-400'}`}>
+                        {concerts.length}/{FREE_CONCERT_LIMIT} listing used
+                      </span>
+                    )}
+                    {atConcertLimit ? (
+                      <button
+                        onClick={() => navigate('/upgrade')}
+                        className="flex items-center gap-2 px-4 py-2 rounded-lg bg-yellow-500/10 text-yellow-400 border border-yellow-500/30 hover:bg-yellow-500/20 transition-colors text-sm font-medium"
+                      >
+                        <Lock size={15} />
+                        <span>Go Pro for more</span>
+                      </button>
+                    ) : (
+                      <button
+                        onClick={handleAddConcert}
+                        className="flex items-center space-x-2 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
+                      >
+                        <Calendar size={16} />
+                        <span>Add Concert</span>
+                      </button>
+                    )}
+                  </div>
                 )}
               </div>
 
@@ -1920,8 +2232,7 @@ const Profile: React.FC = () => {
             </section>
           )}
 
-          {false && (
-            <section>
+          <section>
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-2xl font-bold text-white flex items-center font-kyobo">
                   <UserIcon className="mr-2 text-primary-400" />
@@ -1941,7 +2252,7 @@ const Profile: React.FC = () => {
               {isEditingAbout ? (
                 <div className="space-y-6">
                   <div className="bg-dark-800 rounded-lg p-6">
-                    <h3 className="text-lg font-semibold text-white mb-3">Edit Biography</h3>
+                    <p className="text-lg font-semibold text-black mb-3">Edit Biography</p>
                     <textarea
                       value={aboutForm.bio}
                       onChange={(e) => setAboutForm(prev => ({ ...prev, bio: e.target.value }))}
@@ -1952,7 +2263,7 @@ const Profile: React.FC = () => {
                   </div>
 
                   <div className="bg-dark-800 rounded-lg p-6">
-                    <h3 className="text-lg font-semibold text-white mb-3">Edit Musical Genres</h3>
+                    <p className="text-lg font-semibold text-black mb-3">Edit Musical Genres</p>
                     <div className="space-y-4">
                       <div className="flex flex-wrap gap-2">
                         {aboutForm.genres.map((genre, index) => (
@@ -1978,7 +2289,7 @@ const Profile: React.FC = () => {
                               e.target.value = '';
                             }
                           }}
-                          className="px-4 py-2 bg-dark-700 border border-dark-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
+                          className="px-4 py-2 bg-dark-700 border border-dark-600 rounded-lg text-black focus:outline-none focus:ring-2 focus:ring-primary-500"
                         >
                           <option value="">Add a genre...</option>
                           <option value="Electronic">Electronic</option>
@@ -2020,9 +2331,9 @@ const Profile: React.FC = () => {
                 <div className="space-y-6">
                   {/* Bio Section */}
                   <div className="bg-dark-800 rounded-lg p-6">
-                    <h3 className="text-lg font-semibold text-white mb-3">Biography</h3>
-                    <p className="text-dark-300 leading-relaxed">
-                      {profileUser?.bio || `${profileUser?.artistName || profileUser?.username || 'User'} is a music lover. Follow to stay updated with their latest discoveries.`}
+                    <h1 className="text-lg font-semibold text-black">Biography</h1>
+                    <p className="text-black leading-relaxed">
+                      {profileUser?.bio || ` Follow to stay updated with their latest discoveries.`}
                     </p>
                   </div>
 
@@ -2032,7 +2343,7 @@ const Profile: React.FC = () => {
                     if (!Array.isArray(genres) || genres.length === 0) return null;
                     return (
                     <div className="bg-dark-800 rounded-lg p-6">
-                      <h3 className="text-lg font-semibold text-white mb-3">Favorite Genres</h3>
+                      <p className="text-lg font-semibold text-black">Favorite Genres</p>
                       <div className="flex flex-wrap gap-3">
                         {genres.map((genre, index) => (
                           <span
@@ -2049,10 +2360,11 @@ const Profile: React.FC = () => {
 
                   {/* Contact/Social Section */}
                   <div className="bg-dark-800 rounded-lg p-6">
-                    <h3 className="text-lg font-semibold text-white mb-3">Connect</h3>
-                    <div className="flex items-center space-x-4">
+                    <p className="text-lg font-semibold text-black">Connect</p>
+                    <div className="flex flex-wrap items-center gap-3">
                       {!isCurrentUser && (
                         <button 
+                          type="button"
                           onClick={handleStartChat}
                           className="flex items-center space-x-2 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
                         >
@@ -2060,16 +2372,42 @@ const Profile: React.FC = () => {
                           <span>Message</span>
                         </button>
                       )}
-                      <button className="flex items-center space-x-2 px-4 py-2 bg-dark-700 text-white rounded-lg hover:bg-dark-600 transition-colors">
-                        <Share2 size={16} />
-                        <span>Share Profile</span>
+                      <button
+                        type="button"
+                        onClick={handleCopyProfileLink}
+                        className="flex items-center space-x-2 px-4 py-2 bg-violet-700 text-white hover:bg-dark-600 transition-colors"
+                        title={profileLinkCopied ? 'Link copied' : 'Copy profile link to share'}
+                      >
+                        {profileLinkCopied ? (
+                          <Check size={16} className="text-emerald-400" />
+                        ) : (
+                          <Share2 size={16} />
+                        )}
+                        <span>{profileLinkCopied ? 'Copied!' : 'Share profile'}</span>
                       </button>
+                      {isCurrentUser && isCurrentUserPro && (
+                        <button
+                          type="button"
+                          onClick={openExternalLinksModal}
+                          className="text-sm text-primary-400 hover:text-primary-300 underline-offset-2 hover:underline"
+                        >
+                          Website & social links
+                        </button>
+                      )}
+                      {isCurrentUser && !isCurrentUserPro && (
+                        <button
+                          type="button"
+                          onClick={() => navigate('/upgrade')}
+                          className="text-sm text-yellow-500/60 hover:text-yellow-400 transition-colors"
+                        >
+                          ★ Social links (Pro)
+                        </button>
+                      )}
                     </div>
                   </div>
                 </div>
               )}
             </section>
-          )}
         </>
       ) : (
         <div className="text-center py-12">
@@ -2203,10 +2541,10 @@ const Profile: React.FC = () => {
         </Modal>
       )}
 
-      {/* Links to other sites modal (max 6) */}
+      {/* Links to other sites modal (max 3) */}
       {showLinksModal && (
         <Modal onClose={() => setShowLinksModal(false)} title="Links to other sites">
-          <p className="text-dark-400 text-sm mb-4">Add up to 6 links (e.g. Twitter, Instagram, Bandcamp).</p>
+          <p className="text-dark-400 text-sm mb-4">Add up to 3 links (e.g. Twitter, Instagram, Bandcamp).</p>
           <div className="space-y-3 mb-5">
             {linkInputs.map((value, i) => (
               <input

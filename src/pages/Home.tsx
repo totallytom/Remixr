@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { motion } from 'framer-motion';
-import { Play, Bookmark, Share2, Clock, TrendingUp, Loader, Zap, Star, Users, Music, List, MessageCircle, X, CreditCard, Lock, CheckCircle, AlertCircle, ThumbsUp, FolderOpen } from 'lucide-react';
+import { Play, Bookmark, Share2, Clock, TrendingUp, Loader, Zap, Star, Users, Music, List, MessageCircle, X, CreditCard, Lock, CheckCircle, AlertCircle, ThumbsUp, FolderOpen, Search } from 'lucide-react';
 import { useStore } from '../store/useStore';
 import TrackCard from '../components/music/TrackCard';
 import UserCard from '../components/social/UserCard';
@@ -11,11 +12,13 @@ import { AlbumService, Album } from '../services/albumService';
 import { formatDistanceToNow } from 'date-fns';
 import { supabase } from '../services/supabase';
 import { safeLog } from '../utils/debugUtils';
+import { isMusicianRole } from '../utils/userRole';
 import SubscribeButton from '../components/SubscribeButton';
 
 
 const Home: React.FC = () => {
-  const { playTrack, addToQueue, player, user } = useStore();
+  const { playTrack, addToQueue, player, user, setSettingsOpen, setSettingsInitialTab } = useStore();
+  const { t } = useTranslation();
   const [recommendedTracks, setRecommendedTracks] = useState<Track[]>([]);
   const [recentTracks, setRecentTracks] = useState<{ track: Track, playedAt: string }[]>([]);
   const [popularTracks, setPopularTracks] = useState<Track[]>([]);
@@ -292,7 +295,7 @@ const Home: React.FC = () => {
   // Load current user's albums for Top Album Chart (musicians only)
   useEffect(() => {
     const loadAlbums = async () => {
-      if (!user || user.role !== 'musician') {
+      if (!user || !isMusicianRole(user.role)) {
         setAlbums([]);
         return;
       }
@@ -441,7 +444,7 @@ const Home: React.FC = () => {
       <div className="p-4 sm:p-6 flex items-center justify-center min-h-[50vh] sm:min-h-screen">
         <div className="flex items-center space-x-2">
           <Loader className="animate-spin text-primary-400" size={24} />
-          <span className="text-white text-sm sm:text-base">Loading your music...</span>
+          <span className="text-white text-sm sm:text-base">{t('home.loading')}</span>
         </div>
       </div>
     );
@@ -449,6 +452,63 @@ const Home: React.FC = () => {
 
   return (
     <div className="px-3 py-4 sm:px-5 sm:py-5 md:px-6 md:py-6 lg:px-8 space-y-6 sm:space-y-7 md:space-y-8 w-full min-w-0 box-border">
+
+      {/* Remixr Logo Header */}
+      <div className="flex items-center gap-3">
+        <img
+          src="/logo/logo.png"
+          alt="Remixr"
+          className="h-10 sm:h-12 w-10 sm:w-12 object-cover rounded-full"
+        />
+        <h1>Remixr</h1>
+        <button
+          onClick={() => navigate('/search')}
+          className="lg:hidden ml-auto flex items-center justify-center w-10 h-10 rounded-xl text-white/70 hover:text-white hover:bg-dark-700 active:scale-95 transition-all duration-200"
+          aria-label="Search"
+        >
+          <Search size={22} strokeWidth={2} />
+        </button>
+      </div>
+
+      {/* Pro banner — upgrade CTA for free users, status for pro users */}
+      {user && (
+        user.subscriptionTier === 'pro' ? (
+          <button
+            type="button"
+            onClick={() => { setSettingsInitialTab('pro'); setSettingsOpen(true); }}
+            className="w-full flex items-center justify-between gap-3 px-4 py-3 rounded-2xl bg-gradient-to-r from-yellow-500/15 to-yellow-600/5 border border-yellow-500/40 hover:border-yellow-500/70 hover:from-yellow-500/20 transition-all text-left"
+          >
+            <div className="flex items-center gap-3 min-w-0">
+              <span className="text-xl flex-shrink-0">★</span>
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-yellow-400 leading-tight">Subscribed to Remixr Pro!</p>
+                <p className="text-xs text-white/40 truncate mt-0.5">Unlimited uploads · Priority Discover · Analytics</p>
+              </div>
+            </div>
+            <span className="flex-shrink-0 text-xs font-bold text-yellow-400 bg-yellow-500/20 border border-yellow-500/30 px-2.5 py-1 rounded-full whitespace-nowrap">
+              Manage subscription
+            </span>
+          </button>
+        ) : (
+          <button
+            type="button"
+            onClick={() => navigate('/upgrade')}
+            className="w-full flex items-center justify-between gap-3 px-4 py-3 rounded-2xl bg-gradient-to-r from-yellow-500/10 to-yellow-600/5 border border-yellow-500/30 hover:border-yellow-500/60 hover:from-yellow-500/15 transition-all text-left"
+          >
+            <div className="flex items-center gap-3 min-w-0">
+              <span className="text-xl flex-shrink-0">★</span>
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-yellow-400 leading-tight">Unlock Remixr Pro</p>
+                <p className="text-xs text-white/40 truncate mt-0.5">Unlimited uploads · Priority Discover · Analytics</p>
+              </div>
+            </div>
+            <span className="flex-shrink-0 text-xs font-bold text-yellow-400 bg-yellow-500/20 border border-yellow-500/30 px-2.5 py-1 rounded-full whitespace-nowrap">
+              Go Pro →
+            </span>
+          </button>
+        )
+      )}
+
       {/* Now Playing hero — mobile only, shown when a track is active */}
       {player.currentTrack && (
         <motion.section
@@ -479,7 +539,7 @@ const Home: React.FC = () => {
             </button>
             <div className="flex-1 min-w-0">
               <p className="text-[10px] font-semibold text-white/50 uppercase tracking-widest mb-0.5">
-                {player.isPlaying ? 'Now Playing' : 'Paused'}
+                {player.isPlaying ? t('home.nowPlaying') : t('home.paused')}
               </p>
               <p className="text-white font-bold truncate">{player.currentTrack.title}</p>
               <p className="text-white/60 text-sm truncate">{player.currentTrack.artist}</p>
@@ -508,10 +568,10 @@ const Home: React.FC = () => {
             </div>
             <div>
               <h2 className="text-xl sm:text-2xl font-bold font-kyobo bg-gradient-to-r from-white via-white to-dark-300 bg-clip-text text-transparent">
-                Recent Drops
+                {t('home.recentDrops')}
               </h2>
-              <h3 className="text-dark-400 text-xs sm:text-sm mt-0.5">
-                Fresh uploads from the community — scroll to discover
+              <h3 className="text-white text-xs sm:text-sm mt-0.5">
+                {t('home.recentDropsSubtitle')}
               </h3>
             </div>
           </div>
@@ -520,8 +580,8 @@ const Home: React.FC = () => {
               {publicFeed.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-12 px-8 rounded-xl bg-dark-700/50 border border-dark-600/50 border-dashed min-w-[280px]">
                   <Music size={40} className="text-dark-500 mb-3" />
-                  <p className="text-dark-400 text-sm font-medium">No recent drops yet</p>
-                  <p className="text-dark-500 text-xs mt-1">Be the first to upload and share your sound</p>
+                  <p className="text-dark-400 text-sm font-medium">{t('home.noRecentDrops')}</p>
+                  <p className="text-dark-500 text-xs mt-1">{t('home.noRecentDropsSubtitle')}</p>
                 </div>
               ) : (
                 publicFeed.map((track, index) => (
@@ -558,9 +618,9 @@ const Home: React.FC = () => {
         >
           <h2 className="text-xl lg:text-2xl font-bold text-white mb-4 flex items-center font-kyobo">
             <FolderOpen className="mr-2 text-amber-400" />
-            Top Album Chart
+            {t('home.topAlbumChart')}
           </h2>
-          <h3 className="text-dark-400 text-sm mb-4">Albums — click to open and play tracks in upload order.</h3>
+          <h3 className="text-dark-400 text-sm mb-4">{t('home.topAlbumChartSubtitle')}</h3>
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 lg:gap-4">
             {albums.map((album) => (
               <button
@@ -582,14 +642,14 @@ const Home: React.FC = () => {
                   <div className="absolute inset-0 bg-gradient-to-t from-black/70 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end justify-center pb-2">
                     <span className="flex items-center gap-1.5 text-white text-sm font-medium">
                       <Play size={18} fill="currentColor" />
-                      Open album
+                      {t('home.openAlbum')}
                     </span>
                   </div>
                 </div>
                 <div className="px-3 pb-3">
                   <h3 className="text-white font-semibold truncate" title={album.title}>{album.title}</h3>
                   <p className="text-dark-400 text-xs truncate">{album.artist}</p>
-                  <p className="text-dark-500 text-xs mt-0.5">{album.trackCount ?? 0} tracks</p>
+                  <p className="text-dark-500 text-xs mt-0.5">{t('home.tracks', { count: album.trackCount ?? 0 })}</p>
                 </div>
               </button>
             ))}
@@ -597,49 +657,12 @@ const Home: React.FC = () => {
         </motion.section>
       )}
 
-   {/*   Boost Feature Advertisement
-      <motion.section
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.1 }}
-        className="relative overflow-hidden"
-      >
-        <div className="bg-gradient-to-r from-primary-600 via-purple-600 to-pink-600 rounded-2xl p-8 text-white relative">
-          Background Pattern 
-          <div className="absolute inset-0 opacity-10">
-            <div className="absolute top-4 right-4 w-32 h-32 bg-white rounded-full"></div>
-            <div className="absolute bottom-4 left-4 w-24 h-24 bg-white rounded-full"></div>
-            <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-16 h-16 bg-white rounded-full"></div>
-          </div>
-          
-          <div className="relative z-10">
-            <div className="flex items-center justify-between mb-6">
-              <div className="flex items-center space-x-3">
-                <div className="p-3 bg-white bg-opacity-20 rounded-full">
-                  <Zap className="text-black" size={24} />
-                </div>
-                <div>
-                  <h2 className="text-2xl font-bold font-kyobo">Boost Your Music</h2>
-                  <p className="text-black text-opacity-90">Get your tracks featured and reach more listeners</p>
-                </div>
-              </div>
-              <button
-                onClick={() => setShowBoostModal(true)}
-                className="px-6 py-3 bg-white text-primary-600 rounded-lg font-semibold hover:bg-gray-100 transition-colors"
-              >
-                Learn More
-              </button>
-            </div>
-          </div>
-        </div>
-      </motion.section> */} 
-
       {/* Top 10 Charts */}
       <section>
         <div className="flex items-center justify-between mb-5">
           <div className="flex items-center space-x-3">
             <TrendingUp className="text-primary-400" size={24} />
-            <h2 className="text-2xl font-bold text-white font-kyobo">Top 10 Charts</h2>
+            <h2 className="text-2xl font-bold text-white font-kyobo">{t('home.top10Charts')}</h2>
           </div>
           {isLoadingTopCharts && (
             <Loader className="animate-spin text-primary-400" size={20} />
@@ -729,21 +752,21 @@ const Home: React.FC = () => {
           </motion.div>
         ) : !isLoadingTopCharts ? (
           <div className="bg-dark-800 rounded-xl p-6 sm:p-8 text-center">
-            <p className="text-dark-400 text-sm sm:text-base">No tracks with likes yet. Be the first to like a track!</p>
+            <p className="text-dark-400 text-sm sm:text-base">{t('home.noTracksWithLikes')}</p>
           </div>
         ) : null}
       </section>
       {/* Recommended Tracks - horizontal side scroll */}
       <section>
         <div className="flex items-center justify-between mb-4 sm:mb-5 gap-2">
-          <h2 className="text-xl sm:text-2xl font-bold text-white font-kyobo truncate">Recommended for You</h2>
+          <h2 className="text-xl sm:text-2xl font-bold text-white font-kyobo truncate">{t('home.recommendedForYou')}</h2>
           {isLoadingRecommendations && (
             <Loader className="animate-spin text-primary-400 flex-shrink-0" size={20} />
           )}
         </div>
         {recommendedTracks.length === 0 && !isLoadingRecommendations ? (
           <div className="bg-dark-800 rounded-xl p-6 text-center">
-            <p className="text-dark-400 text-sm">No tracks available yet. Upload some music to get started!</p>
+            <p className="text-dark-400 text-sm">{t('home.noTracksAvailable')}</p>
           </div>
         ) : (
           <div className="overflow-x-auto pb-2 scrollbar-thin scrollbar-thumb-dark-600 scrollbar-track-transparent">
@@ -780,7 +803,7 @@ const Home: React.FC = () => {
       {recentTracks.length > 0 && (
         <section>
           <div className="flex items-center justify-between mb-4 sm:mb-6 gap-2">
-            <h2 className="text-xl sm:text-2xl font-bold text-white font-kyobo truncate">Recently Played</h2>
+            <h2 className="text-xl sm:text-2xl font-bold text-white font-kyobo truncate">{t('home.recentlyPlayed')}</h2>
             <Clock className="text-dark-400 flex-shrink-0 w-5 h-5 sm:w-5 sm:h-5" size={20} />
           </div>
           <motion.div
@@ -816,16 +839,16 @@ const Home: React.FC = () => {
                   }}
                 />
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-white truncate font-kotra">
+                  <p className="text-sm font-medium text-black truncate font-kotra">
                     {track.title}
                   </p>
-                  <p className="text-xs text-dark truncate">
+                  <p className="text-xs text-black truncate">
                     {track.artist} {track.album && `• ${track.album}`}
                   </p>
                   {track.genre && (
                     <p className="text-xs text-primary-400 truncate hidden sm:block">{track.genre}</p>
                   )}
-                  <p className="text-xs text-dark-500 mt-0.5 sm:mt-1">Played {formatDistanceToNow(new Date(playedAt), { addSuffix: true })}</p>
+                  <p className="text-xs text-dark-500 mt-0.5 sm:mt-1">{t('home.played', { time: formatDistanceToNow(new Date(playedAt), { addSuffix: true }) })}</p>
                 </div>
                 <div className="flex items-center gap-1 sm:gap-2 flex-shrink-0">
                   <button 
@@ -856,12 +879,12 @@ const Home: React.FC = () => {
       {/* Popular Tracks - horizontal side scroll */}
       <section>
         <div className="flex items-center justify-between mb-4 sm:mb-6 gap-2">
-          <h2 className="text-xl sm:text-2xl font-bold text-white font-kyobo truncate">Popular Tracks</h2>
+          <h2 className="text-xl sm:text-2xl font-bold text-white font-kyobo truncate">{t('home.popularTracks')}</h2>
           <TrendingUp className="text-primary-400 flex-shrink-0 w-5 h-5 sm:w-6 sm:h-6" size={24} />
         </div>
         {popularTracks.length === 0 ? (
           <div className="bg-dark-800 rounded-xl p-6 text-center">
-            <p className="text-dark-400 text-sm">No popular tracks yet. Start playing tracks to see them here!</p>
+            <p className="text-dark-400 text-sm">{t('home.noPopularTracks')}</p>
           </div>
         ) : (
           <div className="overflow-x-auto pb-2 scrollbar-thin scrollbar-thumb-dark-600 scrollbar-track-transparent">
@@ -892,366 +915,6 @@ const Home: React.FC = () => {
           </div>
         )}
       </section>
-
-      {/* Trending Artists */}
-      <section>
-        <div className="flex items-center justify-between mb-4 sm:mb-6 gap-2">
-          <h2 className="text-xl sm:text-2xl font-bold text-white font-kyobo truncate">Trending Users</h2>
-          <TrendingUp className="text-primary-400 flex-shrink-0 w-5 h-5 sm:w-6 sm:h-6" size={24} />
-        </div>
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 0.4 }}
-          className="grid grid-cols-[repeat(auto-fill,minmax(200px,1fr))] gap-6"
-        >
-          {trendingUsers.map((user, index) => (
-            <motion.div
-              key={user.id}
-              initial={{ opacity: 0, scale: 0.9 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ delay: 0.5 + index * 0.1 }}
-            >
-              <UserCard user={user} />
-            </motion.div>
-          ))}
-        </motion.div>
-      </section>
-
-      {/* Boosted Tracks 
-      {recommendedTracks.filter(track => track.boosted).length > 0 && (
-        <section>
-          <div className="flex items-center justify-between mb-6">
-            <div className="flex items-center space-x-2">
-              <Zap className="text-yellow-400" size={24} />
-              <h2 className="text-2xl font-bold text-white font-kyobo">Featured Tracks</h2>
-            </div>
-            <div className="flex items-center space-x-2">
-              <div className="px-2 py-1 bg-yellow-400 text-black text-xs font-bold rounded-full">
-                BOOSTED
-              </div>
-            </div>
-          </div>
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.6 }}
-            className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6"
-          >
-            {recommendedTracks.filter(track => track.boosted).map((track, index) => (
-              <motion.div
-                key={track.id}
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.7 + index * 0.1 }}
-              >
-                <TrackCard 
-                  track={track} 
-                  onPlay={handlePlayTrack}
-                  onAddToQueue={handleAddToQueue}
-                  showBoostActions={false}
-                />
-              </motion.div>
-            ))}
-          </motion.div>
-        </section> 
-      )} */}
-
-      {/* Google AdSense Ad - Under Home Page Content */}
-      <div className="my-6 sm:my-8 flex justify-center px-0 sm:px-2">
-        <ins className="adsbygoogle"
-          style={{ display: 'block', minHeight: 90, width: '100%', maxWidth: 728 }}
-          data-ad-client="ca-pub-3981993675235210"
-          data-ad-slot="YOUR_SLOT_ID"
-          data-ad-format="auto"
-          data-full-width-responsive="true"></ins>
-      </div>
-
-      {/* Boost Feature Modal */}
-      {showBoostModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
-          <motion.div
-            initial={{ scale: 0.9, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            exit={{ scale: 0.9, opacity: 0 }}
-            className="bg-dark-900 rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto my-auto"
-          >
-            <div className="p-4 sm:p-6 md:p-8">
-              <div className="flex items-center justify-between gap-3 mb-4 sm:mb-6">
-                <div className="flex items-center space-x-2 sm:space-x-3 min-w-0">
-                  <div className="p-2 sm:p-3 bg-gradient-to-r from-primary-600 to-purple-600 rounded-full flex-shrink-0">
-                    <Zap className="text-white w-5 h-5 sm:w-6 sm:h-6" size={24} />
-                  </div>
-                  <div className="min-w-0">
-                    <h2 className="text-xl sm:text-2xl font-bold text-white font-kyobo truncate">Boost Your Music</h2>
-                    <p className="text-dark-400 text-sm sm:text-base truncate">Premium promotion for artists</p>
-                  </div>
-                </div>
-                <button
-                  onClick={() => setShowBoostModal(false)}
-                  className="p-2 text-dark-400 hover:text-white transition-colors"
-                >
-                  <X size={24} />
-                </button>
-              </div>
-
-              <div className="space-y-6">
-                {/* Pricing Section */}
-                <div className="bg-dark-800 rounded-xl p-6">
-                  <h3 className="text-xl font-bold text-white mb-4">Pricing</h3>
-                  <div className="text-center">
-                    <div className="text-4xl font-bold text-primary-400 mb-2">$10</div>
-                    <div className="text-dark-400 mb-4">per month</div>
-                    <div className="text-sm text-white space-y-2">
-                      {/*<p>• Boost up to 5 tracks per month</p>*/}
-                      <p>• Featured placement in recommendations</p>
-                      <p>• Priority in curated playlists</p>
-                      <p>• Analytics and insights</p>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Features Section */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div className="space-y-4">
-                    <h3 className="text-lg font-semibold text-white mb-4">What You Get</h3>
-                    <div className="space-y-3">
-                      <div className="flex items-center space-x-3">
-                        <div className="w-8 h-8 bg-primary-600 rounded-full flex items-center justify-center">
-                          <Star className="text-white" size={16} />
-                        </div>
-                        <div>
-                          <h4 className="font-medium text-white">Featured Placement</h4>
-                          <p className="text-sm text-dark-400">Your tracks appear at the top of recommendations</p>
-                        </div>
-                      </div>
-                      <div className="flex items-center space-x-3">
-                        <div className="w-8 h-8 bg-primary-600 rounded-full flex items-center justify-center">
-                          <Users className="text-white" size={16} />
-                        </div>
-                        <div>
-                          <h4 className="font-medium text-white">Reach More Listeners</h4>
-                          <p className="text-sm text-dark-400">Get discovered by new audiences</p>
-                        </div>
-                      </div>
-                      <div className="flex items-center space-x-3">
-                        <div className="w-8 h-8 bg-primary-600 rounded-full flex items-center justify-center">
-                          <Music className="text-white" size={16} />
-                        </div>
-                        <div>
-                          <h4 className="font-medium text-white">Playlist Priority</h4>
-                          <p className="text-sm text-dark-400">Your tracks featured in curated playlists</p>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="space-y-4">
-                    <h3 className="text-lg font-semibold text-white mb-4">How It Works</h3>
-                    <div className="space-y-3">
-                      <div className="flex items-center space-x-3">
-                        <div className="w-8 h-8 bg-dark-700 rounded-full flex items-center justify-center text-white font-bold text-sm">
-                          1
-                        </div>
-                        <div>
-                          <h4 className="font-medium text-white">Subscribe</h4>
-                          <p className="text-sm text-dark-400">Choose the $10/month plan</p>
-                        </div>
-                      </div>
-                      <div className="flex items-center space-x-3">
-                        <div className="w-8 h-8 bg-dark-700 rounded-full flex items-center justify-center text-white font-bold text-sm">
-                          2
-                        </div>
-                        <div>
-                          <h4 className="font-medium text-white">Select Tracks</h4>
-                          {/*<p className="text-sm text-dark-400">Choose up to 5 tracks to boost</p>*/}
-                        </div>
-                      </div>
-                      <div className="flex items-center space-x-3">
-                        <div className="w-8 h-8 bg-dark-700 rounded-full flex items-center justify-center text-white font-bold text-sm">
-                          3
-                        </div>
-                        <div>
-                          <h4 className="font-medium text-white">Get Featured</h4>
-                          <p className="text-sm text-dark-400">Your tracks get promoted automatically</p>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </motion.div>
-        </div>
-      )}
-
-      {/* Payment Modal */}
-      {showPaymentModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
-          <motion.div
-            initial={{ scale: 0.9, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            exit={{ scale: 0.9, opacity: 0 }}
-            className="bg-dark-900 rounded-2xl max-w-md w-full max-h-[90vh] overflow-y-auto my-auto"
-          >
-            <div className="p-4 sm:p-6">
-              <div className="flex items-center justify-between gap-2 mb-4 sm:mb-6">
-                <div className="flex items-center space-x-2 sm:space-x-3 min-w-0">
-                  <div className="p-2 sm:p-3 bg-gradient-to-r from-primary-600 to-purple-600 rounded-full flex-shrink-0">
-                    <Zap className="text-white w-5 h-5 sm:w-6 sm:h-6" size={24} />
-                  </div>
-                  <div className="min-w-0">
-                    <h2 className="text-xl sm:text-2xl font-bold text-white font-kyobo truncate">Boost Subscription</h2>
-                    <p className="text-dark-400 text-sm sm:text-base truncate">Complete your payment</p>
-                  </div>
-                </div>
-                <button
-                  onClick={() => setShowPaymentModal(false)}
-                  className="p-2 text-dark-400 hover:text-white transition-colors"
-                >
-                  <X size={24} />
-                </button>
-              </div>
-
-              {paymentStep === 'details' && (
-                <form onSubmit={handlePaymentSubmit} className="space-y-4">
-                  {/* Order Summary */}
-                  <div className="bg-dark-800 rounded-lg p-4 space-y-2">
-                    <h4 className="text-sm font-medium text-white mb-3">Order Summary</h4>
-                    <div className="flex justify-between text-sm">
-                      <span className="text-dark-400">Boost Subscription:</span>
-                      <span className="text-white">$10.00</span>
-                    </div>
-                    <div className="flex justify-between text-sm">
-                      <span className="text-dark-400">Tax:</span>
-                      <span className="text-white">$0.00</span>
-                    </div>
-                    <div className="border-t border-dark-600 pt-2 flex justify-between font-medium">
-                      <span className="text-white">Total:</span>
-                      <span className="text-primary-400">$10.00</span>
-                    </div>
-                  </div>
-
-                  {/* Payment Form */}
-                  <div>
-                    <label className="block text-sm font-medium text-white mb-2">
-                      Cardholder Name *
-                    </label>
-                    <input
-                      type="text"
-                      value={cardholderName}
-                      onChange={(e) => setCardholderName(e.target.value)}
-                      className="w-full px-3 py-2 bg-dark-700 border border-dark-600 rounded-lg text-white placeholder-dark-400 focus:outline-none focus:ring-2 focus:ring-primary-500"
-                      placeholder="John Doe"
-                      required
-                    />
-                  </div>
-                  
-                  <div>
-                    <label className="block text-sm font-medium text-white mb-2">
-                      Card Number *
-                    </label>
-                    <div className="relative">
-                      <CreditCard className="absolute left-3 top-1/2 transform -translate-y-1/2 text-dark-400" size={20} />
-                      <input
-                        type="text"
-                        value={cardNumber}
-                        onChange={(e) => setCardNumber(formatCardNumber(e.target.value))}
-                        className="w-full pl-10 pr-3 py-2 bg-dark-700 border border-dark-600 rounded-lg text-white placeholder-dark-400 focus:outline-none focus:ring-2 focus:ring-primary-500"
-                        placeholder="1234 5678 9012 3456"
-                        maxLength={19}
-                        required
-                      />
-                    </div>
-                  </div>
-                  
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-white mb-2">
-                        Expiry Date *
-                      </label>
-                      <input
-                        type="text"
-                        value={expiryDate}
-                        onChange={(e) => setExpiryDate(formatExpiryDate(e.target.value))}
-                        className="w-full px-3 py-2 bg-dark-700 border border-dark-600 rounded-lg text-white placeholder-dark-400 focus:outline-none focus:ring-2 focus:ring-primary-500"
-                        placeholder="MM/YY"
-                        maxLength={5}
-                        required
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-white mb-2">
-                        CVV *
-                      </label>
-                      <input
-                        type="text"
-                        value={cvv}
-                        onChange={(e) => setCvv(e.target.value.replace(/\D/g, ''))}
-                        className="w-full px-3 py-2 bg-dark-700 border border-dark-600 rounded-lg text-white placeholder-dark-400 focus:outline-none focus:ring-2 focus:ring-primary-500"
-                        placeholder="123"
-                        maxLength={4}
-                        required
-                      />
-                    </div>
-                  </div>
-                  
-                  <div className="flex items-center space-x-2 text-sm text-dark-400">
-                    <Lock size={16} />
-                    <span>Your payment information is secure and encrypted</span>
-                  </div>
-                  
-                  <button
-                    type="submit"
-                    disabled={loading}
-                    className="w-full bg-primary-600 text-white py-3 rounded-lg hover:bg-primary-700 disabled:bg-dark-600 disabled:cursor-not-allowed transition-colors font-semibold flex items-center justify-center space-x-2"
-                  >
-                    {loading ? (
-                      <>
-                        <Loader className="animate-spin" size={20} />
-                        <span>Processing...</span>
-                      </>
-                    ) : (
-                      <span>Pay $10.00</span>
-                    )}
-                  </button>
-                </form>
-              )}
-
-              {paymentStep === 'processing' && (
-                <div className="text-center py-8">
-                  <Loader className="animate-spin mx-auto mb-4" size={48} />
-                  <h3 className="text-xl font-semibold text-white mb-2">Processing Payment</h3>
-                  <p className="text-dark-400">Please wait while we process your payment...</p>
-                </div>
-              )}
-
-              {paymentStep === 'success' && (
-                <div className="text-center py-8">
-                  <CheckCircle className="mx-auto mb-4 text-green-500" size={48} />
-                  <h3 className="text-xl font-semibold text-white mb-2">Payment Successful!</h3>
-                  <p className="text-dark-400 mb-4">Your boost subscription has been activated.</p>
-                  <p className="text-sm text-dark-400">You can now boost up to 5 tracks per month!</p>
-                </div>
-              )}
-
-              {paymentStep === 'error' && (
-                <div className="text-center py-8">
-                  <AlertCircle className="mx-auto mb-4 text-red-500" size={48} />
-                  <h3 className="text-xl font-semibold text-white mb-2">Payment Failed</h3>
-                  <p className="text-red-400 mb-4">{error}</p>
-                  <button
-                    onClick={() => setPaymentStep('details')}
-                    className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
-                  >
-                    Try Again
-                  </button>
-                </div>
-              )}
-            </div>
-          </motion.div>
-        </div>
-      )}
     </div>
   );
 };

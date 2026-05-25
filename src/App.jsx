@@ -1,12 +1,30 @@
 import { useEffect, lazy, Suspense } from 'react'
 import './App.css'
 import { useStore } from './store/useStore';
+import { isOnboardingPending } from './utils/onboardingPending';
 import ThemeProvider from './components/ThemeProvider';
 import { AlertProvider } from './contexts/AlertContext';
 import AlertToast from './components/AlertToast';
-import {BrowserRouter as Router, Routes, Route} from 'react-router-dom';
+import {BrowserRouter as Router, Routes, Route, useLocation, useNavigate} from 'react-router-dom';
+import { Analytics } from "@vercel/analytics/react"
 import { AnimatePresence, motion } from 'framer-motion';
 import Sidebar from './components/layout/Sidebar';
+
+// Routes that manage their own scroll/layout and must not inherit page-content padding
+const FULL_HEIGHT_ROUTES = new Set(['/chat', '/playlists']);
+
+function PageContent({ children }) {
+  const { pathname } = useLocation();
+  const isFullHeight = FULL_HEIGHT_ROUTES.has(pathname);
+  return (
+    <div className={isFullHeight
+      ? 'flex-1 min-w-0 overflow-hidden flex flex-col h-full'
+      : 'flex-1 min-w-0 overflow-y-auto overflow-x-hidden page-content'
+    }>
+      {children}
+    </div>
+  );
+}
 
 // Lazy-loaded pages (code splitting: each route loads on demand)
 const Home = lazy(() => import('./pages/Home'));
@@ -27,8 +45,28 @@ const AlbumTracksPage = lazy(() => import('./pages/AlbumTracksPage'));
 const Remix = lazy(() => import('./pages/Remix'));
 const Discover = lazy(() => import('./pages/Discover'));
 const Admin = lazy(() => import('./pages/Admin'));
+const Dmca = lazy(() => import('./pages/Dmca'));
+const Upgrade = lazy(() => import('./pages/Upgrade'));
+const AnalyticsPage = lazy(() => import('./pages/Analytics'));
+const Storefront = lazy(() => import('./pages/Storefront'));
 const SettingsModal = lazy(() => import('./components/layout/SettingsModal'));
 const MusicPlayer = lazy(() => import('./components/player/MusicPlayer'));
+
+function OnboardingRedirectGuard() {
+  const { user } = useStore();
+  const navigate = useNavigate();
+  const { pathname } = useLocation();
+
+  useEffect(() => {
+    if (!user || user.role !== 'musician') return;
+    if (pathname.startsWith('/onboarding')) return;
+    isOnboardingPending(user.id).then((pending) => {
+      if (pending) navigate('/onboarding', { replace: true });
+    });
+  }, [user?.id, pathname, navigate]);
+
+  return null;
+}
 
 function App() {
   const store = useStore() || {};
@@ -36,6 +74,7 @@ function App() {
     setChats = () => {},
     sidebarOpen = false,
     isSettingsOpen = false,
+    settingsInitialTab = 'account',
 
     player = {
       isPlaying: false,
@@ -64,11 +103,6 @@ function App() {
 
 
   useEffect(() => {
-    // Load mock data asynchronously so it doesn't bloat the initial bundle
-    import('./data/mockData').then(({ mockData }) => {
-      setChats(mockData.chats);
-    });
-
     // Initialize audio system
     initializeAudio();
 
@@ -105,6 +139,7 @@ function App() {
     <ThemeProvider>
       <AlertProvider>
       <Router>
+        <OnboardingRedirectGuard />
         <div
           className="flex h-dvh bg-dark-900 text-white"
           style={
@@ -137,7 +172,7 @@ function App() {
 
           {/* Main Content */}
           <div className="flex-1 flex flex-col min-w-0 main-content">
-            <div className="flex-1 min-w-0 overflow-y-auto overflow-x-hidden page-content">
+            <PageContent>
               <Suspense fallback={
                 <div className="flex items-center justify-center min-h-[40vh] text-white/70">Loading…</div>
               }>
@@ -147,6 +182,7 @@ function App() {
                   <Route path="/chat" element={<Chat />} />
                   <Route path="/profile" element={<Profile />} />
                   <Route path="/profile/:userId" element={<Profile />} />
+                  <Route path="/@:handle" element={<Profile />} />
                   <Route path="/artist/:id" element={<Artist />} />
                   <Route path="/upload" element={<Upload />} />
                   <Route path="/playlists" element={<Playlists />} />
@@ -165,9 +201,13 @@ function App() {
                   <Route path="/onboarding/upload" element={<OnboardingUpload />} />
                   <Route path="/onboarding/live" element={<OnboardingLive />} />
                   <Route path="/reset-password" element={<ResetPassword />} />
+                  <Route path="/dmca" element={<Dmca />} />
+                  <Route path="/upgrade" element={<Upgrade />} />
+                  <Route path="/analytics" element={<AnalyticsPage />} />
+                  <Route path="/storefront" element={<Storefront />} />
                 </Routes>
               </Suspense>
-            </div>
+            </PageContent>
           </div>
         </div>
 
@@ -203,11 +243,12 @@ function App() {
 
         {/* Settings Modal (lazy-loaded) */}
         <Suspense fallback={null}>
-          <SettingsModal isOpen={isSettingsOpen} />
+          <SettingsModal isOpen={isSettingsOpen} initialTab={settingsInitialTab} />
         </Suspense>
 
         {/* Global alert toasts (copyright, upload success/error) */}
         <AlertToast />
+        <Analytics />
       </Router>
       </AlertProvider>
     </ThemeProvider>

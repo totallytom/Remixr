@@ -2,10 +2,9 @@ import React, { useRef, useEffect } from 'react';
 import { Search as SearchIcon, X, ChevronUp, Music, User, Calendar } from 'lucide-react';
 import { Loader } from 'lucide-react';
 
-export type SearchCategory = 'all' | 'music' | 'users' | 'concerts';
+export type SearchCategory = 'music' | 'users' | 'concerts';
 
 const CATEGORY_OPTIONS: { value: SearchCategory; label: string; icon: React.ElementType }[] = [
-  { value: 'all', label: 'All', icon: SearchIcon },
   { value: 'music', label: 'Music', icon: Music },
   { value: 'users', label: 'Users', icon: User },
   { value: 'concerts', label: 'Concerts', icon: Calendar },
@@ -55,7 +54,7 @@ const SearchBar: React.FC<SearchBarProps> = ({
         <button
           type="button"
           onClick={() => setDropdownOpen((o) => !o)}
-          className="search-bar-dropdown-trigger flex items-center gap-2 px-4 py-3 border-r border-dark-600 bg-dark-700/90 hover:bg-dark-600/90 transition-colors h-full min-w-[7.5rem] rounded-l-full"
+          className="search-bar-dropdown-trigger flex items-center gap-2 px-4 py-3 border-r border-dark-600 bg-dark-700/90 hover:bg-dark-600/90 transition-colors h-full min-w-[7.5rem] rounded-l-full !text-black"
           aria-haspopup="listbox"
           aria-expanded={dropdownOpen}
         >
@@ -83,7 +82,7 @@ const SearchBar: React.FC<SearchBarProps> = ({
                     onCategoryChange(opt.value);
                     setDropdownOpen(false);
                   }}
-                  className={`w-full flex items-center gap-2 px-3 py-2.5 text-sm text-left text-white transition-colors ${
+                  className={`w-full flex items-center gap-2 px-3 py-2.5 text-sm text-left !text-black transition-colors ${
                     category === opt.value
                       ? 'bg-lime-400/25'
                       : 'hover:bg-dark-700'
@@ -106,7 +105,7 @@ const SearchBar: React.FC<SearchBarProps> = ({
           onChange={(e) => onChange(e.target.value)}
           placeholder={placeholder}
           disabled={disabled}
-          className="w-full py-3 pl-4 pr-10 bg-transparent text-white placeholder-dark-400 focus:outline-none text-sm"
+          className="w-full py-3 pl-4 pr-10 bg-transparent text-black placeholder-dark-400 focus:outline-none text-sm"
           aria-label="Search"
         />
         <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1">

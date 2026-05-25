@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { motion, useMotionValue, useTransform, animate } from 'framer-motion';
-import { Play, Pause } from 'lucide-react';
+import { Play, Pause, Star } from 'lucide-react';
 import type { Track } from '../../store/useStore';
 
 interface DiscoveryCardProps {
@@ -130,9 +130,17 @@ const DiscoveryCardComponent: React.FC<DiscoveryCardProps> = ({ track, onSwipe, 
       dragElastic={0.2}
       onDragEnd={handleDragEnd}
       whileTap={isTop ? { scale: 1.02 } : undefined}
-      className="absolute inset-0 flex items-center justify-center px-4 sm:px-6 touch-none"
+      className="absolute inset-0 flex items-center justify-center lg:px-6 touch-none"
     >
-      <div className={`w-full max-w-sm aspect-[3/4] rounded-3xl overflow-hidden shadow-2xl border border-white/10 bg-neutral-900 relative ${isTop ? 'cursor-grab active:cursor-grabbing' : 'cursor-default'}`}>
+      <div className={`w-full h-full lg:max-w-sm lg:aspect-[3/4] lg:h-auto rounded-2xl lg:rounded-3xl overflow-hidden shadow-2xl border border-white/10 bg-neutral-900 relative ${isTop ? 'cursor-grab active:cursor-grabbing' : 'cursor-default'}`}>
+        {/* Featured badge for boosted/pro tracks */}
+        {track.boosted && (
+          <div className="absolute top-3 left-3 z-10 flex items-center gap-1 px-2 py-1 rounded-full bg-yellow-500/90 backdrop-blur-sm">
+            <Star size={11} className="text-yellow-900 fill-yellow-900" />
+            <span className="text-yellow-900 text-[10px] font-bold uppercase tracking-wide">Featured</span>
+          </div>
+        )}
+
         {/* Like stamp - only on top card */}
         {isTop && (
           <>

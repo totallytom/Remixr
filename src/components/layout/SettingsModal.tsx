@@ -1,12 +1,15 @@
-import React, { useState, useEffect } from 'react';
+﻿import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { 
-  X, 
-  User, 
-  Mail, 
-  Lock, 
-  Shield, 
-  Bell, 
+import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
+import i18n from '../../i18n';
+import {
+  X,
+  User,
+  Mail,
+  Lock,
+  Shield,
+  Bell,
   Palette,
   LogOut,
   Eye,
@@ -15,15 +18,20 @@ import {
   Check,
   Circle,
   Moon,
+  Globe,
   EyeOff as InvisibleIcon,
+  Star,
 } from 'lucide-react';
 import { useStore } from '../../store/useStore';
 import { applyTheme, themeConfigs } from '../../data/themeConfig';
 import { AuthService } from '../../services/authService';
 import { DEFAULT_AVATAR_URL, getAvatarUrl } from '../../utils/avatar';
+import { proSubscriptionService, ProSubscription } from '../../services/proSubscriptionService';
+import { PRICING } from '../../config/pricing';
 
 interface SettingsModalProps {
   isOpen: boolean;
+  initialTab?: 'account' | 'security' | 'notifications' | 'appearance' | 'pro';
 }
 
 interface ChangeEmailForm {
@@ -38,9 +46,11 @@ interface ChangePasswordForm {
   confirmPassword: string;
 }
 
-const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen }) => {
-  const { user, setSettingsOpen, theme, setTheme, setUserAvatar, updateProfile, changePassword, togglePrivateAccount, logout, userStatus, setUserStatus } = useStore();
-  const [activeTab, setActiveTab] = useState<'account' | 'security' | 'notifications' | 'appearance'>('account');
+const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, initialTab }) => {
+  const { user, setSettingsOpen, theme, setTheme, setUserAvatar, updateProfile, changePassword, togglePrivateAccount, logout, userStatus, setUserStatus, refreshUser } = useStore();
+  const { t } = useTranslation();
+  const [activeTab, setActiveTab] = useState<'account' | 'security' | 'notifications' | 'appearance' | 'pro'>(initialTab || 'account');
+  const navigate = useNavigate();
   const [showCurrentPassword, setShowCurrentPassword] = useState(false);
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
@@ -59,6 +69,34 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen }) => {
   const [resetPasswordSent, setResetPasswordSent] = useState(false);
   const [resetPasswordError, setResetPasswordError] = useState('');
 
+  const [proSubscription, setProSubscription] = useState<ProSubscription | null>(null);
+  const [proSubLoading, setProSubLoading] = useState(false);
+  const [portalLoading, setPortalLoading] = useState(false);
+  const [portalError, setPortalError] = useState('');
+
+  useEffect(() => {
+    if (isOpen && initialTab) setActiveTab(initialTab);
+  }, [isOpen, initialTab]);
+
+  useEffect(() => {
+    if (!isOpen || !user?.id || activeTab !== 'pro') return;
+    setProSubLoading(true);
+    refreshUser()
+      .then(() => proSubscriptionService.getSubscription(user.id))
+      .then((sub) => {
+        setProSubscription(sub);
+        // If subscription record is active but store still says free (webhook may have been slow/missed),
+        // patch the store so Pro UI and feature gates work for this session.
+        if (sub && (sub.status === 'active' || sub.status === 'past_due')) {
+          const storeUser = useStore.getState().user;
+          if (storeUser && storeUser.subscriptionTier !== 'pro') {
+            useStore.setState({ user: { ...storeUser, subscriptionTier: 'pro' } });
+          }
+        }
+      })
+      .finally(() => setProSubLoading(false));
+  }, [isOpen, user?.id, activeTab]);
+
   useEffect(() => {
     if (user?.email) setResetPasswordEmail(user.email);
   }, [user?.email]);
@@ -76,10 +114,10 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen }) => {
   });
 
   const tabs = [
-    { id: 'account', label: 'Account', icon: User },
-    { id: 'security', label: 'Security', icon: Shield },
-    { id: 'notifications', label: 'Notifications', icon: Bell },
-    //{ id: 'appearance', label: 'Appearance', icon: Palette },
+    { id: 'account', label: t('settings.tabs.account'), icon: User },
+    { id: 'security', label: t('settings.tabs.security'), icon: Shield },
+    { id: 'notifications', label: t('settings.tabs.notifications'), icon: Bell },
+    { id: 'pro', label: t('settings.tabs.subscription'), icon: Star },
   ];
 
   const handleEmailChange = (field: keyof ChangeEmailForm, value: string) => {
@@ -421,6 +459,31 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen }) => {
         )}
       </div>
 
+      {/* Language Switcher */}
+      <div className="bg-gray-50 rounded-lg p-6 border border-gray-200">
+        <p className="text-lg font-semibold text-gray-800 mb-1 flex items-center">
+          <Globe className="mr-2 text-blue-600" size={20} />
+          {t('settings.language.title')}
+        </p>
+        <p className="text-gray-600 text-sm mb-4">{t('settings.language.subtitle')}</p>
+        <div className="flex flex-wrap gap-2">
+          {(['en', 'ko', 'ja'] as const).map((lang) => (
+            <button
+              key={lang}
+              type="button"
+              onClick={() => i18n.changeLanguage(lang)}
+              className={`px-4 py-2 rounded-lg font-medium text-sm transition-colors border ${
+                i18n.language === lang
+                  ? 'bg-blue-600 text-white border-blue-600'
+                  : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+              }`}
+            >
+              {t(`settings.language.${lang}`)}
+            </button>
+          ))}
+        </div>
+      </div>
+
       <div className="bg-gray-50 rounded-lg p-6 border border-gray-200">
         <p className="text-lg font-semibold text-gray-800 mb-4 flex items-center">
           <Mail className="mr-2 text-blue-600" />
@@ -670,117 +733,135 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen }) => {
     </div>
   );
 
- {/* const renderAppearanceTab = () => (
-    <div className="space-y-6">
-      <div className="bg-gray-50 rounded-lg p-6 border border-gray-200">
-        <p className="text-lg font-semibold text-gray-800 mb-4 flex items-center">
-          <Palette className="mr-2 text-blue-600" />
-          Theme Settings
-        </p>
-        <div className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Theme</label>
-            <select 
-              value={theme.type}
-              onChange={(e) => handleThemeChange(e.target.value as 'dark' | 'light' | 'auto')}
-              className="w-full px-4 py-3 bg-white border border-gray-300 rounded-lg text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="dark">Dark</option>
-              <option value="light">Light</option>
-              <option value="auto">Auto (System)</option>
-            </select>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Accent Color</label>
-            <div className="flex space-x-2">
-              {Object.entries(themeConfigs).map(([key, config]) => (
-                <button
-                  key={key}
-                  onClick={() => handleAccentColorChange(key as 'primary' | 'secondary' | 'green' | 'purple')}
-                  className={`w-8 h-8 rounded-full border-2 transition-all ${
-                    theme.accentColor === key 
-                      ? 'border-white scale-110' 
-                      : 'border-transparent hover:scale-105'
-                  }`}
-                  style={{ backgroundColor: config.colors.primary }}
-                  title={config.name}
-                />
-              ))}
-            </div>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Secondary Color</label>
-            <div className="flex items-center space-x-3">
-              <input
-                type="color"
-                value={theme.customSecondaryColor || themeConfigs[theme.accentColor].colors.secondary}
-                onChange={e => {
-                  const color = e.target.value;
-                  setTheme({ ...theme, customSecondaryColor: color });
-                  applyTheme({ ...theme, customSecondaryColor: color });
-                }}
-                className="w-10 h-10 p-0 border-2 border-dark-600 rounded-full bg-transparent cursor-pointer"
-                title="Pick a custom secondary color"
-              />
-              {theme.customSecondaryColor && (
-                <button
-                  onClick={() => {
-                    setTheme({ ...theme, customSecondaryColor: undefined });
-                    applyTheme({ ...theme, customSecondaryColor: undefined });
-                  }}
-                  className="px-3 py-1 bg-gray-200 text-gray-800 rounded hover:bg-gray-300 border border-gray-400 text-xs"
-                >
-                  Reset
-                </button>
-              )}
-              <span className="text-xs text-gray-600">{theme.customSecondaryColor || themeConfigs[theme.accentColor].colors.secondary}</span>
-            </div>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Background Color</label>
-            <div className="flex items-center space-x-3">
-              <input
-                type="color"
-                value={theme.customBackgroundColor || '#18181b'}
-                onChange={e => {
-                  const color = e.target.value;
-                  setTheme({ ...theme, customBackgroundColor: color });
-                  applyTheme({ ...theme, customBackgroundColor: color });
-                }}
-                className="w-10 h-10 p-0 border-2 border-dark-600 rounded-full bg-transparent cursor-pointer"
-                title="Pick a custom background color"
-              />
-              {theme.customBackgroundColor && (
-                <button
-                  onClick={() => {
-                    setTheme({ ...theme, customBackgroundColor: undefined });
-                    applyTheme({ ...theme, customBackgroundColor: undefined });
-                  }}
-                  className="px-3 py-1 bg-gray-200 text-gray-800 rounded hover:bg-gray-300 border border-gray-400 text-xs"
-                >
-                  Reset
-                </button>
-              )}
-              <span className="text-xs text-gray-600">{theme.customBackgroundColor || '#18181b'}</span>
-            </div>
-          </div>
-          <div className="mt-4 p-4 bg-dark-700 rounded-lg">
-            <p className="text-sm font-medium text-gray-700 mb-2">Preview</p>
-            <div className="space-y-2">
-              <div className="flex items-center space-x-2">
-                <div className="w-4 h-4 rounded-full" style={{ backgroundColor: themeConfigs[theme.accentColor].colors.primary }}></div>
-                <span className="text-sm text-white">Primary Color</span>
-              </div>
-              <div className="flex items-center space-x-2">
-                <div className="w-4 h-4 rounded-full" style={{ backgroundColor: theme.customSecondaryColor || themeConfigs[theme.accentColor].colors.secondary }}></div>
-                <span className="text-sm text-white">Secondary Color</span>
-              </div>
-            </div>
-          </div>
+  const renderProTab = () => {
+    // Use the DB subscription record as ground truth — the store's subscriptionTier
+    // can be stale if the webhook hasn't updated it yet.
+    const isPro =
+      user?.subscriptionTier === 'pro' ||
+      Boolean(proSubscription && (proSubscription.status === 'active' || proSubscription.status === 'past_due'));
+
+    const handleOpenPortal = async () => {
+      setPortalLoading(true);
+      setPortalError('');
+      try {
+        await proSubscriptionService.openPortal();
+      } catch (err) {
+        setPortalError(err instanceof Error ? err.message : 'Could not open billing portal');
+      } finally {
+        setPortalLoading(false);
+      }
+    };
+
+    if (proSubLoading) {
+      return (
+        <div className="flex items-center justify-center py-16 gap-2 text-gray-400 text-sm">
+          <div className="w-4 h-4 border-2 border-gray-400 border-t-transparent rounded-full animate-spin" />
+          Loading subscription…
         </div>
+      );
+    }
+
+    return (
+      <div className="space-y-4">
+
+        {/* Current plan card */}
+        <div className={`rounded-xl border p-5 ${isPro ? 'bg-yellow-50 border-yellow-200' : 'bg-gray-50 border-gray-200'}`}>
+          <div className="flex items-center justify-between mb-1">
+            <div className="flex items-center gap-2">
+              <div className={`w-8 h-8 rounded-full flex items-center justify-center ${isPro ? 'bg-yellow-100' : 'bg-gray-200'}`}>
+                <Star size={15} className={isPro ? 'text-yellow-500' : 'text-gray-400'} />
+              </div>
+              <p className="font-semibold text-gray-800">{isPro ? 'Remixr Pro' : 'Free plan'}</p>
+            </div>
+            <span className={`text-xs px-2.5 py-1 rounded-full font-semibold ${isPro ? 'bg-green-100 text-green-700' : 'bg-gray-200 text-gray-600'}`}>
+              {isPro ? 'Active' : 'Free'}
+            </span>
+          </div>
+          {isPro && proSubscription && (
+            <p className="text-sm text-gray-500 capitalize ml-10">
+              {proSubscription.plan} plan
+              {' · '}
+              {proSubscription.cancelAtPeriodEnd ? 'Cancels' : 'Renews'}{' '}
+              {new Date(proSubscription.currentPeriodEnd).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
+            </p>
+          )}
+          {!isPro && (
+            <p className="text-sm text-gray-500 ml-10">Up to 10 tracks · 2 albums · core features</p>
+          )}
+        </div>
+
+        {/* Cancellation notice */}
+        {isPro && proSubscription?.cancelAtPeriodEnd && (
+          <div className="flex items-start gap-3 bg-amber-50 border border-amber-200 rounded-xl p-4">
+            <Star size={16} className="text-amber-500 flex-shrink-0 mt-0.5" />
+            <p className="text-sm text-amber-700">
+              Your Pro access ends on{' '}
+              <strong>
+                {new Date(proSubscription.currentPeriodEnd).toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' })}
+              </strong>
+              . You won't be charged again. Resubscribe any time to keep Pro.
+            </p>
+          </div>
+        )}
+
+        {/* Manage subscription (Pro users) */}
+        {isPro && (
+          <div className="bg-gray-50 border border-gray-200 rounded-xl p-5 space-y-3">
+            <div>
+              <p className="text-sm font-semibold text-gray-800 mb-0.5">Manage subscription</p>
+              <p className="text-xs text-gray-500">Update your payment method, download invoices, or cancel — all through the Stripe billing portal.</p>
+            </div>
+            <button
+              onClick={handleOpenPortal}
+              disabled={portalLoading}
+              className="flex items-center gap-2 px-4 py-2.5 bg-green-300 hover:bg-orange-600 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
+            >
+              {portalLoading ? (
+                <><div className="w-3.5 h-3.5 border-2 border-white/60 border-t-transparent rounded-full animate-spin" /> Opening portal…</>
+              ) : (
+                <>Open billing portal <span aria-hidden>↗</span></>
+              )}
+            </button>
+            {portalError && (
+              <div className="space-y-1.5">
+                <p className="text-xs text-red-500">{portalError}</p>
+                <p className="text-xs text-gray-500">
+                  If the portal won't open, contact support with the email on your account.
+                </p>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Upgrade CTA (Free users) */}
+        {!isPro && (
+          <div className="bg-gray-50 border border-gray-200 rounded-xl p-5 space-y-4">
+            <div>
+              <p className="text-sm font-semibold text-gray-800 mb-1">Unlock Remixr Pro</p>
+              <p className="text-xs text-gray-500">Unlimited uploads, priority Discover placement, analytics, enhanced profile, and more.</p>
+            </div>
+            <div className="flex gap-2 text-sm">
+              <div className="flex-1 bg-white border border-gray-200 rounded-lg px-3 py-2 text-center">
+                <p className="font-bold text-gray-900">{PRICING.monthly.display}</p>
+                <p className="text-xs text-gray-500">per month</p>
+              </div>
+              <div className="flex-1 bg-yellow-50 border border-yellow-200 rounded-lg px-3 py-2 text-center relative">
+                <span className="absolute -top-2 left-1/2 -translate-x-1/2 text-[10px] bg-yellow-400 text-yellow-900 px-1.5 py-0.5 rounded-full font-bold whitespace-nowrap">2 months free</span>
+                <p className="font-bold text-gray-900 mt-1">{PRICING.yearly.display}</p>
+                <p className="text-xs text-gray-500">per month, billed yearly</p>
+              </div>
+            </div>
+            <button
+              onClick={() => { setSettingsOpen(false); navigate('/upgrade'); }}
+              className="w-full py-2.5 bg-yellow-500 hover:bg-yellow-400 text-gray-900 rounded-lg font-semibold text-sm transition-colors"
+            >
+              View plans and upgrade
+            </button>
+          </div>
+        )}
       </div>
-    </div>
-  );*/}
+    );
+  };
 
   const renderTabContent = () => {
     switch (activeTab) {
@@ -790,8 +871,8 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen }) => {
         return renderSecurityTab();
       case 'notifications':
         return renderNotificationsTab();
-      //case 'appearance':
-        //return renderAppearanceTab();
+      case 'pro':
+        return renderProTab();
       default:
         return renderAccountTab();
     }
@@ -809,7 +890,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen }) => {
           >
             {/* Header */}
             <div className="flex items-center justify-between p-6 border-b border-gray-200">
-              <p className="text-2xl font-bold text-gray-800">Settings</p>
+              <p className="text-2xl font-bold text-gray-800">{t('settings.title')}</p>
               <button
                 onClick={() => setSettingsOpen(false)}
                 className="p-2 rounded-lg hover:bg-gray-100 transition-colors"
@@ -875,3 +956,4 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen }) => {
 };
 
 export default SettingsModal; 
+

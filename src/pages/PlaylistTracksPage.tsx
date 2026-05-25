@@ -28,7 +28,7 @@ import { getAvatarUrl } from '../utils/avatar';
 
 const PlaylistTracksPage: React.FC = () => {
   const { playlistId } = useParams<{ playlistId: string }>();
-  const { playlists, player, playTrack, playQueue, addToQueue, user, updatePlaylist, setPlaylists, addTrackToPlaylist } = useStore();
+  const { playlists, player, playTrack, playQueue, addToQueue, user, setPlaylists } = useStore();
   const navigate = useNavigate();
   const [isPlaying, setIsPlaying] = useState(false);
   const [isChangingCover, setIsChangingCover] = useState(false);
@@ -132,10 +132,8 @@ const PlaylistTracksPage: React.FC = () => {
           
           // Update store with fetched playlist
           if (playlist) {
-            // Update existing playlist in store
-            updatePlaylist(playlistId, fetchedPlaylist);
+            setPlaylists(playlists.map(p => p.id === playlistId ? fetchedPlaylist : p));
           } else {
-            // Add new playlist to store
             setPlaylists([...playlists, fetchedPlaylist]);
           }
         } catch (error) {
@@ -149,7 +147,7 @@ const PlaylistTracksPage: React.FC = () => {
     };
 
     fetchPlaylist();
-  }, [playlistId, playlist, playlists, updatePlaylist, setPlaylists]);
+  }, [playlistId, playlist, playlists, setPlaylists]);
 
   const loadAvailableTracks = async () => {
     setIsLoadingTracks(true);
@@ -177,16 +175,17 @@ const PlaylistTracksPage: React.FC = () => {
       
       // Refresh playlist
       const updatedPlaylist = await MusicService.getPlaylistById(playlist.id);
-      if (playlist) {
-        updatePlaylist(playlist.id, updatedPlaylist);
-      } else {
-        setPlaylists([...playlists, updatedPlaylist]);
-      }
-      
+      setPlaylists(playlists.map(p => p.id === playlist.id ? updatedPlaylist : p));
       setShowAddTrackModal(false);
     } catch (error) {
-      console.error('Failed to add track to playlist:', error);
-      alert(`Failed to add track to playlist: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      if (message.includes('duplicate key') || message.includes('unique constraint')) {
+        alert('Duplicated tracks!!');
+        setShowAddTrackModal(false);
+      } else {
+        console.error('Failed to add track to playlist:', error);
+        alert(`Failed to add track to playlist: ${message}`);
+      }
     }
   };
 
@@ -281,6 +280,19 @@ const PlaylistTracksPage: React.FC = () => {
     }
   };
 
+  const handleRemoveTrack = async (trackId: string) => {
+    if (!playlist || !hasAccess) return;
+
+    try {
+      await MusicService.removeTrackFromPlaylist(playlist.id, trackId);
+      const updatedPlaylist = await MusicService.getPlaylistById(playlist.id);
+      setPlaylists(playlists.map(p => p.id === playlist.id ? updatedPlaylist : p));
+    } catch (error) {
+      console.error('Failed to remove track:', error);
+      alert(`Failed to remove track: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  };
+
   const handleCancelInvitation = async (invitationId: string) => {
     if (!user || !isOwner || !playlistId) return;
     
@@ -300,7 +312,7 @@ const PlaylistTracksPage: React.FC = () => {
 
   if ((isLoading || isCheckingAccess) && !playlist) {
     return (
-      <div className="min-h-screen bg-dark-900 text-black flex items-center justify-center">
+      <div className="min-h-screen bg-dark-900 text-white flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-white mx-auto mb-4"></div>
           <p>Loading playlist...</p>
@@ -391,9 +403,7 @@ const PlaylistTracksPage: React.FC = () => {
     setIsChangingCover(true);
     try {
       await MusicService.updatePlaylist(playlist.id, user.id, { cover: coverUrl });
-      
-      // Update local state
-      updatePlaylist(playlist.id, { cover: coverUrl });
+      setPlaylists(playlists.map(p => p.id === playlist.id ? { ...p, cover: coverUrl } : p));
       setShowCoverModal(false);
     } catch (error) {
       console.error('Failed to update playlist cover:', error);
@@ -425,9 +435,7 @@ const PlaylistTracksPage: React.FC = () => {
 
       // Update playlist with new cover URL
       await MusicService.updatePlaylist(playlist.id, user.id, { cover: coverUrl });
-      
-      // Update local state
-      updatePlaylist(playlist.id, { cover: coverUrl });
+      setPlaylists(playlists.map(p => p.id === playlist.id ? { ...p, cover: coverUrl } : p));
       setShowCoverModal(false);
     } catch (error) {
       console.error('Failed to upload playlist cover:', error);
@@ -443,166 +451,168 @@ const PlaylistTracksPage: React.FC = () => {
     'https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?w=400&h=400&fit=crop';
 
   return (
-    <div className="min-h-screen bg-dark-900 text-black">
-      {/* Header Section - playlist color on mobile */}
-      <div className="p-4 sm:p-6 md:p-8 bg-gradient-to-br from-violet-900/50 to-indigo-900/40 md:bg-dark-800 border-b border-violet-700/50 md:border-dark-700">
-        <div className="flex items-end space-x-4 md:space-x-6">
-          {/* Playlist Cover Art */}
-          <div className="relative w-48 h-48 rounded-lg overflow-hidden" style={{ backgroundColor: 'var(--color-border)' }}>
-            <img 
-              src={playlistCover} 
+    <div className="min-h-screen bg-dark-900">
+
+      {/* ── Hero Header ── */}
+      <div className="relative bg-gradient-to-b from-violet-950/80 via-violet-900/30 to-dark-900">
+        <div className="flex flex-col sm:flex-row sm:items-end gap-5 p-5 sm:p-8 pt-6 sm:pt-10">
+
+          {/* Cover Art */}
+          <div className="relative w-44 h-44 sm:w-52 sm:h-52 rounded-xl overflow-hidden flex-shrink-0 mx-auto sm:mx-0 shadow-2xl bg-dark-700 group/cover">
+            <img
+              src={playlistCover}
               alt="Playlist Cover"
               className="w-full h-full object-cover"
               onError={(e) => {
-                console.error('Failed to load cover image:', playlistCover);
                 const target = e.target as HTMLImageElement;
                 target.style.display = 'none';
                 const parent = target.parentElement;
                 if (parent && !parent.querySelector('.fallback-cover-playlist-page')) {
                   const fallback = document.createElement('div');
-                  fallback.className = 'fallback-cover-playlist-page w-full h-full flex items-center justify-center bg-gray-300 text-6xl';
+                  fallback.className = 'fallback-cover-playlist-page w-full h-full flex items-center justify-center bg-dark-600 text-5xl';
                   fallback.textContent = '🎵';
                   parent.appendChild(fallback);
                 }
               }}
               onLoad={(e) => {
-                // Hide fallback if image loads successfully
                 const target = e.target as HTMLImageElement;
-                const parent = target.parentElement;
-                const fallback = parent?.querySelector('.fallback-cover-playlist-page');
-                if (fallback) {
-                  fallback.remove();
-                }
+                const fallback = target.parentElement?.querySelector('.fallback-cover-playlist-page');
+                if (fallback) fallback.remove();
               }}
             />
-            
-            {/* Cover Change Button */}
             {user && playlist && user.id === playlist.createdBy && (
               <button
                 onClick={() => setShowCoverModal(true)}
-                className="absolute inset-0 bg-black bg-opacity-50 opacity-0 hover:opacity-100 transition-opacity duration-200 flex items-center justify-center text-black"
-                title="Change playlist cover"
+                className="absolute inset-0 bg-black/60 opacity-0 group-hover/cover:opacity-100 transition-opacity flex flex-col items-center justify-center gap-1 text-white"
               >
-                <div className="text-center">
-                  <div className="w-8 h-8 bg-white bg-opacity-20 rounded-full flex items-center justify-center mx-auto mb-2">
-                    <Plus size={20} />
-                  </div>
-                  <span className="text-sm font-medium">Change Cover</span>
-                </div>
+                <Plus size={22} />
+                <span className="text-xs font-medium">Change cover</span>
               </button>
             )}
           </div>
-          
-          {/* Playlist Info */}
-          <div className="flex-1">
-            <div className="flex items-center mb-4">
-              <p className="text-6xl font-bold text-black mr-4">
-                {playlist.name}
-              </p>
-              <span className="ml-2 px-3 py-1 bg-dark-700 text-green-400 text-lg font-bold rounded-full align-middle" title="Number of tracks">
-                {playlist.tracks.length} {playlist.tracks.length === 1 ? 'track' : 'tracks'}
-              </span>
+
+          {/* Playlist Info + Actions */}
+          <div className="flex-1 text-center sm:text-left min-w-0">
+            <p className="text-xs uppercase tracking-widest text-violet-400 font-semibold mb-1">Playlist</p>
+            <h1 className="text-3xl sm:text-5xl font-bold text-white leading-tight break-words mb-2">
+              {playlist.name}
+            </h1>
+            <div className="flex items-center justify-center sm:justify-start gap-2 text-sm text-gray-400 mb-5 flex-wrap">
+              <span>{playlist.tracks.length} {playlist.tracks.length === 1 ? 'track' : 'tracks'}</span>
+              {!playlist.isPublic && (
+                <span className="px-2 py-0.5 bg-violet-600/30 text-violet-300 rounded-full text-xs border border-violet-600/40">
+                  Private
+                </span>
+              )}
+            </div>
+
+            {/* Action Buttons */}
+            <div className="flex items-center justify-center sm:justify-start flex-wrap gap-2">
+              <button
+                onClick={handlePlayPlaylist}
+                disabled={playlist.tracks.length === 0}
+                className="flex items-center gap-2 px-5 py-2.5 bg-violet-600 hover:bg-violet-500 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-full font-semibold text-sm transition-colors"
+              >
+                <Play size={16} fill="currentColor" />
+                Play
+              </button>
+              {hasAccess && (
+                <button
+                  onClick={() => { setShowAddTrackModal(true); loadAvailableTracks(); }}
+                  className="flex items-center gap-2 px-4 py-2.5 bg-dark-700/80 hover:bg-dark-600 text-white rounded-full text-sm transition-colors border border-dark-500/60"
+                >
+                  <Plus size={15} />
+                  Add tracks
+                </button>
+              )}
+              {isOwner && (
+                <>
+                  <button
+                    onClick={() => setShowInviteModal(true)}
+                    className="flex items-center gap-2 px-4 py-2.5 bg-dark-700/80 hover:bg-dark-600 text-white rounded-full text-sm transition-colors border border-dark-500/60"
+                  >
+                    <UserPlus size={15} />
+                    Invite
+                  </button>
+                  <button
+                    onClick={() => setShowCollaboratorsSection(!showCollaboratorsSection)}
+                    className={`flex items-center gap-2 px-4 py-2.5 rounded-full text-sm transition-colors border ${
+                      showCollaboratorsSection
+                        ? 'bg-violet-600/30 border-violet-500/50 text-violet-300'
+                        : 'bg-dark-700/80 hover:bg-dark-600 text-white border-dark-500/60'
+                    }`}
+                  >
+                    <Users size={15} />
+                    {collaborators.length > 0
+                      ? `${collaborators.length} collaborator${collaborators.length !== 1 ? 's' : ''}`
+                      : 'Collaborators'}
+                  </button>
+                </>
+              )}
             </div>
           </div>
         </div>
       </div>
 
-      {/* Control Bar */}
-      <div className="px-8 py-4 bg-dark-900 border-b border-dark-700">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center space-x-4">
+      {/* ── Pending Invitation Banner ── */}
+      {pendingInvitations.length > 0 && !hasAccess && (
+        <div className="mx-4 sm:mx-8 mb-2 mt-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 px-4 py-3 bg-blue-900/40 border border-blue-700/50 rounded-xl">
+          <p className="text-sm text-white font-medium">You have a pending invitation to collaborate on this playlist.</p>
+          <div className="flex items-center gap-2 flex-shrink-0">
             <button
-              onClick={handlePlayPlaylist}
-              className="w-14 h-14 bg-blue-500 hover:bg-green-600 rounded-full flex items-center justify-center transition-colors"
+              onClick={() => handleAcceptInvitation(pendingInvitations[0].id)}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-green-500 hover:bg-green-400 text-white rounded-lg text-sm transition-colors"
             >
-              <Play size={24} className="text-black ml-1" />
+              <Check size={14} /> Accept
             </button>
-            {isOwner && (
-              <>
-                <button 
-                  onClick={() => setShowInviteModal(true)}
-                  className="text-gray-400 hover:text-black transition-colors"
-                  title="Invite users to collaborate"
-                >
-                  <UserPlus size={20} />
-                </button>
-                <button
-                  onClick={() => setShowCollaboratorsSection(!showCollaboratorsSection)}
-                  className="px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-700 transition-colors flex items-center space-x-2"
-                  title="View collaborators"
-                >
-                  <Users size={18} />
-                  <span>Collaborators</span>
-                </button>
-              </>
-            )}
-            {hasAccess && (
-              <button
-                onClick={() => {
-                  setShowAddTrackModal(true);
-                  loadAvailableTracks();
-                }}
-                className="px-4 py-2 bg-green-500 text-black rounded hover:bg-green-600 transition-colors flex items-center space-x-2"
-                title="Add tracks to playlist"
-              >
-                <Plus size={18} />
-                <span>Add Tracks</span>
-              </button>
-            )}
+            <button
+              onClick={() => handleDeclineInvitation(pendingInvitations[0].id)}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-dark-700 hover:bg-dark-600 text-gray-300 rounded-lg text-sm transition-colors"
+            >
+              <XCircle size={14} /> Decline
+            </button>
           </div>
         </div>
-      </div>
+      )}
 
-      {/* Collaborators Section */}
+      {/* ── Collaborators Panel ── */}
       {isOwner && showCollaboratorsSection && (
-        <div className="px-8 py-4 bg-dark-800 border-b border-dark-700">
-          <div className="mb-4">
-            <h3 className="text-lg font-bold text-white flex items-center space-x-2">
-              <Users size={20} />
-              <span>Collaborators</span>
-            </h3>
+        <div className="mx-4 sm:mx-8 mb-4 mt-2 bg-dark-800/60 border border-dark-700/60 rounded-xl overflow-hidden">
+          <div className="px-5 py-4 border-b border-dark-700/60">
+            <p className="text-sm font-semibold text-black flex items-center gap-2">
+              <Users size={16} className="text-violet-400" />
+              Collaborators
+            </p>
           </div>
 
           {isLoadingCollaborators ? (
-            <div className="text-center py-4">
-              <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-white mx-auto"></div>
-              <p className="text-gray-400 mt-2">Loading collaborators...</p>
+            <div className="flex items-center justify-center py-8 gap-3 text-gray-400 text-sm">
+              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-violet-400" />
+              Loading…
             </div>
           ) : (
-            <div className="space-y-6">
-              {/* Active Collaborators */}
+            <div className="p-4 space-y-4">
+              {/* Active */}
               <div>
-                <h4 className="text-md font-semibold text-white mb-3 flex items-center space-x-2">
-                  <Check size={16} className="text-green-400" />
-                  <span>Active Collaborators ({collaborators.length})</span>
-                </h4>
+                <p className="text-xs uppercase tracking-widest text-gray-500 font-medium mb-2 flex items-center gap-1.5">
+                  <Check size={12} className="text-green-400" />
+                  Active · {collaborators.length}
+                </p>
                 {collaborators.length === 0 ? (
-                  <p className="text-gray-400 text-sm">No active collaborators yet.</p>
+                  <p className="text-gray-500 text-sm py-2">No active collaborators yet.</p>
                 ) : (
-                  <div className="space-y-2">
-                    {collaborators.map((collaborator) => (
-                      <div
-                        key={collaborator.id}
-                        className="flex items-center justify-between p-3 bg-dark-700 rounded-lg hover:bg-dark-600 transition-colors"
-                      >
-                        <div className="flex items-center space-x-3">
-                          <img
-                            src={getAvatarUrl(collaborator.avatar)}
-                            alt={collaborator.username}
-                            className="w-10 h-10 rounded-full object-cover"
-                          />
-                          <div>
-                            <p className="text-white font-medium">{collaborator.username}</p>
-                            <p className="text-gray-400 text-sm">Active collaborator</p>
-                          </div>
+                  <div className="space-y-1.5">
+                    {collaborators.map((c) => (
+                      <div key={c.id} className="flex items-center justify-between gap-3 px-3 py-2.5 bg-dark-700/50 hover:bg-dark-700 rounded-lg transition-colors">
+                        <div className="flex items-center gap-3 min-w-0">
+                          <img src={getAvatarUrl(c.avatar)} alt={c.username} className="w-8 h-8 rounded-full object-cover flex-shrink-0" />
+                          <span className="text-white text-sm font-medium truncate">{c.username}</span>
                         </div>
                         <button
-                          onClick={() => handleRemoveCollaborator(collaborator.invitationId)}
-                          className="px-3 py-1.5 bg-red-500 text-white rounded hover:bg-red-600 transition-colors flex items-center space-x-2 text-sm"
-                          title="Remove collaborator"
+                          onClick={() => handleRemoveCollaborator(c.invitationId)}
+                          className="flex items-center gap-1.5 px-3 py-1.5 bg-red-500/20 hover:bg-red-500/30 text-red-400 rounded-lg text-xs transition-colors flex-shrink-0"
                         >
-                          <UserMinus size={14} />
-                          <span>Remove</span>
+                          <UserMinus size={12} /> Remove
                         </button>
                       </div>
                     ))}
@@ -610,443 +620,319 @@ const PlaylistTracksPage: React.FC = () => {
                 )}
               </div>
 
-              {/* Pending Invitations */}
-              <div>
-                <h4 className="text-md font-semibold text-white mb-3 flex items-center space-x-2">
-                  <Mail size={16} className="text-yellow-400" />
-                  <span>Pending Invitations ({pendingInvitesSent.length})</span>
-                </h4>
-                {pendingInvitesSent.length === 0 ? (
-                  <p className="text-gray-400 text-sm">No pending invitations.</p>
-                ) : (
-                  <div className="space-y-2">
-                    {pendingInvitesSent.map((invitation) => (
-                      <div
-                        key={invitation.invitationId}
-                        className="flex items-center justify-between p-3 bg-dark-700 rounded-lg hover:bg-dark-600 transition-colors"
-                      >
-                        <div className="flex items-center space-x-3">
-                          <img
-                            src={getAvatarUrl(invitation.avatar)}
-                            alt={invitation.username}
-                            className="w-10 h-10 rounded-full object-cover"
-                          />
-                          <div>
-                            <p className="text-white font-medium">{invitation.username}</p>
-                            <p className="text-gray-400 text-sm">
-                              Invited {new Date(invitation.createdAt).toLocaleDateString()}
-                            </p>
+              {/* Pending */}
+              {pendingInvitesSent.length > 0 && (
+                <div>
+                  <p className="text-xs uppercase tracking-widest text-gray-500 font-medium mb-2 flex items-center gap-1.5">
+                    <Mail size={12} className="text-yellow-400" />
+                    Pending · {pendingInvitesSent.length}
+                  </p>
+                  <div className="space-y-1.5">
+                    {pendingInvitesSent.map((inv) => (
+                      <div key={inv.invitationId} className="flex items-center justify-between gap-3 px-3 py-2.5 bg-dark-700/50 hover:bg-dark-700 rounded-lg transition-colors">
+                        <div className="flex items-center gap-3 min-w-0">
+                          <img src={getAvatarUrl(inv.avatar)} alt={inv.username} className="w-8 h-8 rounded-full object-cover flex-shrink-0" />
+                          <div className="min-w-0">
+                            <p className="text-white text-sm font-medium truncate">{inv.username}</p>
+                            <p className="text-gray-500 text-xs">Invited {new Date(inv.createdAt).toLocaleDateString()}</p>
                           </div>
                         </div>
                         <button
-                          onClick={() => handleCancelInvitation(invitation.invitationId)}
-                          className="px-3 py-1.5 bg-gray-600 text-white rounded hover:bg-gray-700 transition-colors flex items-center space-x-2 text-sm"
-                          title="Cancel invitation"
+                          onClick={() => handleCancelInvitation(inv.invitationId)}
+                          className="flex items-center gap-1.5 px-3 py-1.5 bg-dark-600 hover:bg-dark-500 text-gray-400 rounded-lg text-xs transition-colors flex-shrink-0"
                         >
-                          <X size={14} />
-                          <span>Cancel</span>
+                          <X size={12} /> Cancel
                         </button>
                       </div>
                     ))}
                   </div>
-                )}
-              </div>
+                </div>
+              )}
             </div>
           )}
         </div>
       )}
 
-      {/* Track List - tracks use neutral/different color on mobile */}
-      <div className="px-4 sm:px-6 md:px-8">
-        {/* Table Header - hidden on mobile, track rows get left border instead */}
-        <div className="hidden md:grid grid-cols-[50px_1fr_1fr_1fr_100px] gap-4 py-4 border-b border-dark-700 text-gray-400 text-sm font-medium">
-          <div>#</div>
-          <div>Title</div>
-          <div>Album</div>
-          <div>Date added</div>
-          <div className="flex justify-center">
-            <Clock size={16} />
-          </div>
+      {/* ── Track List ── */}
+      <div className="px-4 sm:px-8 pb-24">
+        {/* Desktop column header */}
+        <div className="hidden md:grid grid-cols-[40px_1fr_180px_120px_56px_40px] gap-4 px-3 py-2 mb-1 border-b border-dark-700/50">
+          <div className="text-xs uppercase tracking-widest text-gray-600 text-center">#</div>
+          <div className="text-xs uppercase tracking-widest text-gray-600">Title</div>
+          <div className="text-xs uppercase tracking-widest text-gray-600">Album</div>
+          <div className="text-xs uppercase tracking-widest text-gray-600">Date added</div>
+          <div className="flex justify-end"><Clock size={13} className="text-gray-600" /></div>
+          <div />
         </div>
 
-        {/* Track Rows - color-coded as tracks on mobile (left border) */}
-      {playlist.tracks.length === 0 ? (
-          <div className="py-8 text-center text-gray-400">
-            No tracks in this playlist yet.
+        {playlist.tracks.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-20 gap-4">
+            <div className="w-16 h-16 bg-dark-800 rounded-full flex items-center justify-center text-3xl">🎵</div>
+            <p className="text-gray-400 text-sm">No tracks yet</p>
             {hasAccess && (
-              <div className="mt-4">
-                <button
-                  onClick={() => {
-                    setShowAddTrackModal(true);
-                    loadAvailableTracks();
-                  }}
-                  className="px-4 py-2 bg-green-500 text-black rounded hover:bg-green-600 transition-colors"
-                >
-                  Add your first track
-                </button>
-              </div>
+              <button
+                onClick={() => { setShowAddTrackModal(true); loadAvailableTracks(); }}
+                className="flex items-center gap-2 px-4 py-2 bg-violet-600 hover:bg-violet-500 text-white rounded-full text-sm transition-colors"
+              >
+                <Plus size={15} /> Add your first track
+              </button>
             )}
           </div>
         ) : (
           <div>
             {playlist.tracks.map((track, index) => (
-              <div 
+              <div
                 key={createDisplayName(track.id)}
-                className="grid grid-cols-[50px_1fr_1fr_1fr_100px] gap-4 py-3 hover:bg-dark-800 rounded group cursor-pointer transition-colors
-                  md:border-l-0 border-l-4 border-l-emerald-500/70 bg-dark-800/50 md:bg-transparent"
                 onClick={() => handlePlayTrack(track)}
+                className="group flex md:grid md:grid-cols-[40px_1fr_180px_120px_56px_40px] items-center gap-3 md:gap-4 px-3 py-2.5 rounded-lg cursor-pointer transition-colors hover:bg-white/5 mb-0.5"
               >
-                <div className="flex items-center justify-center">
-                  <span className="text-gray-400 group-hover:hidden">{index + 1}</span>
-                  <button className="hidden group-hover:block text-black">
-                    <Play size={16} />
-                  </button>
-                </div>
-                
-                <div className="flex items-center space-x-3">
-                  <div className="w-10 h-10 bg-dark-700 rounded overflow-hidden flex-shrink-0">
-                    <img 
-                      src={track.cover} 
-                      alt={track.title}
-                      className="w-full h-full object-cover"
-                    />
-                  </div>
-                  <div>
-                    <div className="text-black font-medium">{track.title}</div>
-                    <div className="text-gray-400 text-sm">{track.artist}</div>
-                  </div>
-                </div>
-                
-                <div className="hidden md:flex items-center text-gray-400">
-                  {track.album}
+                {/* Index / play icon */}
+                <div className="w-8 flex-shrink-0 flex items-center justify-center">
+                  <span className="text-gray-500 text-sm group-hover:hidden select-none">{index + 1}</span>
+                  <Play size={14} className="hidden group-hover:block text-white" fill="currentColor" />
                 </div>
 
-                <div className="hidden md:flex items-center text-gray-400">
-                  {formatDate(new Date())}
+                {/* Cover + title/artist */}
+                <div className="flex items-center gap-3 flex-1 min-w-0">
+                  <img
+                    src={track.cover}
+                    alt={track.title}
+                    className="w-10 h-10 rounded-md object-cover flex-shrink-0 bg-dark-700"
+                  />
+                  <div className="min-w-0">
+                    <p className="text-white text-sm font-medium truncate leading-snug">{track.title}</p>
+                    <p className="text-gray-500 text-xs truncate">{track.artist}</p>
+                  </div>
                 </div>
-                
-                <div className="flex items-center justify-center text-gray-400">
+
+                {/* Album — desktop */}
+                <div className="hidden md:block text-gray-500 text-sm truncate">{track.album}</div>
+
+                {/* Date — desktop */}
+                <div className="hidden md:block text-gray-500 text-sm">{formatDate(new Date())}</div>
+
+                {/* Duration */}
+                <div className="flex-shrink-0 text-gray-500 text-sm md:text-right tabular-nums">
                   {formatDuration(track.duration)}
                 </div>
+
+                {/* Remove button */}
+                {hasAccess && (
+                  <div className="flex justify-end flex-shrink-0">
+                    <button
+                      onClick={(e) => { e.stopPropagation(); handleRemoveTrack(track.id); }}
+                      className="opacity-0 group-hover:opacity-100 p-1.5 text-gray-500 hover:text-red-400 hover:bg-red-400/10 rounded-lg transition-all"
+                      title="Remove from playlist"
+                    >
+                      <X size={14} />
+                    </button>
+                  </div>
+                )}
               </div>
             ))}
           </div>
         )}
       </div>
 
-      {/* Add Track Modal */}
+      {/* ── Add Track Modal ── */}
       {showAddTrackModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-dark-800 rounded-lg p-6 w-full max-w-2xl max-h-[80vh] overflow-hidden flex flex-col">
-            <div className="flex items-center justify-between mb-4">
-              <div className="text-xl font-bold text-black">
-                Add Tracks to "{playlist?.name}"
-              </div>
-              <button
-                onClick={() => setShowAddTrackModal(false)}
-                className="p-2 text-gray-400 hover:text-black transition-colors"
-              >
-                <X size={20} />
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-end sm:items-center justify-center z-50 p-0 sm:p-4">
+          <div className="bg-dark-800 border border-dark-700/60 rounded-t-2xl sm:rounded-2xl w-full sm:max-w-xl max-h-[85vh] flex flex-col shadow-2xl">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-dark-700/60 flex-shrink-0">
+              <p className="text-base font-semibold text-black">Add to "{playlist?.name}"</p>
+              <button onClick={() => setShowAddTrackModal(false)} className="p-1.5 text-gray-500 hover:text-white transition-colors rounded-lg hover:bg-dark-700">
+                <X size={18} />
               </button>
             </div>
-            
-            <div className="flex-1 overflow-y-auto">
+            <div className="flex-1 overflow-y-auto px-3 py-3">
               {isLoadingTracks ? (
-                <div className="text-center py-8">
-                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white mx-auto mb-4"></div>
-                  <p className="text-gray-400">Loading tracks...</p>
+                <div className="flex items-center justify-center py-12 gap-3 text-gray-400 text-sm">
+                  <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-violet-400" />
+                  Loading tracks…
                 </div>
               ) : (
-                <div className="space-y-2">
-                  {availableTracks
-                    .filter(track => !playlist?.tracks.find(t => t.id === track.id))
-                    .map((track) => (
-                      <div key={track.id} className="flex items-center space-x-3 p-3 bg-dark-700 rounded hover:bg-dark-600 transition-colors">
-                        <img
-                          src={track.cover}
-                          alt={track.title}
-                          className="w-12 h-12 rounded object-cover"
-                        />
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium text-black truncate">{track.title}</p>
-                          <p className="text-xs text-gray-400 truncate">{track.artist}</p>
-                        </div>
-                        <div className="flex items-center space-x-2">
-                          <span className="text-xs text-gray-400">{formatDuration(track.duration)}</span>
-                          <button
-                            onClick={() => handleAddTrackToPlaylist(track)}
-                            className="p-2 bg-green-500 text-black rounded-full hover:bg-green-600 transition-colors"
-                            title="Add to playlist"
-                          >
-                            <Plus size={16} />
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-                  {availableTracks.filter(track => !playlist?.tracks.find(t => t.id === track.id)).length === 0 && (
-                    <div className="text-center py-8 text-gray-400">
-                      <p>No tracks available to add to this playlist.</p>
+                <>
+                  {availableTracks.filter(t => !playlist?.tracks.find(pt => pt.id === t.id)).length === 0 ? (
+                    <p className="text-center text-gray-500 text-sm py-12">No tracks available to add.</p>
+                  ) : (
+                    <div className="space-y-1">
+                      {availableTracks
+                        .filter(t => !playlist?.tracks.find(pt => pt.id === t.id))
+                        .map((track) => (
+                          <div key={track.id} className="flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-dark-700/60 transition-colors group/row">
+                            <img src={track.cover} alt={track.title} className="w-10 h-10 rounded-md object-cover flex-shrink-0 bg-dark-700" />
+                            <div className="flex-1 min-w-0">
+                              <p className="text-white text-sm font-medium truncate">{track.title}</p>
+                              <p className="text-gray-500 text-xs truncate">{track.artist}</p>
+                            </div>
+                            <span className="text-gray-600 text-xs tabular-nums mr-1">{formatDuration(track.duration)}</span>
+                            <button
+                              onClick={() => handleAddTrackToPlaylist(track)}
+                              className="p-1.5 bg-violet-600 hover:bg-violet-500 text-white rounded-full transition-colors flex-shrink-0"
+                            >
+                              <Plus size={14} />
+                            </button>
+                          </div>
+                        ))}
                     </div>
                   )}
-                </div>
+                </>
               )}
             </div>
-            
-            <div className="mt-4 pt-4 border-t border-dark-600">
-              <button
-                onClick={() => setShowAddTrackModal(false)}
-                className="w-full bg-dark-700 text-black px-4 py-2 rounded-lg hover:bg-dark-600 transition-colors"
-              >
-                Close
+            <div className="px-5 py-4 border-t border-dark-700/60 flex-shrink-0">
+              <button onClick={() => setShowAddTrackModal(false)} className="w-full py-2.5 bg-dark-700 hover:bg-dark-600 text-white rounded-xl text-sm transition-colors">
+                Done
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Cover Change Modal */}
+      {/* ── Cover Change Modal ── */}
       {showCoverModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-dark-800 rounded-lg p-6 w-full max-w-md">
-            <div className="flex items-center justify-between mb-4">
-              <div className="text-xl font-bold text-black">Change Playlist Cover</div>
-              <button
-                onClick={() => setShowCoverModal(false)}
-                className="text-gray-400 hover:text-black transition-colors"
-              >
-                <X size={20} />
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-end sm:items-center justify-center z-50 p-0 sm:p-4">
+          <div className="bg-dark-800 border border-dark-700/60 rounded-t-2xl sm:rounded-2xl w-full sm:max-w-md shadow-2xl">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-dark-700/60">
+              <h2 className="text-base font-semibold text-white">Change cover</h2>
+              <button onClick={() => setShowCoverModal(false)} className="p-1.5 text-gray-500 hover:text-white transition-colors rounded-lg hover:bg-dark-700">
+                <X size={18} />
               </button>
             </div>
-            
-        <div className="space-y-4">
-              {/* File Upload Section */}
+            <div className="p-5 space-y-5">
+              {/* Upload */}
               <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">
-                  Upload Cover Image
-                </label>
-                <div 
-                  className={`border-2 border-dashed rounded-lg p-6 text-center transition-colors ${
-                    isDragOver 
-                      ? 'border-primary-500 bg-primary-500 bg-opacity-10' 
-                      : 'border-dark-600 hover:border-primary-500'
+                <p className="text-xs font-medium text-gray-400 mb-2">Upload image</p>
+                <div
+                  className={`border-2 border-dashed rounded-xl p-6 text-center transition-colors cursor-pointer ${
+                    isDragOver ? 'border-violet-500 bg-violet-500/10' : 'border-dark-600 hover:border-violet-600/60'
                   }`}
-                  onDragOver={(e) => {
-                    e.preventDefault();
-                    setIsDragOver(true);
-                  }}
-                  onDragLeave={(e) => {
-                    e.preventDefault();
-                    setIsDragOver(false);
-                  }}
+                  onDragOver={(e) => { e.preventDefault(); setIsDragOver(true); }}
+                  onDragLeave={(e) => { e.preventDefault(); setIsDragOver(false); }}
                   onDrop={(e) => {
-                    e.preventDefault();
-                    setIsDragOver(false);
+                    e.preventDefault(); setIsDragOver(false);
                     const file = e.dataTransfer.files[0];
-                    if (file && file.type.startsWith('image/')) {
-                      handleFileUpload(file);
-                    }
+                    if (file?.type.startsWith('image/')) handleFileUpload(file);
                   }}
                 >
-                  <input
-                    type="file"
-                    accept="image/*"
-                    onChange={(e) => {
-                      const file = e.target.files?.[0];
-                      if (file) {
-                        handleFileUpload(file);
-                      }
-                    }}
-                    className="hidden"
-                    id="coverFile"
-                    disabled={isChangingCover}
+                  <input type="file" accept="image/*" id="coverFile" className="hidden" disabled={isChangingCover}
+                    onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFileUpload(f); }}
                   />
-                  <label
-                    htmlFor="coverFile"
-                    className="cursor-pointer block"
-                  >
-                    <div className="flex flex-col items-center space-y-2">
-                      <div className="w-12 h-12 bg-dark-700 rounded-full flex items-center justify-center">
-                        <Plus size={24} className="text-gray-400" />
-                      </div>
-                      <div>
-                        <p className="text-sm font-medium text-black">
-                          {isChangingCover ? 'Uploading...' : isDragOver ? 'Drop image here' : 'Click to upload image'}
-                        </p>
-                        <p className="text-xs text-gray-400 mt-1">
-                          PNG, JPG, GIF up to 5MB
-                        </p>
-                      </div>
+                  <label htmlFor="coverFile" className="cursor-pointer flex flex-col items-center gap-2">
+                    <div className="w-10 h-10 bg-dark-700 rounded-full flex items-center justify-center">
+                      <Plus size={20} className="text-gray-400" />
                     </div>
+                    <p className="text-sm text-gray-300">
+                      {isChangingCover ? 'Uploading…' : isDragOver ? 'Drop here' : 'Click or drag image'}
+                    </p>
+                    <p className="text-xs text-gray-600">PNG, JPG up to 5MB</p>
                   </label>
                 </div>
               </div>
 
-              {/* URL Input Section */}
+              {/* URL */}
               <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">
-                  Or enter image URL
-                </label>
-                <input
-                  type="url"
-                  placeholder="https://example.com/image.jpg"
-                  className="w-full px-3 py-2 bg-dark-700 border border-dark-600 rounded-lg text-black placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-500"
-                  id="coverUrl"
-                />
+                <p className="text-xs font-medium text-gray-400 mb-2">Or paste URL</p>
+                <div className="flex gap-2">
+                  <input
+                    type="url"
+                    id="coverUrl"
+                    placeholder="https://example.com/image.jpg"
+                    className="flex-1 px-3 py-2 bg-dark-700 border border-dark-600 rounded-lg text-white placeholder-gray-600 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500"
+                  />
+                  <button
+                    onClick={() => {
+                      const url = (document.getElementById('coverUrl') as HTMLInputElement)?.value;
+                      if (url) handleChangeCover(url);
+                    }}
+                    disabled={isChangingCover}
+                    className="px-4 py-2 bg-violet-600 hover:bg-violet-500 disabled:opacity-40 text-white rounded-lg text-sm transition-colors"
+                  >
+                    {isChangingCover ? '…' : 'Apply'}
+                  </button>
+                </div>
               </div>
-              
-              {/* Preset Cover Options */}
+
+              {/* Track covers */}
               {playlist.tracks.length > 0 && (
                 <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">
-                    Use Track Cover
-                  </label>
-                  <div className="grid grid-cols-4 gap-2">
-                    {playlist.tracks.slice(0, 8).map((track, index) => (
+                  <p className="text-xs font-medium text-gray-400 mb-2">Use a track cover</p>
+                  <div className="grid grid-cols-5 gap-2">
+                    {playlist.tracks.slice(0, 10).map((track, i) => (
                       <button
                         key={track.id}
                         onClick={() => handleChangeCover(track.cover)}
                         disabled={isChangingCover}
-                        className="w-16 h-16 rounded-lg overflow-hidden hover:opacity-80 transition-opacity disabled:opacity-50"
+                        className="aspect-square rounded-lg overflow-hidden hover:opacity-75 transition-opacity disabled:opacity-40"
                       >
-                        <img 
-                          src={track.cover} 
-                          alt={`Track ${index + 1}`}
-                          className="w-full h-full object-cover"
-                        />
+                        <img src={track.cover} alt={`Track ${i + 1}`} className="w-full h-full object-cover" />
                       </button>
                     ))}
                   </div>
                 </div>
               )}
-              
-              <div className="flex space-x-2">
-                <button
-                  onClick={() => {
-                    const url = (document.getElementById('coverUrl') as HTMLInputElement)?.value;
-                    if (url) {
-                      handleChangeCover(url);
-                    }
-                  }}
-                  disabled={isChangingCover}
-                  className="flex-1 px-4 py-2 bg-primary-600 text-black rounded-lg hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                >
-                  {isChangingCover ? 'Updating...' : 'Update from URL'}
-                </button>
-                <button
-                  onClick={() => setShowCoverModal(false)}
-                  className="px-4 py-2 bg-gray-600 text-black rounded-lg hover:bg-gray-700 transition-colors"
-                >
-                  Cancel
-                </button>
-              </div>
             </div>
           </div>
         </div>
       )}
 
-      {/* Invite User Modal */}
+      {/* ── Invite Modal ── */}
       {showInviteModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-dark-800 rounded-lg p-6 w-full max-w-md">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-xl font-bold text-black">Invite Users to Playlist</h2>
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-end sm:items-center justify-center z-50 p-0 sm:p-4">
+          <div className="bg-dark-800 border border-dark-700/60 rounded-t-2xl sm:rounded-2xl w-full sm:max-w-md shadow-2xl">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-dark-700/60">
+              <p className="text-base font-semibold text-black">Invite collaborators</p>
               <button
-                onClick={() => {
-                  setShowInviteModal(false);
-                  setInviteSearchQuery('');
-                  setInviteSearchResults([]);
-                }}
-                className="text-gray-400 hover:text-black transition-colors"
+                onClick={() => { setShowInviteModal(false); setInviteSearchQuery(''); setInviteSearchResults([]); }}
+                className="p-1.5 text-gray-500 hover:text-white transition-colors rounded-lg hover:bg-dark-700"
               >
-                <X size={20} />
+                <X size={18} />
               </button>
             </div>
-            
-            <div className="mb-4">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={18} />
+            <div className="p-4">
+              <div className="relative mb-3">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" size={16} />
                 <input
                   type="text"
-                  placeholder="Search users by username..."
+                  placeholder="Search by username…"
                   value={inviteSearchQuery}
-                  onChange={(e) => {
-                    setInviteSearchQuery(e.target.value);
-                    handleSearchUsers(e.target.value);
-                  }}
-                  className="w-full pl-10 pr-4 py-2 bg-dark-700 border border-dark-600 rounded-lg text-black placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  onChange={(e) => { setInviteSearchQuery(e.target.value); handleSearchUsers(e.target.value); }}
+                  className="w-full pl-9 pr-4 py-2.5 bg-dark-700 border border-dark-600 rounded-xl text-white placeholder-gray-600 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500"
                 />
               </div>
-            </div>
-            
-            <div className="max-h-80 overflow-y-auto space-y-2">
-              {isSearchingUsers ? (
-                <div className="text-center py-4">
-                  <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-white mx-auto"></div>
-                  <p className="text-gray-400 mt-2">Searching...</p>
-                </div>
-              ) : inviteSearchResults.length === 0 && inviteSearchQuery ? (
-                <p className="text-center text-gray-400 py-4">No users found</p>
-              ) : inviteSearchResults.length === 0 ? (
-                <p className="text-center text-gray-400 py-4">Search for users to invite</p>
-              ) : (
-                inviteSearchResults.map((userResult) => (
-                  <div
-                    key={userResult.id}
-                    className="flex items-center justify-between p-3 bg-dark-700 rounded hover:bg-dark-600 transition-colors"
-                  >
-                    <div className="flex items-center space-x-3">
-                      <img
-                        src={getAvatarUrl(userResult.avatar)}
-                        alt={userResult.username}
-                        className="w-10 h-10 rounded-full object-cover"
-                      />
-                      <div>
-                        <p className="text-black font-medium">{userResult.username}</p>
-                        {userResult.artistName && (
-                          <p className="text-sm text-gray-400">{userResult.artistName}</p>
-                        )}
-                      </div>
-                    </div>
-                    <button
-                      onClick={() => handleInviteUser(userResult.id)}
-                      className="px-4 py-2 bg-primary-600 text-white rounded hover:bg-primary-700 transition-colors text-sm"
-                    >
-                      Invite
-                    </button>
+              <div className="max-h-72 overflow-y-auto space-y-1">
+                {isSearchingUsers ? (
+                  <div className="flex items-center justify-center py-8 gap-2 text-gray-400 text-sm">
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-violet-400" /> Searching…
                   </div>
-                ))
-              )}
+                ) : inviteSearchResults.length === 0 ? (
+                  <p className="text-center text-gray-500 text-sm py-8">
+                    {inviteSearchQuery ? 'No users found' : 'Search for users to invite'}
+                  </p>
+                ) : (
+                  inviteSearchResults.map((u) => (
+                    <div key={u.id} className="flex items-center justify-between gap-3 px-3 py-2.5 rounded-lg hover:bg-dark-700/60 transition-colors">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <img src={getAvatarUrl(u.avatar)} alt={u.username} className="w-9 h-9 rounded-full object-cover flex-shrink-0" />
+                        <div className="min-w-0">
+                          <p className="text-white text-sm font-medium truncate">{u.username}</p>
+                          {u.artistName && <p className="text-gray-500 text-xs truncate">{u.artistName}</p>}
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => handleInviteUser(u.id)}
+                        className="flex-shrink-0 px-3 py-1.5 bg-violet-600 hover:bg-violet-500 text-white rounded-full text-xs font-medium transition-colors"
+                      >
+                        Invite
+                      </button>
+                    </div>
+                  ))
+                )}
+              </div>
             </div>
           </div>
         </div>
       )}
 
-      {/* Pending Invitation Banner */}
-      {pendingInvitations.length > 0 && !hasAccess && (
-        <div className="px-8 py-4 bg-blue-900 border-b border-blue-700">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-white font-medium">You have a pending invitation to collaborate on this playlist</p>
-            </div>
-            <div className="flex items-center space-x-2">
-              <button
-                onClick={() => handleAcceptInvitation(pendingInvitations[0].id)}
-                className="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600 transition-colors flex items-center space-x-2"
-              >
-                <Check size={16} />
-                <span>Accept</span>
-              </button>
-              <button
-                onClick={() => handleDeclineInvitation(pendingInvitations[0].id)}
-                className="px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600 transition-colors flex items-center space-x-2"
-              >
-                <XCircle size={16} />
-                <span>Decline</span>
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 };

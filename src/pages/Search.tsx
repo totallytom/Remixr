@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Users, Music, Loader, User as UserIcon, MessageCircle, Calendar, MapPin } from 'lucide-react';
-import { mockTracks } from '../data/mockData';
 import TrackCard from '../components/music/TrackCard';
 import SearchBar, { SearchCategory } from '../components/search/SearchBar';
 import { useStore } from '../store/useStore';
@@ -30,17 +29,16 @@ const Search: React.FC = () => {
   const [selectedGenre, setSelectedGenre] = useState<string | null>(null);
   const [category, setCategory] = useState<SearchCategory>('music');
   const [filterChip, setFilterChip] = useState<FilterChip>('top');
-  const [allUsers, setAllUsers] = useState<User[]>([]);
   const [filteredUsers, setFilteredUsers] = useState<User[]>([]);
   const [allTracks, setAllTracks] = useState<Track[]>([]);
   const [filteredTracks, setFilteredTracks] = useState<Track[]>([]);
   const [availableGenres, setAvailableGenres] = useState<string[]>([]);
-  const [isLoadingUsers, setIsLoadingUsers] = useState(false);
   const [isLoadingTracks, setIsLoadingTracks] = useState(false);
   const [isSearching, setIsSearching] = useState(false);
   const [featuredArtists, setFeaturedArtists] = useState<User[]>([]);
   const [isLoadingArtists, setIsLoadingArtists] = useState(false);
   const [concerts, setConcerts] = useState<ConcertWithUser[]>([]);
+  const [filteredConcerts, setFilteredConcerts] = useState<ConcertWithUser[]>([]);
   const [isLoadingConcerts, setIsLoadingConcerts] = useState(false);
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -101,8 +99,8 @@ const Search: React.FC = () => {
           setFilteredTracks(tracks);
         } catch (error) {
           console.error('Failed to load tracks:', error);
-          setAllTracks(mockTracks);
-          setFilteredTracks(mockTracks);
+          setAllTracks([]);
+          setFilteredTracks([]);
         } finally {
           setIsLoadingTracks(false);
         }
@@ -112,26 +110,6 @@ const Search: React.FC = () => {
     loadTracks();
   }, [effectiveView]);
 
-  const loadUsers = useCallback(async () => {
-    setIsLoadingUsers(true);
-    try {
-      // Load suggested users only (~5) for discovery
-      const users = await ChatService.searchUsers('', currentUser?.id || '', 5);
-      setAllUsers(users);
-      setFilteredUsers(users);
-    } catch (error) {
-      console.error('Failed to load suggested users:', error);
-    } finally {
-      setIsLoadingUsers(false);
-    }
-  }, [currentUser]);
-
-  // Load all users when users view is relevant
-  useEffect(() => {
-    if (effectiveView === 'users') {
-      loadUsers();
-    }
-  }, [effectiveView, loadUsers]);
 
   // Load concerts when concerts view is active
   useEffect(() => {
@@ -141,9 +119,11 @@ const Search: React.FC = () => {
       try {
         const all = await ConcertService.getAllConcerts(50);
         setConcerts(all);
+        setFilteredConcerts(all);
       } catch (error) {
         console.error('Failed to load concerts:', error);
         setConcerts([]);
+        setFilteredConcerts([]);
       } finally {
         setIsLoadingConcerts(false);
       }
@@ -224,8 +204,24 @@ const Search: React.FC = () => {
       } else {
         setFilteredUsers(allUsers);
       }
+    } else if (effectiveView === 'concerts') {
+      const q = query.trim().toLowerCase();
+      if (q) {
+        setFilteredConcerts(
+          concerts.filter(c =>
+            c.title.toLowerCase().includes(q) ||
+            c.venue.toLowerCase().includes(q) ||
+            c.location.toLowerCase().includes(q) ||
+            (c.user?.artist_name?.toLowerCase().includes(q)) ||
+            (c.user?.username?.toLowerCase().includes(q)) ||
+            (c.description?.toLowerCase().includes(q))
+          )
+        );
+      } else {
+        setFilteredConcerts(concerts);
+      }
     }
-  }, [effectiveView, allTracks, allUsers, currentUser]);
+  }, [effectiveView, allTracks, concerts, currentUser]);
 
   // Debounced search
   useEffect(() => {
@@ -236,13 +232,15 @@ const Search: React.FC = () => {
         if (effectiveView === 'music') {
           setFilteredTracks(allTracks);
         } else if (effectiveView === 'users') {
-          setFilteredUsers(allUsers);
+          setFilteredUsers([]);
+        } else if (effectiveView === 'concerts') {
+          setFilteredConcerts(concerts);
         }
       }
     }, 300);
 
     return () => clearTimeout(timeoutId);
-  }, [search, handleSearch, effectiveView, allTracks, allUsers]);
+  }, [search, handleSearch, effectiveView, allTracks]);
 
   // Filter by genre (music view); default sort: Newest First
   useEffect(() => {
@@ -272,14 +270,16 @@ const Search: React.FC = () => {
     navigate(`/artist/${artistId}`);
   };
 
-  const handleUserClick = (userId: string) => {
-    // If clicking on own profile, navigate to /profile (My Profile)
-    // Otherwise navigate to /profile/{userId} (viewing another user's profile)
-    if (currentUser && userId === currentUser.id) {
+  const handleUserClick = (user: { id: string; username?: string | null }) => {
+    if (currentUser && user.id === currentUser.id) {
       navigate('/profile');
-    } else {
-      navigate(`/profile/${userId}`);
+      return;
     }
+    const slug =
+      user.username?.trim()
+        ? encodeURIComponent(user.username.trim())
+        : user.id;
+    navigate(`/profile/${slug}`);
   };
 
   const handlePlayTrack = (track: Track) => {
@@ -359,7 +359,7 @@ const Search: React.FC = () => {
                 className={`flex-shrink-0 px-4 h-11 rounded-full text-sm font-medium transition-colors border ${
                   filterChip === chip.id
                     ? 'bg-lime-400/20 text-lime-400 border-lime-400/40'
-                    : 'bg-dark-800 text-dark-300 border-dark-600 hover:text-white hover:border-dark-500'
+                    : 'bg-dark-800 text-black border-dark-600 hover:text-white hover:border-dark-500'
                 }`}
               >
                 {chip.label}
@@ -430,19 +430,21 @@ const Search: React.FC = () => {
             <div className="text-center py-12">
               <Loader className="animate-spin text-primary-400 mx-auto" size={32} />
             </div>
-          ) : concerts.length === 0 ? (
+          ) : filteredConcerts.length === 0 ? (
             <div className="text-center py-12">
               <Calendar className="mx-auto text-dark-400 mb-3" size={40} />
-              <p className="text-dark-400 text-lg">No concerts yet</p>
-              <p className="text-dark-500 text-sm mt-2">Artists will show their upcoming shows here when they add them to their profiles.</p>
+              <p className="text-dark-400 text-lg">{search.trim() ? 'No concerts match your search' : 'No concerts yet'}</p>
+              <p className="text-dark-500 text-sm mt-2">
+                {search.trim() ? 'Try a different search term' : 'Artists will show their upcoming shows here when they add them to their profiles.'}
+              </p>
             </div>
           ) : (
             <div className="grid grid-cols-[repeat(auto-fill,minmax(180px,1fr))] gap-3 sm:gap-4">
-              {concerts.map(concert => (
+              {filteredConcerts.map(concert => (
                 <div
                   key={concert.id}
                   className="bg-dark-800 rounded-lg p-4 sm:p-5 border border-dark-700 card-hover cursor-pointer"
-                  onClick={() => concert.user && handleUserClick(concert.user.id)}
+                  onClick={() => concert.user && handleUserClick(concert.user)}
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex-1 min-w-0">
@@ -491,7 +493,7 @@ const Search: React.FC = () => {
                     )}
                     {concert.user && (
                       <button
-                        onClick={e => { e.stopPropagation(); handleUserClick(concert.user!.id); }}
+                        onClick={e => { e.stopPropagation(); handleUserClick(concert.user!); }}
                         className="px-3 py-1.5 bg-dark-700 text-white rounded text-sm hover:bg-dark-600 transition-colors"
                       >
                         View profile
@@ -507,134 +509,137 @@ const Search: React.FC = () => {
 
       {effectiveView === 'users' && (
         <>
-          {/* Featured Artists */}
-          <section className="mb-8">
-            <h2 className="text-2xl font-bold text-white mb-4 font-kyobo">Featured Artists</h2>
-            {isLoadingArtists ? (
-              <div className="text-center py-8">
-                <Loader className="animate-spin text-primary-400 mx-auto" size={32} />
+          {/* Featured Artists — always visible */}
+          {!search.trim() && (
+            <section className="mb-8">
+              <h2 className="text-2xl font-bold text-white mb-4 font-kyobo">Featured Artists</h2>
+              {isLoadingArtists ? (
+                <div className="text-center py-8">
+                  <Loader className="animate-spin text-primary-400 mx-auto" size={32} />
+                </div>
+              ) : (
+                <div className="grid grid-cols-[repeat(auto-fill,minmax(180px,1fr))] gap-6">
+                  {featuredArtists.length === 0 ? (
+                    <div className="text-dark-400 col-span-full text-center">No featured artists found.</div>
+                  ) : (
+                    featuredArtists.map(artist => (
+                      <div
+                        key={artist.id}
+                        onClick={() => handleUserClick(artist)}
+                        className="bg-dark-800 rounded-lg px-2 cursor-pointer card-hover py-2"
+                      >
+                        <div className="flex items-center space-x-2">
+                          <img
+                            src={getAvatarUrl(artist.avatar)}
+                            alt={artist.username}
+                            className="w-16 h-16 rounded-full object-cover"
+                          />
+                          <div className="flex-1 min-w-0">
+                            <p className="text-lg font-semibold text-black truncate flex items-center gap-1.5">
+                              {artist.username}
+                              <VerifiedBadge verified={artist.isVerified || artist.isVerifiedArtist} size={16} />
+                            </p>
+                            <p className="text-xs text-primary-400">Click to view profile</p>
+                          </div>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              )}
+            </section>
+          )}
+
+          {/* User search results — only when actively searching */}
+          {search.trim() && (
+            <section>
+              <div className="flex items-center justify-between mb-4 sm:mb-6 gap-2">
+                <h2 className="text-xl sm:text-2xl font-bold text-white font-kyobo truncate">Users</h2>
+                {isSearching && <Loader className="animate-spin text-primary-400 flex-shrink-0" size={20} />}
               </div>
-            ) : (
-              <div className="grid grid-cols-[repeat(auto-fill,minmax(180px,1fr))] gap-6">
-                {featuredArtists.length === 0 ? (
-                  <div className="text-dark-400 col-span-full text-center">No featured artists found.</div>
-                ) : (
-                  featuredArtists.map(artist => (
+
+              {!currentUser ? (
+                <div className="text-center py-8 sm:py-12 px-4">
+                  <Users className="mx-auto text-dark-400 mb-3 sm:mb-4" size={40} />
+                  <h3 className="text-lg sm:text-xl font-bold text-white mb-2">Sign in to search users</h3>
+                  <p className="text-dark-400 text-sm sm:text-base mb-4 sm:mb-6">Connect with other artists and music lovers by signing in to your account.</p>
+                  <button
+                    onClick={() => window.location.href = '/login'}
+                    className="px-5 py-2.5 sm:px-6 sm:py-3 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors text-sm sm:text-base"
+                  >
+                    Sign In
+                  </button>
+                </div>
+              ) : filteredUsers.length === 0 && !isSearching ? (
+                <div className="text-center py-8 sm:py-12">
+                  <p className="text-dark-400 text-base sm:text-lg">No users found</p>
+                  <p className="text-dark-500 text-xs sm:text-sm mt-2">Try a different search term</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-[repeat(auto-fill,minmax(180px,1fr))] gap-3 sm:gap-4">
+                  {filteredUsers.map(user => (
                     <div
-                      key={artist.id}
-                      onClick={() => handleUserClick(artist.id)}
-                      className="bg-dark-800 rounded-lg px-2 cursor-pointer card-hover py-2"
+                      key={user.id}
+                      className="bg-dark-800 rounded-lg p-3 sm:p-4 cursor-pointer card-hover"
                     >
-                      <div className="flex items-center space-x-2">
+                      <div className="flex items-center gap-3 sm:gap-4">
                         <img
-                          src={getAvatarUrl(artist.avatar)}
-                          alt={artist.username}
-                          className="w-16 h-16 rounded-full object-cover"
+                          src={getAvatarUrl(user.avatar)}
+                          alt={user.username}
+                          className="w-12 h-12 sm:w-14 sm:h-14 md:w-16 md:h-16 rounded-full object-cover flex-shrink-0"
                         />
                         <div className="flex-1 min-w-0">
-                          <p className="text-lg font-semibold text-white truncate flex items-center gap-1.5">
-                            {artist.username}
-                            <VerifiedBadge verified={artist.isVerified || artist.isVerifiedArtist} size={16} />
+                          <p className="text-base sm:text-lg font-semibold text-black truncate font-kyobo flex items-center gap-1.5">
+                            {user.username}
+                            <VerifiedBadge verified={user.isVerified || user.isVerifiedArtist} size={16} />
                           </p>
-                          <p className="text-xs text-primary-400">Click to view profile</p>
+                          {user.artistName && (
+                            <p className="text-xs sm:text-sm text-primary-400 truncate">{user.artistName}</p>
+                          )}
+                          <p className="text-xs sm:text-sm text-dark-400">{user.followers} followers</p>
+                          {user.bio && (
+                            <p className="text-xs text-dark-500 truncate mt-0.5 sm:mt-1 hidden sm:block">{user.bio}</p>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2 mt-3 sm:mt-4">
+                        <div className="flex items-center gap-2 sm:hidden">
+                          <button
+                            onClick={(e) => { e.stopPropagation(); handleUserClick(user); }}
+                            className="p-2 bg-dark-700 text-white rounded-full hover:bg-dark-600 transition-colors"
+                            title="View Profile"
+                          >
+                            <UserIcon size={18} />
+                          </button>
+                          <button
+                            onClick={(e) => { e.stopPropagation(); handleStartChat(user); }}
+                            className="p-2 bg-primary-600 text-white rounded-full hover:bg-primary-700 transition-colors"
+                            title="Message"
+                          >
+                            <MessageCircle size={18} />
+                          </button>
+                        </div>
+                        <div className="hidden sm:flex flex-1 sm:flex-initial gap-2">
+                          <button
+                            onClick={(e) => { e.stopPropagation(); handleUserClick(user); }}
+                            className="flex-1 sm:flex-initial px-3 py-2 bg-dark-700 text-black rounded text-sm hover:bg-dark-600 transition-colors"
+                          >
+                            View Profile
+                          </button>
+                          <button
+                            onClick={(e) => { e.stopPropagation(); handleStartChat(user); }}
+                            className="px-3 py-2 bg-primary-600 text-white rounded text-sm hover:bg-primary-700 transition-colors"
+                          >
+                            Message
+                          </button>
                         </div>
                       </div>
                     </div>
-                  ))
-                )}
-              </div>
-            )}
-          </section>
-
-          <section>
-          <div className="flex items-center justify-between mb-4 sm:mb-6 gap-2">
-            <h2 className="text-xl sm:text-2xl font-bold text-white font-kyobo truncate">Suggested Users</h2>
-            {isLoadingUsers && <Loader className="animate-spin text-primary-400 flex-shrink-0" size={20} />}
-          </div>
-          
-          {!currentUser ? (
-            <div className="text-center py-8 sm:py-12 px-4">
-              <Users className="mx-auto text-dark-400 mb-3 sm:mb-4" size={40} />
-              <h3 className="text-lg sm:text-xl font-bold text-white mb-2">Sign in to see suggested users</h3>
-              <p className="text-dark-400 text-sm sm:text-base mb-4 sm:mb-6">Connect with other artists and music lovers by signing in to your account.</p>
-              <button
-                onClick={() => window.location.href = '/login'}
-                className="px-5 py-2.5 sm:px-6 sm:py-3 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors text-sm sm:text-base"
-              >
-                Sign In
-              </button>
-            </div>
-          ) : filteredUsers.length === 0 && !isLoadingUsers ? (
-            <div className="text-center py-8 sm:py-12">
-              <p className="text-dark-400 text-base sm:text-lg">No suggested users to show</p>
-              <p className="text-dark-500 text-xs sm:text-sm mt-2">Try clearing your search</p>
-            </div>
-          ) : (
-            <div className="grid grid-cols-[repeat(auto-fill,minmax(180px,1fr))] gap-3 sm:gap-4">
-              {filteredUsers.map(user => (
-                <div
-                  key={user.id}
-                  className="bg-dark-800 rounded-lg p-3 sm:p-4 cursor-pointer card-hover"
-                >
-                  <div className="flex items-center gap-3 sm:gap-4">
-                    <img
-                      src={getAvatarUrl(user.avatar)}
-                      alt={user.username}
-                      className="w-12 h-12 sm:w-14 sm:h-14 md:w-16 md:h-16 rounded-full object-cover flex-shrink-0"
-                    />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-base sm:text-lg font-semibold text-white truncate font-kyobo flex items-center gap-1.5">
-                        {user.username}
-                        <VerifiedBadge verified={user.isVerified || user.isVerifiedArtist} size={16} />
-                      </p>
-                      {user.artistName && (
-                        <p className="text-xs sm:text-sm text-primary-400 truncate">{user.artistName}</p>
-                      )}
-                      <p className="text-xs sm:text-sm text-dark-400">{user.followers} followers</p>
-                      {user.bio && (
-                        <p className="text-xs text-dark-500 truncate mt-0.5 sm:mt-1 hidden sm:block">{user.bio}</p>
-                      )}
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2 mt-3 sm:mt-4">
-                    {/* Mobile: icon-only buttons */}
-                    <div className="flex items-center gap-2 sm:hidden">
-                      <button
-                        onClick={(e) => { e.stopPropagation(); handleUserClick(user.id); }}
-                        className="p-2 bg-dark-700 text-white rounded-full hover:bg-dark-600 transition-colors"
-                        title="View Profile"
-                      >
-                        <UserIcon size={18} />
-                      </button>
-                      <button
-                        onClick={(e) => { e.stopPropagation(); handleStartChat(user); }}
-                        className="p-2 bg-primary-600 text-white rounded-full hover:bg-primary-700 transition-colors"
-                        title="Message"
-                      >
-                        <MessageCircle size={18} />
-                      </button>
-                    </div>
-                    {/* Web: text buttons */}
-                    <div className="hidden sm:flex flex-1 sm:flex-initial gap-2">
-                      <button
-                        onClick={(e) => { e.stopPropagation(); handleUserClick(user.id); }}
-                        className="flex-1 sm:flex-initial px-3 py-2 bg-dark-700 text-white rounded text-sm hover:bg-dark-600 transition-colors"
-                      >
-                        View Profile
-                      </button>
-                      <button
-                        onClick={(e) => { e.stopPropagation(); handleStartChat(user); }}
-                        className="px-3 py-2 bg-primary-600 text-white rounded text-sm hover:bg-primary-700 transition-colors"
-                      >
-                        Message
-                      </button>
-                    </div>
-                  </div>
+                  ))}
                 </div>
-              ))}
-            </div>
+              )}
+            </section>
           )}
-        </section>
         </>
       )}
     </div>

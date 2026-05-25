@@ -33,3 +33,5 @@ docs/
 sql/
 scripts/
 supabase/
+.vercel
+.env*.local

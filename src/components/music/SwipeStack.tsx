@@ -100,7 +100,7 @@ export const SwipeStack: React.FC<SwipeStackProps> = ({
   const canGoBack = currentIndex > 0;
 
   return (
-    <div className="relative w-full max-w-sm mx-auto aspect-[3/4] min-h-[320px] sm:min-h-[420px] flex items-center justify-center overflow-hidden">
+    <div className="relative w-full h-full lg:max-w-sm lg:mx-auto lg:aspect-[3/4] lg:h-auto lg:min-h-[420px] flex items-center justify-center overflow-hidden">
       <AnimatePresence initial={false} mode="popLayout">
         {visibleTracks.map((track, index) => (
           <DiscoveryCard
@@ -114,8 +114,8 @@ export const SwipeStack: React.FC<SwipeStackProps> = ({
         ))}
       </AnimatePresence>
       {visibleTracks.length === 0 && (
-        <div className="absolute inset-0 flex items-center justify-center px-4 sm:px-6">
-          <div className="w-full max-w-sm aspect-[3/4] flex flex-col items-center justify-center rounded-3xl bg-dark-800 border border-white/10 shadow-2xl text-dark-400 overflow-hidden">
+        <div className="absolute inset-0 flex items-center justify-center lg:px-6">
+          <div className="w-full h-full lg:max-w-sm lg:aspect-[3/4] lg:h-auto flex flex-col items-center justify-center rounded-2xl lg:rounded-3xl bg-dark-800 border border-white/10 shadow-2xl text-dark-400 overflow-hidden">
             {isLoadingMore ? (
               <>
                 <div className="w-10 h-10 sm:w-12 sm:h-12 border-2 border-primary-500 border-t-transparent rounded-full animate-spin mb-4" />

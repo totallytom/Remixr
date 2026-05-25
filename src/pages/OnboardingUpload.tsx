@@ -9,6 +9,8 @@ import { useStore } from '../store/useStore';
 import { useAlerts } from '../contexts/AlertContext';
 import { supabase } from '../services/supabase';
 import { checkCopyright } from '../services/copyrightService';
+import { isMusicianRole } from '../utils/userRole';
+import { scheduleRecoveryThenSignupRedirect } from '../utils/authRedirect';
 import { transcodeWavOrAiffToM4a, shouldTranscodeToM4a } from '../utils/transcodeAudio';
 
 // ─── Constants ─────────────────────────────────────────────────────────────
@@ -167,11 +169,10 @@ const OnboardingUpload: React.FC = () => {
     if (isAuthenticated && !user) return;
 
     if (!isAuthenticated) {
-      const t = setTimeout(() => navigate('/signup'), 8000);
-      return () => clearTimeout(t);
+      return scheduleRecoveryThenSignupRedirect(navigate);
     }
 
-    if (user && user.role !== 'musician') {
+    if (user && !isMusicianRole(user.role)) {
       navigate('/', { replace: true });
     }
   }, [isAuthenticated, user, navigate]);
@@ -299,17 +300,6 @@ const OnboardingUpload: React.FC = () => {
           .from('music-files')
           .upload(audioPath, track.file, { contentType: audioContentType(track.file), upsert: false });
         if (audioErr || !audioData?.path) throw new Error(audioErr?.message || 'Audio upload failed');
-
-        // ACRCloud check
-        try {
-          const { data: acrData } = await supabase.functions.invoke('check-copyright-acr', {
-            body: { bucket: 'music-files', path: audioData.path },
-          });
-          if (acrData?.copyrighted) {
-            addAlert(acrData.reason || 'Matches a copyrighted recording.', 'error', 'Copyright');
-            setIsUploading(false); clearInterval(tick); return;
-          }
-        } catch { /* allow upload if edge function unavailable */ }
 
         const audioUrl = supabase.storage.from('music-files').getPublicUrl(audioData.path).data.publicUrl;
 
@@ -655,7 +645,10 @@ const OnboardingUpload: React.FC = () => {
                 <p className="text-center text-xs text-white/20 mt-2">
                   <button
                     type="button"
-                    onClick={() => navigate(`/profile/${user.id}`)}
+                    onClick={() =>
+                      navigate(
+                        `/profile/${user.username?.trim() ? encodeURIComponent(user.username.trim()) : user.id}`,
+                      )}
                     className="hover:text-white/45 transition-colors underline underline-offset-2"
                   >
                     Skip for now — go to my profile

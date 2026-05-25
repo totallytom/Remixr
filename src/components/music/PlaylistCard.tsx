@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { 
   Play, 
@@ -51,6 +51,19 @@ const PlaylistCard: React.FC<PlaylistCardProps> = ({
   });
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [isUpdating, setIsUpdating] = useState(false);
+
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!showMenu) return;
+    const handler = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setShowMenu(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [showMenu]);
 
   // Collaboration modal state
   const [showInviteModal, setShowInviteModal] = useState(false);
@@ -229,48 +242,91 @@ const PlaylistCard: React.FC<PlaylistCardProps> = ({
 
         {/* Playlist Info - same as Profile */}
         <div className="flex-1 min-w-0">
-          <div className="text-white font-semibold truncate text-sm lg:text-base font-kotra">{playlist.name}</div>
+          <div className="text-black font-semibold truncate text-sm lg:text-base font-kotra">{playlist.name}</div>
           <p className="text-dark-400 text-xs lg:text-sm truncate">
             {playlist.tracks.length} track{playlist.tracks.length !== 1 ? 's' : ''}
             {playlist.description && ` • ${playlist.description}`}
           </p>
         </div>
 
-        {/* Actions - same as Profile */}
-        <div className="flex items-center gap-1 lg:gap-2 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
+        {/* Actions */}
+        <div className="flex items-center gap-1 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
           <button
             onClick={(e) => { e.stopPropagation(); handlePlay(); }}
-            className="p-2 lg:p-2.5 bg-primary-600 text-white rounded-full hover:bg-primary-700 transition-colors"
+            className="p-2 bg-primary-600 text-white rounded-full hover:bg-primary-700 transition-colors"
             title="Play playlist"
           >
-            <Play size={16} className="lg:w-4 lg:h-4" fill="currentColor" />
+            <Play size={15} fill="currentColor" />
           </button>
+
+          {/* Desktop: individual buttons */}
           {showActions && canEdit && (
-            <>
+            <div className="hidden md:flex items-center gap-1">
               <button
                 onClick={(e) => { e.stopPropagation(); handleEdit(); }}
                 className="p-2 text-dark-400 hover:text-white transition-colors rounded-full"
                 title="Edit playlist"
               >
-                <Edit3 size={16} />
+                <Edit3 size={15} />
               </button>
               <button
                 onClick={(e) => { e.stopPropagation(); handleDelete(); }}
                 className="p-2 text-red-400 hover:text-red-300 transition-colors rounded-full"
                 title="Delete playlist"
               >
-                <Trash2 size={16} />
+                <Trash2 size={15} />
               </button>
-            </>
+            </div>
           )}
           {onAddTrack && showActions && (
             <button
               onClick={(e) => { e.stopPropagation(); onAddTrack(playlist); }}
-              className="p-2 text-dark-400 hover:text-primary-400 transition-colors rounded-full"
+              className="hidden md:flex p-2 text-dark-400 hover:text-primary-400 transition-colors rounded-full"
               title="Add tracks"
             >
-              <Plus size={16} />
+              <Plus size={15} />
             </button>
+          )}
+
+          {/* Mobile: collapsed menu */}
+          {showActions && (canEdit || onAddTrack) && (
+            <div className="relative md:hidden" ref={menuRef}>
+              <button
+                onClick={(e) => { e.stopPropagation(); setShowMenu(v => !v); }}
+                className="p-2 text-dark-400 hover:text-white transition-colors rounded-full"
+                title="More options"
+              >
+                <MoreVertical size={15} />
+              </button>
+              {showMenu && (
+                <div className="absolute right-0 top-9 bg-dark-800 border border-dark-600 rounded-lg shadow-xl z-50 min-w-[140px] overflow-hidden">
+                  {canEdit && (
+                    <button
+                      onClick={(e) => { e.stopPropagation(); handleEdit(); setShowMenu(false); }}
+                      className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-white hover:bg-dark-700 transition-colors"
+                    >
+                      <Edit3 size={14} /> Edit
+                    </button>
+                  )}
+                  {onAddTrack && (
+                    <button
+                      onClick={(e) => { e.stopPropagation(); onAddTrack(playlist); setShowMenu(false); }}
+                      className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-white hover:bg-dark-700 transition-colors"
+                    >
+                      <Plus size={14} /> Add tracks
+                    </button>
+                  )}
+                  {canEdit && (
+                    <button
+                      onClick={(e) => { e.stopPropagation(); handleDelete(); setShowMenu(false); }}
+                      className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-red-400 hover:bg-dark-700 transition-colors"
+                    >
+                      <Trash2 size={14} /> Delete
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
           )}
         </div>
       </motion.div>
@@ -315,9 +371,9 @@ const PlaylistCard: React.FC<PlaylistCardProps> = ({
       {/* Delete Confirmation Modal */}
       {showDeleteConfirm && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 w-full max-w-md shadow-xl">
-            <h2 className="text-xl font-bold text-var(--color-text) mb-4">Delete Playlist</h2>
-            <p className="text-var(--color-text-secondary) mb-6">
+          <div className="bg-dark-800 border border-dark-600 rounded-lg p-6 w-full max-w-md mx-4 shadow-xl">
+            <h2 className="text-xl font-bold text-white mb-4">Delete Playlist</h2>
+            <p className="text-dark-300 mb-6">
               Are you sure you want to delete "{playlist.name}"? This action cannot be undone.
             </p>
             
@@ -329,7 +385,7 @@ const PlaylistCard: React.FC<PlaylistCardProps> = ({
               </button>
               <button
                 onClick={e => { e.stopPropagation(); setShowDeleteConfirm(false); }}
-                className="flex-1 bg-gray-200 text-gray-800 px-4 py-2 rounded-lg hover:bg-gray-300 transition-colors">
+                className="flex-1 bg-dark-700 text-white px-4 py-2 rounded-lg hover:bg-dark-600 transition-colors">
                 Cancel
               </button>
             </div>

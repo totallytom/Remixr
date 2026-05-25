@@ -1,25 +1,27 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { 
-  Calendar, 
-  MapPin, 
-  Users, 
-  Eye, 
-  Play, 
-  Heart, 
-  Share2, 
+import {
+  Calendar,
+  MapPin,
+  Users,
+  Eye,
+  Play,
+  Heart,
+  Share2,
   Music,
   Clock,
   Ticket,
   Image
 } from 'lucide-react';
 import { useStore } from '../store/useStore';
-import { mockUsers, mockTracks, mockPosts } from '../data/mockData';
 import TrackCard from '../components/music/TrackCard';
 import PostCard from '../components/social/PostCard';
 import { Track } from '../store/useStore';
 import { getAvatarUrl } from '../utils/avatar';
+import { ChatService } from '../services/chatService';
+import { MusicService } from '../services/musicService';
+import { PostsService } from '../services/postsService';
 
 interface Concert {
   id: string;
@@ -70,20 +72,44 @@ const Artist: React.FC = () => {
   const { setCurrentTrack, addToQueue } = useStore();
   const [isFollowing, setIsFollowing] = useState(false);
   const [activeTab, setActiveTab] = useState<'music' | 'posts' | 'concerts' | 'about'>('music');
+  const [artist, setArtist] = useState<any>(null);
+  const [artistTracks, setArtistTracks] = useState<Track[]>([]);
+  const [artistPosts, setArtistPosts] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
 
-  // Handle case when no users exist
-  if (mockUsers.length === 0) {
+  useEffect(() => {
+    if (!artistId) return;
+    setIsLoading(true);
+    Promise.all([
+      ChatService.getUserById(artistId),
+      MusicService.getUserTracks(artistId),
+      PostsService.getUserPosts(artistId),
+    ])
+      .then(([user, tracks, posts]) => {
+        setArtist(user);
+        setArtistTracks(tracks);
+        setArtistPosts(posts);
+      })
+      .catch(console.error)
+      .finally(() => setIsLoading(false));
+  }, [artistId]);
+
+  if (isLoading) {
     return (
       <div className="p-6 text-center">
-        <h1 className="text-2xl font-bold text-black mb-4">No Artists Found</h1>
-        <p className="text-gray-500">There are no artists available at the moment.</p>
+        <p className="text-gray-500">Loading artist...</p>
       </div>
     );
   }
 
-  const artist = mockUsers.find(u => u.id === artistId) || mockUsers[0];
-  const artistTracks = mockTracks.filter(track => track.artist === artist.username);
-  const artistPosts = (mockPosts as any[]).filter((post: any) => post.user?.username === artist.username);
+  if (!artist) {
+    return (
+      <div className="p-6 text-center">
+        <h1 className="text-2xl font-bold text-black mb-4">Artist Not Found</h1>
+        <p className="text-gray-500">This artist profile could not be loaded.</p>
+      </div>
+    );
+  }
 
   const handlePlayTrack = (track: Track) => {
     setCurrentTrack(track);

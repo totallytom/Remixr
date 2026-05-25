@@ -1,6 +1,6 @@
-import { createClient } from '@supabase/supabase-js';
+const { createClient } = require('@supabase/supabase-js');
 
-export default async function handler(req, res) {
+module.exports = async (req, res) => {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
@@ -16,26 +16,21 @@ export default async function handler(req, res) {
   );
 
   try {
+    const authHeader = req.headers['authorization'] ?? '';
+    const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
+    if (!token) return res.status(401).json({ error: 'Missing authorization token' });
+
+    const { data: { user: caller }, error: authError } = await supabase.auth.getUser(token);
+    if (authError || !caller) return res.status(401).json({ error: 'Invalid or expired token' });
+
     const { userId } = req.body;
 
     if (!userId) {
       return res.status(400).json({ error: 'Missing userId' });
     }
 
-    // Verify user exists
-    const { data: user, error: userError } = await supabase
-      .from('users')
-      .select('id')
-      .eq('id', userId)
-      .maybeSingle();
-
-    if (userError) {
-      console.error('Error checking user:', userError);
-      return res.status(500).json({ error: 'Failed to verify user' });
-    }
-
-    if (!user) {
-      return res.status(404).json({ error: 'User not found' });
+    if (caller.id !== userId) {
+      return res.status(403).json({ error: 'Forbidden' });
     }
 
     console.log(`Starting account deletion for user: ${userId}`);

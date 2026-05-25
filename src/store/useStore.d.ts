@@ -8,6 +8,8 @@ export interface User {
   followers: number;
   following: number;
   role: 'musician' | 'consumer';
+  subscriptionTier?: 'free' | 'pro';
+  stripeCustomerId?: string;
   isVerified: boolean;
   isPrivate: boolean;
   isAdmin?: boolean;
@@ -16,6 +18,10 @@ export interface User {
   bio?: string;
   genres?: string[];
   externalLinks: string[];
+  // Pro: enhanced artist profile
+  bannerUrl?: string;
+  vanityUrl?: string;
+  emailConfirmed?: boolean;
 }
 
 export const useStore: UseBoundStore<any>;

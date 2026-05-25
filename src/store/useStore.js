@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { AuthService } from '../services/authService';
 import { MusicService } from '../services/musicService';
 import { supabase } from '../services/supabase';
+import { storage, STORAGE_KEYS } from '../platform/storage';
 
 export const useStore = create((set, get) => ({
   // --------------------
@@ -38,6 +39,7 @@ export const useStore = create((set, get) => ({
   sidebarOpen: true,
   currentView: 'home',
   isSettingsOpen: false,
+  settingsInitialTab: 'account',
 
   theme: {
     type: 'light',
@@ -48,25 +50,20 @@ export const useStore = create((set, get) => ({
 
   playEvent: 0,
 
-  // Manual status: 'online' | 'idle' | 'invisible' (persisted in localStorage)
-  userStatus: (() => {
-    try {
-      const s = localStorage.getItem('sypher_user_status');
-      return s === 'idle' || s === 'invisible' ? s : 'online';
-    } catch {
-      return 'online';
-    }
-  })(),
+  // Manual status: 'online' | 'idle' | 'invisible' (persisted via storage)
+  userStatus: 'online',
 
   // --------------------
   // BASIC ACTIONS
   // --------------------
   setUser: (user) => set({ user }),
   setUserStatus: (userStatus) => {
-    try {
-      localStorage.setItem('sypher_user_status', userStatus);
-    } catch (_) {}
+    storage.set(STORAGE_KEYS.USER_STATUS, userStatus);
     set({ userStatus });
+  },
+  initUserStatus: async () => {
+    const s = await storage.get(STORAGE_KEYS.USER_STATUS);
+    if (s === 'idle' || s === 'invisible') set({ userStatus: s });
   },
   setAuthenticated: (isAuthenticated) => set({ isAuthenticated }),
   setChats: (chats) => set({ chats }),
@@ -75,6 +72,7 @@ export const useStore = create((set, get) => ({
     playlists: s.playlists.filter(p => p.id !== playlistId)
   })),
   setSettingsOpen: (isSettingsOpen) => set({ isSettingsOpen }),
+  setSettingsInitialTab: (settingsInitialTab) => set({ settingsInitialTab }),
   toggleSidebar: () => set((s) => ({ sidebarOpen: !s.sidebarOpen })),
   triggerPlayEvent: () => set((s) => ({ playEvent: s.playEvent + 1 })),
   setTheme: (theme) => set({ theme }),
@@ -299,9 +297,19 @@ export const useStore = create((set, get) => ({
     set({ user, isAuthenticated: true });
   },
 
+  /** After AuthService.register — syncs store even if auth listener briefly cleared state. */
+  applySessionUser: (user) =>
+    set({ user, isAuthenticated: !!user, isAuthInitialized: true }),
+
+  register: async (data) => {
+    const user = await AuthService.register(data);
+    set({ user, isAuthenticated: true, isAuthInitialized: true });
+    return user;
+  },
+
   logout: async () => {
     await AuthService.logout();
-    localStorage.removeItem('supabase.auth.session');
+    await storage.remove(STORAGE_KEYS.SUPABASE_SESSION);
     set({ user: null, isAuthenticated: false });
   },
 
@@ -323,14 +331,45 @@ export const useStore = create((set, get) => ({
     }
   },
 
-  initializeAuth: () => {
-    let lastUserId = undefined;
+  refreshUser: async () => {
+    try {
+      const user = await AuthService.getCurrentUser();
+      if (user) {
+        if (user.subscriptionTier !== 'pro') {
+          const { data: sub } = await supabase
+            .from('pro_subscriptions')
+            .select('status')
+            .eq('user_id', user.id)
+            .in('status', ['active', 'past_due'])
+            .maybeSingle();
+          if (sub) {
+            user.subscriptionTier = 'pro';
+            await supabase.from('users').update({ subscription_tier: 'pro' }).eq('id', user.id);
+            await storage.setJSON(STORAGE_KEYS.PROFILE_CACHE, user);
+          }
+        }
+        set({ user, isAuthenticated: true });
+      }
+    } catch (error) {
+      console.error('Error refreshing user:', error);
+    }
+  },
 
-    const { data } = AuthService.onAuthStateChange((user) => {
-      // Skip duplicate events for the same user (Supabase fires SIGNED_IN twice)
-      const incomingId = user?.id ?? null;
-      if (incomingId === lastUserId) return;
-      lastUserId = incomingId;
+  initializeAuth: () => {
+    const { data } = AuthService.onAuthStateChange(async (user) => {
+      if (user && user.subscriptionTier !== 'pro') {
+        const { data: sub } = await supabase
+          .from('pro_subscriptions')
+          .select('status')
+          .eq('user_id', user.id)
+          .in('status', ['active', 'past_due'])
+          .maybeSingle();
+        if (sub) {
+          user.subscriptionTier = 'pro';
+          await supabase.from('users').update({ subscription_tier: 'pro' }).eq('id', user.id);
+          await storage.setJSON(STORAGE_KEYS.PROFILE_CACHE, user);
+        }
+      }
       set({ user, isAuthenticated: !!user, isAuthInitialized: true });
     });
 

@@ -5,6 +5,7 @@ import { useSearchParams, useNavigate, Link } from 'react-router-dom';
 import { Music, Mail, Lock, Eye, EyeOff, User, Mic, Headphones } from 'lucide-react';
 import { useStore } from '../store/useStore';
 import { AuthService } from '../services/authService';
+import { supabase } from '../services/supabase';
 
 interface LoginForm {
   email: string;
@@ -50,8 +51,12 @@ const Login: React.FC = () => {
     if (isAuthenticated) {
       const hintedRole = sessionStorage.getItem('signup_role');
       const role = user?.role ?? hintedRole;
-      if (role === 'musician') navigate('/onboarding', { replace: true });
-      else navigate('/', { replace: true });
+      const pendingOnboarding = sessionStorage.getItem('signup_pending_onboarding') === '1';
+      if (role === 'musician' && pendingOnboarding) {
+        navigate('/onboarding', { replace: true });
+      } else {
+        navigate('/', { replace: true });
+      }
     }
   }, [searchParams, isAuthenticated, user, navigate]);
 
@@ -69,6 +74,8 @@ const Login: React.FC = () => {
 
       await Promise.race([loginPromise, timeoutPromise]);
       console.log('✅ Login completed successfully');
+      sessionStorage.removeItem('signup_role');
+      sessionStorage.removeItem('signup_pending_onboarding');
     } catch (error) {
       console.error('❌ Login failed:', error);
       setError(error instanceof Error ? error.message : 'Login failed');
@@ -84,6 +91,9 @@ const Login: React.FC = () => {
     try {
       // Set role hint BEFORE register() — auth listeners may fire mid-await.
       sessionStorage.setItem('signup_role', data.role);
+      if (data.role === 'musician') {
+        sessionStorage.setItem('signup_pending_onboarding', '1');
+      }
       const user = await register({
         username: data.username,
         email: data.email,
@@ -94,14 +104,21 @@ const Login: React.FC = () => {
       });
       // After successful registration, create Stripe customer
       if (user && user.id && user.email) {
-        await fetch('/api/create-stripe-customer', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ userId: user.id, email: user.email })
-        });
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session?.access_token) {
+          await fetch('/api/create-stripe-customer', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${session.access_token}`,
+            },
+            body: JSON.stringify({ userId: user.id, email: user.email }),
+          });
+        }
       }
     } catch (error) {
       sessionStorage.removeItem('signup_role');
+      sessionStorage.removeItem('signup_pending_onboarding');
       setError(error instanceof Error ? error.message : 'Registration failed');
     } finally {
       setIsLoading(false);
@@ -153,7 +170,7 @@ const Login: React.FC = () => {
             >
               <img src="/logo/logo.png" alt="Remix Logo" className="w-16 h-16 rounded-full object-cover" />
             </motion.div>
-            <h1 className="h2 text-center mb-2 text-gradient-neon">Remix</h1>
+            <h1 className="h2 text-center mb-2 text-gradient-neon">Remixr</h1>
             <p className="body text-center text-black">Connect with musicians and enthusiasts worldwide</p>
           </div>
 

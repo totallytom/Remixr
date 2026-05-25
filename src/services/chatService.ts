@@ -340,7 +340,7 @@ export class ChatService {
     const defaultLimit = limit || (query ? 10 : 20);
     const { data, error } = await supabase
       .from('users')
-      .select('id, username, email, avatar, followers, following, role, is_verified, is_verified_artist, artist_name, bio, genres')
+      .select('id, username, avatar, followers, following, role, is_verified, is_verified_artist, artist_name, bio, genres')
       .neq('id', currentUserId)
       .ilike('username', `%${query}%`)
       .limit(defaultLimit);
@@ -350,7 +350,6 @@ export class ChatService {
     return data.map((u) => ({
       id: u.id,
       username: u.username,
-      email: u.email,
       avatar: u.avatar,
       followers: u.followers,
       following: u.following,
@@ -363,6 +362,48 @@ export class ChatService {
     }));
   }
 
+  private static userFromDbRow(data: Record<string, unknown>): User {
+    return {
+      id: data.id as string,
+      username: data.username as string,
+      email: data.email as string,
+      avatar: data.avatar as string,
+      followers: data.followers as number,
+      following: data.following as number,
+      role: data.role as User['role'],
+      isVerified: data.is_verified as boolean,
+      isPrivate: data.is_private as boolean,
+      isVerifiedArtist: (data.is_verified_artist as boolean) ?? false,
+      artistName: data.artist_name as string | undefined,
+      bio: data.bio as string | undefined,
+      genres: data.genres as string[] | undefined,
+      externalLinks: (data.external_links as string[]) ?? [],
+      subscriptionTier: (data.subscription_tier as 'free' | 'pro') ?? 'free',
+      bannerUrl: data.banner_url as string | undefined,
+      vanityUrl: data.vanity_url as string | undefined,
+    };
+  }
+
+  static async getProfileByVanityUrl(handle: string): Promise<User | null> {
+    const { data, error } = await supabase
+      .from('users')
+      .select('*')
+      .eq('vanity_url', handle.toLowerCase())
+      .maybeSingle();
+    if (error || !data) return null;
+    return this.userFromDbRow(data as Record<string, unknown>);
+  }
+
+  static async isVanityUrlAvailable(handle: string, excludeUserId: string): Promise<boolean> {
+    const { data } = await supabase
+      .from('users')
+      .select('id')
+      .eq('vanity_url', handle.toLowerCase())
+      .neq('id', excludeUserId)
+      .maybeSingle();
+    return !data;
+  }
+
   // Get user by ID
   static async getUserById(userId: string): Promise<User | null> {
     const { data, error } = await supabase
@@ -373,22 +414,30 @@ export class ChatService {
 
     if (error || !data) return null;
 
-    return {
-      id: data.id,
-      username: data.username,
-      email: data.email,
-      avatar: data.avatar,
-      followers: data.followers,
-      following: data.following,
-      role: data.role,
-      isVerified: data.is_verified,
-      isPrivate: data.is_private,
-      isVerifiedArtist: data.is_verified_artist ?? false,
-      artistName: data.artist_name,
-      bio: data.bio,
-      genres: data.genres,
-      externalLinks: data.external_links ?? [],
-    };
+    return this.userFromDbRow(data as Record<string, unknown>);
+  }
+
+  /** Resolve public profile URL segment: UUID → by id, otherwise by username (stored lowercase). */
+  static async getProfileBySlug(slug: string): Promise<User | null> {
+    let s = slug.trim();
+    if (!s) return null;
+    try {
+      s = decodeURIComponent(s);
+    } catch {
+      /* keep s */
+    }
+    if (this.isValidUUID(s)) {
+      return this.getUserById(s);
+    }
+    const key = s.toLowerCase();
+    const { data, error } = await supabase
+      .from('users')
+      .select('*')
+      .eq('username', key)
+      .maybeSingle();
+
+    if (error || !data) return null;
+    return this.userFromDbRow(data as Record<string, unknown>);
   }
 
   // Mark messages as read
@@ -412,9 +461,17 @@ export class ChatService {
       timestamp: new Date(dbMessage.created_at),
       type: dbMessage.type,
     };
-    // Attach joined track data if available (avoids JSON.parse in UI)
+    // Attach joined track data if available, mapping snake_case → camelCase
     if (dbMessage.track) {
-      (msg as any).track = dbMessage.track;
+      (msg as any).track = {
+        id: dbMessage.track.id,
+        title: dbMessage.track.title,
+        artist: dbMessage.track.artist,
+        cover: dbMessage.track.cover,
+        audioUrl: dbMessage.track.audio_url,
+        duration: dbMessage.track.duration,
+        genre: dbMessage.track.genre,
+      };
     }
     return msg;
   }

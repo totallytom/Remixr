@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import {
   Camera, AtSign, ArrowRight, Check, X, Loader2,
   Mic2, Music2, Users,
@@ -8,6 +8,9 @@ import {
 import { useStore } from '../store/useStore';
 import { supabase } from '../services/supabase';
 import { getAvatarUrl } from '../utils/avatar';
+import { isMusicianRole } from '../utils/userRole';
+import { scheduleRecoveryThenSignupRedirect } from '../utils/authRedirect';
+import { setOnboardingPending, clearOnboardingPending } from '../utils/onboardingPending';
 
 const GENRES = [
   'Electronic', 'Pop', 'Rock', 'Hip Hop', 'R&B', 'Jazz', 'Classical',
@@ -15,6 +18,17 @@ const GENRES = [
 ];
 const MAX_GENRES = 3;
 const HANDLE_RE = /^[a-zA-Z0-9_]{3,24}$/;
+
+/** Set while musician is on identity onboarding; cleared on submit/skip. If they log out before that, we keep them on this URL. */
+const SESSION_ONBOARDING_IDENTITY_PENDING = 'onboarding_identity_pending';
+
+function readIdentityPending(): boolean {
+  try {
+    return sessionStorage.getItem(SESSION_ONBOARDING_IDENTITY_PENDING) === '1';
+  } catch {
+    return false;
+  }
+}
 
 type HandleStatus = 'idle' | 'checking' | 'available' | 'taken' | 'invalid';
 
@@ -112,17 +126,35 @@ const Onboarding: React.FC = () => {
   const { user, isAuthenticated, updateProfile, setUserAvatar } = useStore();
   const navigate = useNavigate();
 
+  // Clear one-shot signup flags once musician onboarding is entered.
+  useEffect(() => {
+    sessionStorage.removeItem('signup_pending_onboarding');
+  }, []);
+
+  // Mark identity step as in progress:
+  // - sessionStorage: keeps user on this page if they log out mid-session (same tab)
+  // - localStorage (user-keyed): persists across full logouts so they're redirected back on re-login
+  useEffect(() => {
+    if (user && isMusicianRole(user.role)) {
+      try {
+        sessionStorage.setItem(SESSION_ONBOARDING_IDENTITY_PENDING, '1');
+      } catch { /* ignore */ }
+      setOnboardingPending(user.id);
+    }
+  }, [user?.id, user?.role]);
+
   // Redirect non-auth users; redirect listeners away from the musician flow
   useEffect(() => {
     // If auth is still hydrating, don't redirect yet.
     if (isAuthenticated && !user) return;
 
     if (!isAuthenticated) {
-      const timer = setTimeout(() => navigate('/signup'), 8000);
-      return () => clearTimeout(timer);
+      // Stay on /onboarding after logout until they submit/skip (flag cleared then) or open this URL logged out without the flag.
+      if (readIdentityPending()) return;
+      return scheduleRecoveryThenSignupRedirect(navigate);
     }
 
-    if (user && user.role !== 'musician') {
+    if (user && !isMusicianRole(user.role)) {
       navigate('/', { replace: true });
     }
   }, [isAuthenticated, user, navigate]);
@@ -237,6 +269,8 @@ const Onboarding: React.FC = () => {
       });
 
       sessionStorage.removeItem('signup_role');
+      try { sessionStorage.removeItem(SESSION_ONBOARDING_IDENTITY_PENDING); } catch { /* ignore */ }
+      clearOnboardingPending(user.id);
       navigate('/onboarding/upload');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to save profile. Please try again.');
@@ -252,6 +286,35 @@ const Onboarding: React.FC = () => {
     if (handleStatus === 'taken') return <X size={14} className="text-red-400" />;
     return null;
   };
+
+  // ── Logged out on identity step (e.g. user hit Log out in settings) — stay on route, no redirect to signup
+  if (!user && !isAuthenticated && readIdentityPending()) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-dark-900 via-dark-800 to-primary-900 flex items-center justify-center p-4">
+        <div className="glass-effect rounded-2xl p-8 max-w-md w-full text-center space-y-4">
+          <Music2 size={40} className="mx-auto text-violet-400" />
+          <h1 className="h2 text-gradient-neon">You&apos;re signed out</h1>
+          <p className="text-sm" style={{ color: 'rgba(255,255,255,0.5)' }}>
+            Sign back in to continue setting up your artist profile. Your progress on this step wasn&apos;t saved yet.
+          </p>
+          <div className="flex flex-col sm:flex-row gap-3 justify-center pt-2">
+            <Link
+              to="/login"
+              className="inline-flex items-center justify-center gap-2 bg-gradient-to-r from-primary-600 to-secondary-600 text-white py-3 px-6 rounded-lg font-semibold hover:from-primary-700 hover:to-secondary-700 transition-all"
+            >
+              Sign in
+            </Link>
+            <Link
+              to="/signup"
+              className="inline-flex items-center justify-center py-3 px-6 rounded-lg font-medium border border-dark-500 text-white/80 hover:bg-white/5 transition-all"
+            >
+              Create an account
+            </Link>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   // ── Loading state while auth resolves ────────────────────────────────────
   if (!user) {
@@ -461,7 +524,11 @@ const Onboarding: React.FC = () => {
             <p className="text-center text-xs text-white/25">
               <button
                 type="button"
-                onClick={() => navigate('/onboarding/upload')}
+                onClick={() => {
+                  try { sessionStorage.removeItem(SESSION_ONBOARDING_IDENTITY_PENDING); } catch { /* ignore */ }
+                  if (user) clearOnboardingPending(user.id);
+                  navigate('/onboarding/upload');
+                }}
                 className="hover:text-white/50 transition-colors underline underline-offset-2"
               >
                 Skip for now

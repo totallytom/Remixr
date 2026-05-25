@@ -8,6 +8,8 @@ import {
 import { useStore } from '../store/useStore';
 import { MusicService } from '../services/musicService';
 import { getAvatarUrl } from '../utils/avatar';
+import { isMusicianRole } from '../utils/userRole';
+import { scheduleRecoveryThenSignupRedirect } from '../utils/authRedirect';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface TrackPreview {
@@ -194,11 +196,10 @@ const OnboardingLive: React.FC = () => {
     if (isAuthenticated && !user) return;
 
     if (!isAuthenticated) {
-      const t = setTimeout(() => navigate('/signup'), 8000);
-      return () => clearTimeout(t);
+      return scheduleRecoveryThenSignupRedirect(navigate);
     }
 
-    if (user && user.role !== 'musician') {
+    if (user && !isMusicianRole(user.role)) {
       navigate('/', { replace: true });
     }
   }, [isAuthenticated, user, navigate]);
@@ -225,7 +226,10 @@ const OnboardingLive: React.FC = () => {
     );
   }
 
-  const profileUrl = `${window.location.origin}/profile/${user.id}`;
+  const profileSlug = user.username?.trim()
+    ? encodeURIComponent(user.username.trim())
+    : user.id;
+  const profileUrl = `${window.location.origin}/profile/${profileSlug}`;
   const tweetUrl = `https://twitter.com/intent/tweet?text=${encodeURIComponent(`Just dropped my first track on Remixr 🎵`)}&url=${encodeURIComponent(profileUrl)}`;
 
   const displayName = user.artistName || user.username;
@@ -316,7 +320,10 @@ const OnboardingLive: React.FC = () => {
               {/* Secondary actions */}
               <div className="flex items-center gap-3 pt-1">
                 <button
-                  onClick={() => navigate(`/profile/${user.id}`)}
+                  onClick={() =>
+                  navigate(
+                    `/profile/${user.username?.trim() ? encodeURIComponent(user.username.trim()) : user.id}`,
+                  )}
                   className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl border border-white/10 text-sm text-white/50 hover:text-white hover:border-white/25 transition-all"
                 >
                   <ExternalLink size={14} />

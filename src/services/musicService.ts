@@ -534,10 +534,12 @@ export class MusicService {
     collaborators?: string[];
   }): Promise<void> {
     try {
+      const { isPublic, ...rest } = updates;
       const { error } = await supabase
         .from('playlists')
         .update({
-          ...updates,
+          ...rest,
+          ...(isPublic !== undefined && { is_public: isPublic }),
           updated_at: new Date().toISOString(),
         })
         .eq('id', playlistId)

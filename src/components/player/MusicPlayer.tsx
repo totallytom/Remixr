@@ -50,22 +50,37 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
   visible,
   onToggleVisibility,
 }) => {
-  const { 
-    player, 
-    setVolume, 
+  const {
+    player,
+    setVolume,
     toggleRepeat,
     toggleShuffle,
     playTrack,
+    pauseTrack,
     addToQueue,
     removeFromQueue,
     setUser,
     setUserAvatar
   } = useStore();
-  
+
   const [showQueue, setShowQueue] = useState(false);
   const [isBookmarked, setIsBookmarked] = useState(false);
   const [showVolume, setShowVolume] = useState(false);
   const [showFullScreen, setShowFullScreen] = useState(false);
+  const [showPreviewEnded, setShowPreviewEnded] = useState(false);
+
+  // Clear the preview-ended banner whenever a non-preview track starts.
+  useEffect(() => {
+    if (!currentTrack?.previewOnly) setShowPreviewEnded(false);
+  }, [currentTrack?.id, currentTrack?.previewOnly]);
+
+  // Stop at 30 s for preview-only tracks.
+  useEffect(() => {
+    if (currentTrack?.previewOnly && currentTime >= 30 && isPlaying) {
+      pauseTrack();
+      setShowPreviewEnded(true);
+    }
+  }, [currentTime, currentTrack?.previewOnly, isPlaying, pauseTrack]);
 
   const formatTime = (time: number) => {
     const minutes = Math.floor(time / 60);
@@ -486,7 +501,11 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
         {/* Track info */}
         <div className="flex-1 min-w-0">
           <p className="text-sm font-semibold truncate text-black leading-tight">{currentTrack.title}</p>
-          <p className="text-xs text-gray-500 truncate">{currentTrack.artist}</p>
+          {showPreviewEnded ? (
+            <p className="text-xs font-medium text-amber-500 truncate">Preview ended · buy to unlock</p>
+          ) : (
+            <p className="text-xs text-gray-500 truncate">{currentTrack.artist}</p>
+          )}
         </div>
 
         {/* Previous */}
@@ -583,9 +602,15 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
           <p className="font-kotra text-xs lg:text-sm text-var(--color-text) truncate leading-tight">
             {currentTrack.title}
           </p>
-          <p className="font-kyobo text-xs text-var(--color-text-secondary) truncate">
-            {currentTrack.artist}
-          </p>
+          {showPreviewEnded ? (
+            <p className="font-kyobo text-xs font-semibold text-amber-400 truncate">
+              Preview ended · buy to unlock
+            </p>
+          ) : (
+            <p className="font-kyobo text-xs text-var(--color-text-secondary) truncate">
+              {currentTrack.artist}
+            </p>
+          )}
           <p className="font-kyobo text-xs text-var(--color-text-secondary) opacity-80 truncate hidden lg:block">
             {currentTrack.album}
           </p>

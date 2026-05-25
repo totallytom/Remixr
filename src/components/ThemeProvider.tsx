@@ -1,6 +1,7 @@
 import React, { useEffect } from 'react';
 import { useStore } from '../store/useStore';
 import { applyTheme } from '../data/themeConfig';
+import { storage, STORAGE_KEYS } from '../platform/storage';
 
 interface ThemeProviderProps {
   children: React.ReactNode;
@@ -10,28 +11,28 @@ const ThemeProvider: React.FC<ThemeProviderProps> = ({ children }) => {
   const { theme, setTheme } = useStore();
 
   useEffect(() => {
-    // Load saved theme on mount
-    const savedTheme = localStorage.getItem('remix-theme');
-    if (savedTheme) {
-      try {
-        const parsedTheme = JSON.parse(savedTheme);
-        setTheme(parsedTheme);
-        applyTheme(parsedTheme);
-      } catch (error) {
-        console.error('Failed to parse saved theme:', error);
-        localStorage.removeItem('remix-theme');
+    const load = async () => {
+      const raw = await storage.get(STORAGE_KEYS.THEME);
+      if (raw) {
+        try {
+          const parsedTheme = JSON.parse(raw);
+          setTheme(parsedTheme);
+          applyTheme(parsedTheme);
+        } catch (error) {
+          console.error('Failed to parse saved theme:', error);
+          await storage.remove(STORAGE_KEYS.THEME);
+          applyTheme(theme);
+        }
+      } else {
         applyTheme(theme);
       }
-    } else {
-      // Apply default theme
-      applyTheme(theme);
-    }
+    };
+    load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
-    // Save theme changes
-    localStorage.setItem('remix-theme', JSON.stringify(theme));
+    storage.setJSON(STORAGE_KEYS.THEME, theme);
     applyTheme(theme);
   }, [theme]);
 
