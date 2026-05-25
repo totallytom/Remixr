@@ -1,6 +1,16 @@
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 const { createClient } = require('@supabase/supabase-js');
 
+function resolveAppUrl(req) {
+  const host = req.headers['x-forwarded-host'] || req.headers.host;
+  const proto = (req.headers['x-forwarded-proto'] || 'https').split(',')[0].trim();
+  if (host) return `${proto}://${host}`;
+  const raw = process.env.APP_URL
+    || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null)
+    || 'https://re-mixed.net';
+  return /^https?:\/\//.test(raw) ? raw : `https://${raw}`;
+}
+
 const supabase = createClient(
   process.env.SUPABASE_URL,
   process.env.SUPABASE_SERVICE_ROLE_KEY
@@ -8,8 +18,17 @@ const supabase = createClient(
 
 module.exports = async (req, res) => {
   try {
+    const authHeader = req.headers['authorization'] ?? '';
+    const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
+    if (!token) return res.status(401).json({ error: 'Missing authorization token' });
+
+    const { data: { user: caller }, error: authError } = await supabase.auth.getUser(token);
+    if (authError || !caller) return res.status(401).json({ error: 'Invalid or expired token' });
+
     const { userId } = req.body;
     if (!userId) return res.status(400).json({ error: 'Missing userId' });
+
+    if (caller.id !== userId) return res.status(403).json({ error: 'Forbidden' });
 
     // 1. Create Stripe Express account
     const account = await stripe.accounts.create({ type: 'express' });
@@ -27,8 +46,8 @@ module.exports = async (req, res) => {
     // 3. Create account onboarding link
     const accountLink = await stripe.accountLinks.create({
       account: account.id,
-      refresh_url: 'https://yourdomain.com/reauth',
-      return_url: 'https://yourdomain.com/dashboard',
+      refresh_url: `${resolveAppUrl(req)}/profile`,
+      return_url: `${resolveAppUrl(req)}/profile`,
       type: 'account_onboarding',
     });
 
