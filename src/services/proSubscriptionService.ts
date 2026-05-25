@@ -48,9 +48,15 @@ export const proSubscriptionService = {
   },
 
   async startProCheckout(stripeCustomerId: string, plan: 'monthly' | 'yearly', userId?: string, email?: string): Promise<void> {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.access_token) throw new Error('Not authenticated');
+
     const response = await fetch('/api/create-subscription-session', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${session.access_token}`,
+      },
       body: JSON.stringify({
         customerId: stripeCustomerId,
         plan,
