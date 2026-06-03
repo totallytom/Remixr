@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { isSafeUrl } from '../utils/sanitize';
 
 export interface Concert {
   id: string;
@@ -111,7 +112,10 @@ export class ConcertService {
       // Only include optional fields if they have values
       if (data.description) insertData.description = data.description;
       if (data.ticketPrice !== undefined) insertData.ticket_price = data.ticketPrice;
-      if (data.ticketUrl) insertData.ticket_url = data.ticketUrl;
+      if (data.ticketUrl) {
+        if (!isSafeUrl(data.ticketUrl)) throw new Error('Invalid ticket URL');
+        insertData.ticket_url = data.ticketUrl;
+      }
 
       const { data: concertData, error } = await supabase
         .from('concerts')
@@ -155,6 +159,7 @@ export class ConcertService {
         updateData.ticket_price = updates.ticketPrice || undefined;
       }
       if (updates.ticketUrl !== undefined) {
+        if (updates.ticketUrl && !isSafeUrl(updates.ticketUrl)) throw new Error('Invalid ticket URL');
         updateData.ticket_url = updates.ticketUrl || undefined;
       }
 

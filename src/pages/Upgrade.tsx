@@ -20,7 +20,7 @@ const PRO_FEATURES: { label: string; detail: string }[] = [
   },
   {
     label: 'Priority placement in Discover',
-    detail: 'Your tracks are auto-boosted to the front of the swipe stack',
+    detail: 'Your tracks appear first in the Discover swipe stack',
   },
   {
     label: 'Full album management',
@@ -242,7 +242,7 @@ export default function Upgrade() {
               <button
                 onClick={() => setPlan('monthly')}
                 className={`px-5 py-2 rounded-lg text-sm font-medium transition-colors ${
-                  plan === 'monthly' ? 'bg-white/10 text-white' : 'text-white/50 hover:text-white/80'
+                  plan === 'monthly' ? 'bg-white/10 text-white' : 'text-black hover:text-red-600'
                 }`}
               >
                 Monthly
@@ -250,7 +250,7 @@ export default function Upgrade() {
               <button
                 onClick={() => setPlan('yearly')}
                 className={`px-5 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 ${
-                  plan === 'yearly' ? 'bg-white/10 text-white' : 'text-white/50 hover:text-white/80'
+                  plan === 'yearly' ? 'bg-white/10 text-white' : 'text-black hover:text-red-600'
                 }`}
               >
                 Yearly
@@ -329,7 +329,7 @@ export default function Upgrade() {
               <button
                 onClick={handleUpgrade}
                 disabled={loading}
-                className="relative w-full py-3 rounded-xl font-semibold text-sm bg-yellow-500 hover:bg-yellow-400 text-dark-900 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+                className="relative w-full py-3 rounded-xl font-semibold text-sm bg-yellow-500 hover:bg-yellow-400 text-black transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
               >
                 {loading ? 'Redirecting to checkout…' : `Get Pro — ${plan === 'yearly' ? PRICING.yearly.checkoutLabel : PRICING.monthly.checkoutLabel}`}
               </button>

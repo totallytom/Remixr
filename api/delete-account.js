@@ -10,6 +10,7 @@ module.exports = async (req, res) => {
     return res.status(500).json({ error: 'Server misconfiguration: missing Supabase credentials' });
   }
 
+  const { isUUID } = require('./_validate');
   const supabase = createClient(
     process.env.SUPABASE_URL,
     process.env.SUPABASE_SERVICE_ROLE_KEY
@@ -28,12 +29,15 @@ module.exports = async (req, res) => {
     if (!userId) {
       return res.status(400).json({ error: 'Missing userId' });
     }
+    if (!isUUID(userId)) {
+      return res.status(400).json({ error: 'Invalid userId' });
+    }
 
     if (caller.id !== userId) {
       return res.status(403).json({ error: 'Forbidden' });
     }
 
-    console.log(`Starting account deletion for user: ${userId}`);
+    console.log('Account deletion started');
 
     // 1. Delete comments first (they reference posts and tracks)
     const { error: commentsError } = await supabase
@@ -42,21 +46,7 @@ module.exports = async (req, res) => {
       .eq('user_id', userId);
     if (commentsError) console.warn('Error deleting comments:', commentsError);
 
-    // 2. Delete boosted tracks
-    const { error: boostedTracksError } = await supabase
-      .from('boosted_tracks')
-      .delete()
-      .eq('user_id', userId);
-    if (boostedTracksError) console.warn('Error deleting boosted tracks:', boostedTracksError);
-
-    // 3. Delete boost subscriptions
-    const { error: boostSubError } = await supabase
-      .from('boost_subscriptions')
-      .delete()
-      .eq('user_id', userId);
-    if (boostSubError) console.warn('Error deleting boost subscriptions:', boostSubError);
-
-    // 4. Delete store items
+    // 2. Delete store items
     const { error: storeItemsError } = await supabase
       .from('store_items')
       .delete()
@@ -122,7 +112,7 @@ module.exports = async (req, res) => {
       return res.status(500).json({ error: 'Failed to delete authentication record' });
     }
 
-    console.log(`Account deletion completed for user: ${userId}`);
+    console.log('Account deletion completed');
     res.json({ success: true, message: 'Account deleted successfully' });
 
   } catch (error) {

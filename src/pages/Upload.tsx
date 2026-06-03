@@ -17,14 +17,11 @@ import {
 import { useStore } from '../store/useStore';
 import { useAlerts } from '../contexts/AlertContext';
 import { supabase } from '../services/supabase';
-import { checkCopyright } from '../services/copyrightService';
-import { removeUploadedFilesFromStorage } from '../services/copyrightCleanup';
 import dinoImg from '../../public/logo/DINO.png';
 import littlePrinceImg from '../../public/logo/LITTLE PRINCE.png';
 import { SnippetEditor } from '../components/music/SnippetEditor';
 import { transcodeWavOrAiffToM4a, shouldTranscodeToM4a } from '../utils/transcodeAudio';
 import { analyticsService } from '../services/analyticsService';
-import { BoostService } from '../services/boostService';
 
 const GENRES = [
   'Electronic', 'Pop', 'Rock', 'Hip Hop', 'R&B', 'Jazz', 'Classical',
@@ -78,6 +75,87 @@ function formatDuration(seconds: number): string {
   const m = Math.floor(seconds / 60);
   const s = seconds % 60;
   return `${m}:${s.toString().padStart(2, '0')}`;
+}
+
+// Extract first ~400 KB of audio as base64 for Audd.io fingerprinting
+async function extractSample(file: File): Promise<string> {
+  return new Promise((resolve) => {
+    const slice = file.slice(0, 400 * 1024);
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result as string;
+      resolve(result.split(',')[1] ?? '');
+    };
+    reader.onerror = () => resolve('');
+    reader.readAsDataURL(slice);
+  });
+}
+
+// Map server error codes to safe user-facing messages (A09 — no internal details leaked)
+const UPLOAD_ERROR_MESSAGES: Record<string, string> = {
+  copyright_blocked: '', // use server reason directly — it names the matched track, not internals
+  token_invalid:     'Upload session expired. Please try again.',
+  token_expired:     'Upload session expired. Please try again.',
+  file_not_found:    'Upload did not complete. Please try again.',
+  file_invalid:      'The uploaded file appears to be invalid. Please try a different file.',
+  forbidden:         'Access denied.',
+};
+
+function resolveUploadError(data: any): string {
+  const code = data?.code as string | undefined;
+  if (code === 'copyright_blocked') return data?.error || 'This track cannot be uploaded due to copyright restrictions.';
+  if (code && UPLOAD_ERROR_MESSAGES[code]) return UPLOAD_ERROR_MESSAGES[code];
+  return 'Upload failed. Please try again.';
+}
+
+// Request a signed upload URL from the server (runs 3-layer copyright check)
+async function requestUploadToken(
+  file: File,
+  metadata: { title: string; artist: string },
+  sessionToken: string
+): Promise<{ signedUrl: string; token: string; path: string; uploadToken: string }> {
+  const sampleBase64 = await extractSample(file);
+  const res = await fetch('/api/request-upload-token', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${sessionToken}`,
+    },
+    body: JSON.stringify({
+      title:    metadata.title,
+      artist:   metadata.artist,
+      filename: file.name,
+      fileSize: file.size,
+      fileType: file.type || 'audio/mpeg',
+      sampleBase64,
+    }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(resolveUploadError(data));
+  return data;
+}
+
+// Confirm upload — server verifies HMAC token and inserts track row
+async function confirmUpload(
+  payload: {
+    uploadToken: string;
+    album?: string;
+    genre: string; duration: number; coverUrl: string;
+    albumId?: string; previewStartSec?: number; previewDurationSec?: number;
+  },
+  sessionToken: string
+): Promise<{ id: string }> {
+  const res = await fetch('/api/confirm-upload', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${sessionToken}`,
+    },
+    body: JSON.stringify(payload),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(resolveUploadError(data));
+  return data;
 }
 
 export interface TrackEntry {
@@ -327,100 +405,69 @@ const UnifiedUploadContent: React.FC = () => {
       addAlert('Please fill in Title, Artist, and Genre.', 'warning');
       return;
     }
-    const selectedFile = tracks[0].file;
-    try {
-      const result = await checkCopyright(selectedFile, { title: singleTitle, artist });
-      if (result.blocked) {
-        addAlert(result.reason || 'This upload was blocked by our copyright policy.', 'error', 'Copyright');
-        return;
-      }
-    } catch {
-      addAlert('Copyright check failed. Please try again.', 'error');
-      return;
-    }
+
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.access_token) { addAlert('Session expired. Please log in again.', 'error'); return; }
+
     setIsUploading(true);
     setUploadProgress(0);
-    const uploadInterval = setInterval(() => {
-      setUploadProgress(prev => (prev >= 90 ? 90 : prev + 10));
-    }, 200);
+    const uploadInterval = setInterval(() => setUploadProgress(p => p >= 85 ? 85 : p + 8), 250);
+
     try {
-  // Upload audio file to Supabase Storage
-  let audioUrl = '';
-  const sanitizedName = selectedFile.name.replace(/[^a-zA-Z0-9.-]/g, '_');
-  const fileName = `audio-files/${user.id}/${Date.now()}-${sanitizedName}`;
-  let audioData: { path?: string } | null = null;
-  let audioError: { message: string } | null = null;
-  try {
-    const result = await supabase.storage
-      .from('music-files')
-      .upload(fileName, selectedFile, {
-        contentType: getAudioContentType(selectedFile),
-        upsert: false
-      });
-    audioData = result.data;
-    audioError = result.error;
-  } catch (uploadError) {
-    const fallbackFileName = `audio-files/${Date.now()}-${sanitizedName}`;
-    const result = await supabase.storage
-      .from('music-files')
-      .upload(fallbackFileName, selectedFile, {
-        contentType: getAudioContentType(selectedFile),
-        upsert: false
-      });
-    audioData = result.data;
-    audioError = result.error;
-  }
-  if (audioError || !audioData?.path) {
-    throw new Error(audioError ? `Failed to upload audio: ${audioError.message}` : 'Upload succeeded but no path returned');
-  }
-  const { data: audioUrlData } = supabase.storage.from('music-files').getPublicUrl(audioData.path);
-  audioUrl = audioUrlData.publicUrl;
+      const selectedFile = tracks[0].file;
 
-  let imageUrl = '';
-  if (coverImage) {
-    const sanitizedImageName = coverImage.name.replace(/[^a-zA-Z0-9.-]/g, '_');
-    const coverPath = `playlist-covers/${user.id}/${Date.now()}-${sanitizedImageName}`;
-    const { data: imageData, error: imageError } = await supabase.storage
-      .from('music-files')
-      .upload(coverPath, coverImage, { contentType: getImageContentType(coverImage), upsert: false });
-    if (imageError || !imageData?.path) throw new Error(imageError?.message || 'Cover upload failed');
-    imageUrl = supabase.storage.from('music-files').getPublicUrl(imageData.path).data.publicUrl;
-  }
-  const duration = tracks[0]?.duration ?? 0;
-  const { data: trackData, error: trackError } = await supabase
-    .from('tracks')
-    .insert({
-      title: singleTitle,
-      artist,
-      album: singleAlbumName,
-      duration,
-      cover: imageUrl || 'https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?w=400&h=400&fit=crop',
-      audio_url: audioUrl,
-      genre,
-      user_id: user.id,
-      preview_start_sec: previewStartSec,
-      preview_duration_sec: previewDurationSec,
-    })
-    .select('id')
-    .single();
-  if (trackError) throw new Error(`Failed to save track: ${trackError.message}`);
+      // Step 1 — server copyright check + signed URL (blocks if copyrighted)
+      const { signedUrl, token: supabaseToken, path, uploadToken } = await requestUploadToken(
+        selectedFile,
+        { title: singleTitle, artist },
+        session.access_token
+      );
+      setUploadProgress(20);
 
-  // Pro users get their track boosted automatically for priority placement in Discover
-  if (isPro && trackData?.id) {
-    BoostService.boostTrack(trackData.id, user.id).catch(() => {});
-  }
+      // Step 2 — upload audio via signed URL
+      const { error: audioError } = await supabase.storage
+        .from('music-files')
+        .uploadToSignedUrl(path, supabaseToken, selectedFile, {
+          contentType: getAudioContentType(selectedFile),
+        });
+      if (audioError) throw new Error(`Audio upload failed: ${audioError.message}`);
+      setUploadProgress(60);
 
-  clearInterval(uploadInterval);
-  setUploadProgress(100);
-  setIsUploading(false);
-  addAlert('Your track is now live.', 'success', 'Track uploaded');
-  clearAll();
-  if (user?.id) analyticsService.getUploadCounts(user.id).then(setUploadCounts).catch(() => {});
-  } catch (error) {
-    clearInterval(uploadInterval);
-    setIsUploading(false);
-    addAlert(error instanceof Error ? error.message : 'Unknown error', 'error', 'Upload failed');
-  }
+      // Step 3 — upload cover image directly (no copyright concern)
+      let coverUrl = '';
+      if (coverImage) {
+        const sanitizedImageName = coverImage.name.replace(/[^a-zA-Z0-9.-]/g, '_');
+        const coverPath = `playlist-covers/${user.id}/${Date.now()}-${sanitizedImageName}`;
+        const { data: imgData, error: imgError } = await supabase.storage
+          .from('music-files')
+          .upload(coverPath, coverImage, { contentType: getImageContentType(coverImage), upsert: false });
+        if (imgError || !imgData?.path) throw new Error(imgError?.message || 'Cover upload failed');
+        coverUrl = supabase.storage.from('music-files').getPublicUrl(imgData.path).data.publicUrl;
+      }
+      setUploadProgress(75);
+
+      // Step 4 — confirm upload: server inserts track row
+      await confirmUpload({
+        uploadToken,
+        album: singleAlbumName,
+        genre,
+        duration: tracks[0]?.duration ?? 0,
+        coverUrl,
+        previewStartSec,
+        previewDurationSec,
+      }, session.access_token);
+
+      clearInterval(uploadInterval);
+      setUploadProgress(100);
+      setIsUploading(false);
+      addAlert('Your track is now live.', 'success', 'Track uploaded');
+      clearAll();
+      if (user?.id) analyticsService.getUploadCounts(user.id).then(setUploadCounts).catch(() => {});
+    } catch (error) {
+      clearInterval(uploadInterval);
+      setIsUploading(false);
+      addAlert(error instanceof Error ? error.message : 'Unknown error', 'error', 'Upload failed');
+    }
   };
 
   const submitAlbum = async () => {
@@ -444,41 +491,49 @@ const UnifiedUploadContent: React.FC = () => {
       addAlert('Please upload an album cover.', 'warning');
       return;
     }
+
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.access_token) { addAlert('Session expired. Please log in again.', 'error'); return; }
+
     setIsUploading(true);
     setUploadProgress(0);
-    const uploadInterval = setInterval(() => setUploadProgress(prev => (prev >= 90 ? 90 : prev + 10)), 200);
+    const uploadInterval = setInterval(() => setUploadProgress(p => p >= 85 ? 85 : p + 5), 300);
+
     try {
+      // Step 1 — upload cover directly (not copyrightable)
       const sanitizedCoverName = coverImage.name.replace(/[^a-zA-Z0-9.-]/g, '_');
       const coverPath = `playlist-covers/${user.id}/${Date.now()}-${sanitizedCoverName}`;
       const { error: coverError } = await supabase.storage
         .from('music-files')
         .upload(coverPath, coverImage, { contentType: getImageContentType(coverImage), upsert: false });
       if (coverError) throw new Error(`Failed to upload cover: ${coverError.message}`);
-      const { data: coverUrlData } = supabase.storage.from('music-files').getPublicUrl(coverPath);
-      const coverUrl = coverUrlData.publicUrl;
-      setUploadProgress(20);
+      const coverUrl = supabase.storage.from('music-files').getPublicUrl(coverPath).data.publicUrl;
+      setUploadProgress(10);
+
+      // Step 2 — request signed URLs for each track (copyright checked per track)
       const sortedTracks = [...tracks].sort((a, b) => a.order - b.order);
-      const uploadedTracks: { title: string; duration: number; audio_url: string; order: number; preview_start_sec: number; preview_duration_sec: number; storage_path: string }[] = [];
+      const signedTokens: { signedUrl: string; token: string; path: string; uploadToken: string }[] = [];
       for (let i = 0; i < sortedTracks.length; i++) {
-        const track = sortedTracks[i];
-        const sanitizedName = track.file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
-        const fileName = `audio-files/${user.id}/${Date.now()}-${i}-${sanitizedName}`;
-        const { error: trackErr } = await supabase.storage
-          .from('music-files')
-          .upload(fileName, track.file, { contentType: getAudioContentType(track.file), upsert: false });
-        if (trackErr) throw new Error(`Failed to upload track ${i + 1}: ${trackErr.message}`);
-        const { data: urlData } = supabase.storage.from('music-files').getPublicUrl(fileName);
-        uploadedTracks.push({
-          title: track.title,
-          duration: track.duration,
-          audio_url: urlData.publicUrl,
-          order: track.order,
-          preview_start_sec: track.previewStartSec ?? 0,
-          preview_duration_sec: track.previewDurationSec ?? 20,
-          storage_path: fileName,
-        });
-        setUploadProgress(20 + ((i + 1) / sortedTracks.length) * 50);
+        const t = signedTokens[i] = await requestUploadToken(
+          sortedTracks[i].file,
+          { title: sortedTracks[i].title || albumTitle, artist },
+          session.access_token
+        );
+        setUploadProgress(10 + ((i + 1) / sortedTracks.length) * 20);
       }
+
+      // Step 3 — upload each audio file via signed URL
+      for (let i = 0; i < sortedTracks.length; i++) {
+        const { error: uploadErr } = await supabase.storage
+          .from('music-files')
+          .uploadToSignedUrl(signedTokens[i].path, signedTokens[i].token, sortedTracks[i].file, { // token = Supabase signed token
+            contentType: getAudioContentType(sortedTracks[i].file),
+          });
+        if (uploadErr) throw new Error(`Failed to upload track ${i + 1}: ${uploadErr.message}`);
+        setUploadProgress(30 + ((i + 1) / sortedTracks.length) * 35);
+      }
+
+      // Step 4 — create album record (metadata only, no copyright concern)
       const { data: albumData, error: albumError } = await supabase
         .from('albums')
         .insert({
@@ -494,30 +549,20 @@ const UnifiedUploadContent: React.FC = () => {
         .single();
       if (albumError) throw new Error(`Failed to create album: ${albumError.message}`);
       setUploadProgress(70);
-      const { data: insertedTracks, error: tracksError } = await supabase.from('tracks').insert(
-        uploadedTracks.map(t => ({
-          title: t.title,
-          artist,
-          album: albumTitle,
-          duration: t.duration,
-          cover: coverUrl,
-          audio_url: t.audio_url,
-          genre,
-          user_id: user.id,
-          album_id: albumData.id,
-          preview_start_sec: t.preview_start_sec,
-          preview_duration_sec: t.preview_duration_sec,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        }))
-      ).select('id');
-      if (tracksError) throw new Error(`Failed to create tracks: ${tracksError.message}`);
 
-      // Pro users get every album track boosted automatically for priority placement in Discover
-      if (isPro && insertedTracks?.length) {
-        insertedTracks.forEach(t => {
-          BoostService.boostTrack(t.id, user.id).catch(() => {});
-        });
+      // Step 5 — confirm each track (server inserts track rows)
+      for (let i = 0; i < sortedTracks.length; i++) {
+        await confirmUpload({
+          uploadToken: signedTokens[i].uploadToken,
+          album: albumTitle,
+          genre,
+          duration: sortedTracks[i].duration,
+          coverUrl,
+          albumId: albumData.id,
+          previewStartSec: sortedTracks[i].previewStartSec ?? 0,
+          previewDurationSec: sortedTracks[i].previewDurationSec ?? 20,
+        }, session.access_token);
+        setUploadProgress(70 + ((i + 1) / sortedTracks.length) * 28);
       }
 
       clearInterval(uploadInterval);

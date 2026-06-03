@@ -173,7 +173,7 @@ const handler = async (req, res) => {
           const expectedCents = Math.round(listingCheck.price * 100);
           if (pi.amount !== expectedCents) {
             console.error(
-              `PRICE MISMATCH — listing=${listing_id} expected=${expectedCents} got=${pi.amount} pi=${pi.id}. Purchase not completed; requires manual review.`
+              `PRICE MISMATCH on payment_intent ${pi.id} — expected=${expectedCents} got=${pi.amount}. Purchase not completed; requires manual review.`
             );
             break;
           }

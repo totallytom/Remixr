@@ -332,10 +332,13 @@ export class AuthService {
     }
   }
 
-  static async updateProfile(userId: string, updates: Partial<User>): Promise<User> {
+  static async updateProfile(updates: Partial<User>): Promise<User> {
     try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.user?.id) throw new Error('Not authenticated');
+
       const updateData: any = {};
-      
+
       if (updates.username) updateData.username = updates.username;
       if (updates.avatar) updateData.avatar = updates.avatar;
       if (updates.bio) updateData.bio = updates.bio;
@@ -351,7 +354,7 @@ export class AuthService {
       const { data, error } = await supabase
         .from('users')
         .update(updateData)
-        .eq('id', userId)
+        .eq('id', session.user.id)
         .select()
         .single();
 
@@ -397,35 +400,29 @@ export class AuthService {
     }
   }
 
-  static async changeUsername(userId: string, newUsername: string): Promise<User> {
+  static async changeUsername(newUsername: string): Promise<User> {
     try {
-      // Check if username is already taken
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.user?.id) throw new Error('Not authenticated');
+
       const { data: existingUser, error: checkError } = await supabase
         .from('users')
         .select('id')
         .eq('username', newUsername)
-        .neq('id', userId)
+        .neq('id', session.user.id)
         .maybeSingle();
 
-      if (checkError) {
-        throw new Error(checkError.message);
-      }
+      if (checkError) throw new Error(checkError.message);
+      if (existingUser) throw new Error('Username is already taken');
 
-      if (existingUser) {
-        throw new Error('Username is already taken');
-      }
-
-      // Update username
       const { data, error } = await supabase
         .from('users')
         .update({ username: newUsername })
-        .eq('id', userId)
+        .eq('id', session.user.id)
         .select()
         .single();
 
-      if (error) {
-        throw new Error(error.message);
-      }
+      if (error) throw new Error(error.message);
 
       return this.transformUser(data);
     } catch (error) {
@@ -433,18 +430,19 @@ export class AuthService {
     }
   }
 
-  static async togglePrivateAccount(userId: string, isPrivate: boolean): Promise<User> {
+  static async togglePrivateAccount(isPrivate: boolean): Promise<User> {
     try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.user?.id) throw new Error('Not authenticated');
+
       const { data, error } = await supabase
         .from('users')
         .update({ is_private: isPrivate })
-        .eq('id', userId)
+        .eq('id', session.user.id)
         .select()
         .single();
 
-      if (error) {
-        throw new Error(error.message);
-      }
+      if (error) throw new Error(error.message);
 
       return this.transformUser(data);
     } catch (error) {
@@ -498,11 +496,14 @@ export class AuthService {
 
   static async deleteAccount(userId: string): Promise<void> {
     try {
-      // Call the backend API endpoint for secure account deletion
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) throw new Error('Not authenticated');
+
       const response = await fetch('/api/delete-account', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`,
         },
         body: JSON.stringify({ userId }),
       });

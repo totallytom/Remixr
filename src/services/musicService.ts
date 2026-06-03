@@ -1,7 +1,7 @@
 import { supabase } from './supabase';
 import { Track, Playlist, Comment } from '../store/useStore';
-import { BoostService } from './boostService';
 import { safeLog } from '../utils/debugUtils';
+import { sanitizeText } from '../utils/sanitize';
 
 export interface CreateTrackData {
   title: string;
@@ -85,14 +85,14 @@ export class MusicService {
       const { data: trackData, error } = await supabase
         .from('tracks')
         .insert({
-          title: data.title,
-          artist: data.artist,
-          album: data.album,
+          title: sanitizeText(data.title, 200),
+          artist: sanitizeText(data.artist, 200),
+          album: sanitizeText(data.album, 200),
           duration: data.duration,
           cover: coverUrl,
           audio_url: audioUrl,
           price: data.price,
-          genre: data.genre,
+          genre: sanitizeText(data.genre, 100),
           user_id: data.userId,
         })
         .select()
@@ -270,22 +270,6 @@ export class MusicService {
     }
   }
 
-  // Boost methods
-  static async boostTrack(trackId: string, userId: string): Promise<boolean> {
-    return await BoostService.boostTrack(trackId, userId);
-  }
-
-  static async unboostTrack(trackId: string, userId: string): Promise<boolean> {
-    return await BoostService.unboostTrack(trackId, userId);
-  }
-
-  static async getBoostedTracks(limit: number = 10): Promise<Track[]> {
-    return await BoostService.getBoostedTracks(limit);
-  }
-
-  static async getUserBoostedTracks(userId: string): Promise<Track[]> {
-    return await BoostService.getUserBoostedTracks(userId);
-  }
 
   // Playlist methods
   static async createPlaylist(data: CreatePlaylistData): Promise<Playlist> {
@@ -444,8 +428,18 @@ export class MusicService {
 
   static async addTrackToPlaylist(playlistId: string, trackId: string): Promise<void> {
     try {
-      // Get current position
-      const { data: maxPosition, error: positionError } = await supabase
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.user?.id) throw new Error('Not authenticated');
+
+      const { data: playlist, error: ownerError } = await supabase
+        .from('playlists')
+        .select('created_by')
+        .eq('id', playlistId)
+        .maybeSingle();
+      if (ownerError || !playlist) throw new Error('Playlist not found');
+      if (playlist.created_by !== session.user.id) throw new Error('You do not own this playlist');
+
+      const { data: maxPosition } = await supabase
         .from('playlist_tracks')
         .select('position')
         .eq('playlist_id', playlistId)
@@ -457,11 +451,7 @@ export class MusicService {
 
       const { error } = await supabase
         .from('playlist_tracks')
-        .insert({
-          playlist_id: playlistId,
-          track_id: trackId,
-          position,
-        });
+        .insert({ playlist_id: playlistId, track_id: trackId, position });
 
       if (error) throw new Error(error.message);
     } catch (error) {
@@ -471,6 +461,17 @@ export class MusicService {
 
   static async removeTrackFromPlaylist(playlistId: string, trackId: string): Promise<void> {
     try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.user?.id) throw new Error('Not authenticated');
+
+      const { data: playlist, error: ownerError } = await supabase
+        .from('playlists')
+        .select('created_by')
+        .eq('id', playlistId)
+        .maybeSingle();
+      if (ownerError || !playlist) throw new Error('Playlist not found');
+      if (playlist.created_by !== session.user.id) throw new Error('You do not own this playlist');
+
       const { error } = await supabase
         .from('playlist_tracks')
         .delete()
@@ -553,7 +554,17 @@ export class MusicService {
 
   static async reorderPlaylistTracks(playlistId: string, trackIds: string[]): Promise<void> {
     try {
-      // Delete existing positions
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.user?.id) throw new Error('Not authenticated');
+
+      const { data: playlist, error: ownerError } = await supabase
+        .from('playlists')
+        .select('created_by')
+        .eq('id', playlistId)
+        .maybeSingle();
+      if (ownerError || !playlist) throw new Error('Playlist not found');
+      if (playlist.created_by !== session.user.id) throw new Error('You do not own this playlist');
+
       const { error: deleteError } = await supabase
         .from('playlist_tracks')
         .delete()
@@ -561,7 +572,6 @@ export class MusicService {
 
       if (deleteError) throw new Error(deleteError.message);
 
-      // Insert new positions
       const trackPositions = trackIds.map((trackId, index) => ({
         playlist_id: playlistId,
         track_id: trackId,
@@ -586,10 +596,12 @@ export class MusicService {
     timestampSeconds?: number
   ): Promise<Comment> {
     try {
+      const clean = sanitizeText(content, 500);
+      if (!clean) throw new Error('Comment cannot be empty');
       const insertPayload: Record<string, unknown> = {
         track_id: trackId,
         user_id: userId,
-        content,
+        content: clean,
         likes: 0,
         liked_by: [],
       };
@@ -644,33 +656,11 @@ export class MusicService {
 
   static async likeComment(commentId: string, userId: string): Promise<void> {
     try {
-      const { data: comment, error: fetchError } = await supabase
-        .from('comments')
-        .select('liked_by')
-        .eq('id', commentId)
-        .maybeSingle();
-
-      if (fetchError) throw new Error(fetchError.message);
-
-      if (!comment) {
-        throw new Error('Comment not found');
-      }
-
-      const likedBy = comment.liked_by || [];
-      const isLiked = likedBy.includes(userId);
-
-      if (!isLiked) {
-        likedBy.push(userId);
-      }
-
-      const { error } = await supabase
-        .from('comments')
-        .update({
-          likes: likedBy.length,
-          liked_by: likedBy,
-        })
-        .eq('id', commentId);
-
+      // Atomic append via RPC — avoids TOCTOU race on concurrent likes
+      const { error } = await supabase.rpc('append_comment_like', {
+        p_comment_id: commentId,
+        p_user_id: userId,
+      });
       if (error) throw new Error(error.message);
     } catch (error) {
       throw new Error(error instanceof Error ? error.message : 'Failed to like comment');
@@ -679,29 +669,11 @@ export class MusicService {
 
   static async unlikeComment(commentId: string, userId: string): Promise<void> {
     try {
-      const { data: comment, error: fetchError } = await supabase
-        .from('comments')
-        .select('liked_by')
-        .eq('id', commentId)
-        .maybeSingle();
-
-      if (fetchError) throw new Error(fetchError.message);
-
-      if (!comment) {
-        throw new Error('Comment not found');
-      }
-
-      const likedBy = comment.liked_by || [];
-      const filteredLikedBy = likedBy.filter((id: string) => id !== userId);
-
-      const { error } = await supabase
-        .from('comments')
-        .update({
-          likes: filteredLikedBy.length,
-          liked_by: filteredLikedBy,
-        })
-        .eq('id', commentId);
-
+      // Atomic remove via RPC — avoids TOCTOU race on concurrent unlikes
+      const { error } = await supabase.rpc('remove_comment_like', {
+        p_comment_id: commentId,
+        p_user_id: userId,
+      });
       if (error) throw new Error(error.message);
     } catch (error) {
       throw new Error(error instanceof Error ? error.message : 'Failed to unlike comment');
@@ -814,12 +786,14 @@ export class MusicService {
   // Post Comment methods
   static async addPostComment(postId: string, userId: string, content: string): Promise<Comment> {
     try {
+      const clean = sanitizeText(content, 500);
+      if (!clean) throw new Error('Comment cannot be empty');
       const { data, error } = await supabase
         .from('comments')
         .insert({
           post_id: postId,
           user_id: userId,
-          content,
+          content: clean,
           likes: 0,
           liked_by: [],
         })
@@ -915,17 +889,11 @@ export class MusicService {
     }
   }
 
-  // Enhanced recommendation methods with boost priority
   static async getRecommendedTracks(userId: string, limit = 10): Promise<Track[]> {
     try {
-      const [boostedTracks, { data, error }] = await Promise.all([
-        BoostService.getBoostedTracks(Math.floor(limit * 0.4)),
-        supabase.rpc('get_recommended_tracks', { user_uuid: userId, limit_count: limit }),
-      ]);
+      const { data, error } = await supabase.rpc('get_recommended_tracks', { user_uuid: userId, limit_count: limit });
       if (error) throw new Error(error.message);
-      const boostedIds = new Set(boostedTracks.map((t: Track) => t.id));
-      const regularTracks = (data || []).map((track: any) => this.transformTrack(track)).filter((t: Track) => !boostedIds.has(t.id));
-      return [...boostedTracks, ...regularTracks].slice(0, limit);
+      return (data || []).map((track: any) => this.transformTrack(track));
     } catch (error) {
       throw new Error(error instanceof Error ? error.message : 'Failed to get recommended tracks');
     }
@@ -933,15 +901,9 @@ export class MusicService {
 
   static async getTracksByGenre(genre: string, limit = 20, offset = 0): Promise<Track[]> {
     try {
-      const [boostedTracks, { data, error }] = await Promise.all([
-        BoostService.getBoostedTracks(limit),
-        supabase.rpc('get_tracks_by_genre', { genre_filter: genre, limit_count: limit, offset_count: offset }),
-      ]);
-      const boostedInGenre = boostedTracks.filter((track: Track) => track.genre === genre);
+      const { data, error } = await supabase.rpc('get_tracks_by_genre', { genre_filter: genre, limit_count: limit, offset_count: offset });
       if (error) throw new Error(error.message);
-      const boostedIds = new Set(boostedInGenre.map((t: Track) => t.id));
-      const regularTracks = (data || []).map((track: any) => this.transformTrack(track)).filter((t: Track) => !boostedIds.has(t.id));
-      return [...boostedInGenre, ...regularTracks].slice(0, limit);
+      return (data || []).map((track: any) => this.transformTrack(track));
     } catch (error) {
       throw new Error(error instanceof Error ? error.message : 'Failed to get tracks by genre');
     }
@@ -965,20 +927,9 @@ export class MusicService {
 
   static async searchTracks(query: string, limit = 50, offset = 0): Promise<Track[]> {
     try {
-      const [boostedTracks, { data, error }] = await Promise.all([
-        BoostService.getBoostedTracks(limit),
-        supabase.rpc('search_tracks', { search_query: query, limit_count: limit, offset_count: offset }),
-      ]);
-      const lq = query.toLowerCase();
-      const boostedMatches = boostedTracks.filter((track: Track) =>
-        track.title.toLowerCase().includes(lq) ||
-        track.artist.toLowerCase().includes(lq) ||
-        track.album.toLowerCase().includes(lq)
-      );
+      const { data, error } = await supabase.rpc('search_tracks', { search_query: query, limit_count: limit, offset_count: offset });
       if (error) throw new Error(error.message);
-      const boostedIds = new Set(boostedMatches.map((t: Track) => t.id));
-      const regularTracks = (data || []).map((track: any) => this.transformTrack(track)).filter((t: Track) => !boostedIds.has(t.id));
-      return [...boostedMatches, ...regularTracks].slice(0, limit);
+      return (data || []).map((track: any) => this.transformTrack(track));
     } catch (error) {
       throw new Error(error instanceof Error ? error.message : 'Failed to search tracks');
     }
@@ -986,14 +937,9 @@ export class MusicService {
 
   static async getPopularTracks(limit = 20, offset = 0): Promise<Track[]> {
     try {
-      const [boostedTracks, { data, error }] = await Promise.all([
-        BoostService.getBoostedTracks(Math.floor(limit * 0.3)),
-        supabase.rpc('get_popular_tracks', { limit_count: limit, offset_count: offset }),
-      ]);
+      const { data, error } = await supabase.rpc('get_popular_tracks', { limit_count: limit, offset_count: offset });
       if (error) throw new Error(error.message);
-      const boostedIds = new Set(boostedTracks.map((t: Track) => t.id));
-      const regularTracks = (data || []).map((track: any) => this.transformTrack(track)).filter((t: Track) => !boostedIds.has(t.id));
-      return [...boostedTracks, ...regularTracks].slice(0, limit);
+      return (data || []).map((track: any) => this.transformTrack(track));
     } catch (error) {
       throw new Error(error instanceof Error ? error.message : 'Failed to get popular tracks');
     }
@@ -1064,10 +1010,6 @@ export class MusicService {
       audioUrl: dbTrack.audio_url,
       price: dbTrack.price,
       genre: dbTrack.genre,
-      boosted: dbTrack.boosted || false,
-      boostExpiresAt: dbTrack.boost_expires_at ? new Date(dbTrack.boost_expires_at) : undefined,
-      boostPriority: dbTrack.boost_priority,
-      boostUserId: dbTrack.boost_user_id,
       remixParentId: dbTrack.remix_parent_id,
       versionLabel: dbTrack.version_label,
       remixOpen: dbTrack.remix_open !== false,

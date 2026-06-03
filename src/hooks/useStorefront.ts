@@ -109,14 +109,16 @@ export function useArtistStorefront() {
   }, [user?.id]);
 
   const toggleActive = useCallback(async (listingId: string, isActive: boolean) => {
-    await StorefrontService.toggleListing(listingId, isActive);
+    if (!user?.id) throw new Error('Not authenticated');
+    await StorefrontService.toggleListing(listingId, isActive, user.id);
     setListings(prev => prev.map(l => l.id === listingId ? { ...l, isActive } : l));
-  }, []);
+  }, [user?.id]);
 
   const updatePrice = useCallback(async (listingId: string, price: number, licenseType: LicenseType) => {
-    await StorefrontService.updateListing(listingId, price, licenseType);
+    if (!user?.id) throw new Error('Not authenticated');
+    await StorefrontService.updateListing(listingId, price, licenseType, user.id);
     setListings(prev => prev.map(l => l.id === listingId ? { ...l, price, licenseType } : l));
-  }, []);
+  }, [user?.id]);
 
   const PLATFORM_FEE_PCT = Number(import.meta.env.VITE_STOREFRONT_PLATFORM_FEE_PERCENT ?? 7) / 100;
   // Net payout per sale after platform fee and Stripe processing (2.9% + $0.30).

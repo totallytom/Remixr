@@ -1,6 +1,7 @@
 // api/cancel-pro-subscription.js
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 const { createClient } = require('@supabase/supabase-js');
+const { isStripeId } = require('./_validate');
 
 const supabase = createClient(
   process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL,
@@ -26,6 +27,9 @@ module.exports = async (req, res) => {
     const { subscriptionId } = req.body;
     if (!subscriptionId) {
       return res.status(400).json({ error: 'subscriptionId is required' });
+    }
+    if (!isStripeId(subscriptionId)) {
+      return res.status(400).json({ error: 'Invalid subscriptionId' });
     }
 
     // Confirm this subscription belongs to the authenticated user

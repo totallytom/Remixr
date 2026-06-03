@@ -1,5 +1,6 @@
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 const { createClient } = require('@supabase/supabase-js');
+const { isStripeId } = require('./_validate');
 
 const supabase = createClient(
   process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL,
@@ -19,6 +20,7 @@ module.exports = async (req, res) => {
 
     const { sessionId } = req.body;
     if (!sessionId) return res.status(400).json({ error: 'Missing sessionId' });
+    if (!isStripeId(sessionId)) return res.status(400).json({ error: 'Invalid sessionId' });
 
     const session = await stripe.checkout.sessions.retrieve(sessionId, {
       expand: ['subscription'],

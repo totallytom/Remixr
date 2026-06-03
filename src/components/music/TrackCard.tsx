@@ -6,8 +6,6 @@ import {
   Share2, 
   MoreVertical,
   Music,
-  Zap,
-  ZapOff,
   X,
   MessageCircle,
   Search,
@@ -20,7 +18,6 @@ import {
 import { useStore } from '../../store/useStore';
 import { Track } from '../../store/useStore';
 import { MusicService } from '../../services/musicService';
-//import { BoostService } from '../../services/boostService';
 import { ChatService } from '../../services/chatService';
 //import CommentSection from './CommentSection';
 import { createPortal } from 'react-dom';
@@ -36,7 +33,6 @@ interface TrackCardProps {
   onAddToQueue?: (track: Track) => void;
   isPlaying?: boolean;
   showActions?: boolean;
-  showBoostActions?: boolean;
   compact?: boolean;
   /** Compact vertical card for search grid: square image, minimal text */
   compactGrid?: boolean;
@@ -49,7 +45,6 @@ const TrackCard: React.FC<TrackCardProps> = ({
   onAddToQueue,
   isPlaying = false,
   showActions = true,
-  showBoostActions = true,
   compact = false,
   compactGrid = false,
   onDelete
@@ -70,8 +65,6 @@ const TrackCard: React.FC<TrackCardProps> = ({
   const [showPlaylistModal, setShowPlaylistModal] = useState(false);
   const [isLiked, setIsLiked] = useState(false);
   const [isCheckingBookmark, setIsCheckingBookmark] = useState(false);
-  const [isBoosting, setIsBoosting] = useState(false);
-  const [boostError, setBoostError] = useState<string | null>(null);
   const [showMessageModal, setShowMessageModal] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<any[]>([]);
@@ -328,34 +321,6 @@ const TrackCard: React.FC<TrackCardProps> = ({
     }
   };
 
-  const handleBoost = async () => {
-    if (!user) return;
-    
-    setIsBoosting(true);
-    setBoostError(null);
-    
-    try {
-      if (track.boosted) {
-        await MusicService.unboostTrack(track.id, user.id);
-        // Update the track locally
-        track.boosted = false;
-        track.boostExpiresAt = undefined;
-        track.boostPriority = undefined;
-        track.boostUserId = undefined;
-      } else {
-        await MusicService.boostTrack(track.id, user.id);
-        // Update the track locally
-        track.boosted = true;
-        track.boostExpiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); // 30 days
-        track.boostPriority = 1;
-        track.boostUserId = user.id;
-      }
-    } catch (error) {
-      setBoostError(error instanceof Error ? error.message : 'Failed to boost track');
-    } finally {
-      setIsBoosting(false);
-    }
-  };
 
   const handleMessage = async (receiverId: string) => {
     if (!user) return;
@@ -433,9 +398,6 @@ const TrackCard: React.FC<TrackCardProps> = ({
   };
 
   const isCurrentlyPlaying = player.currentTrack?.id === track.id && player.isPlaying;
-  const isOwnTrack = user && track.boostUserId === user.id;
-  const canBoost = user && (isOwnTrack || !track.boosted);
-
   if (compactGrid) {
     return (
       <>

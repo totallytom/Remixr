@@ -207,19 +207,21 @@ export class StorefrontService {
     return this.transformListing(row);
   }
 
-  static async updateListing(listingId: string, price: number, licenseType: LicenseType): Promise<void> {
+  static async updateListing(listingId: string, price: number, licenseType: LicenseType, sellerId: string): Promise<void> {
     const { error } = await supabase
       .from('store_listings' as any)
       .update({ price, license_type: licenseType })
-      .eq('id', listingId);
+      .eq('id', listingId)
+      .eq('seller_id', sellerId);
     if (error) throw new Error(error.message);
   }
 
-  static async toggleListing(listingId: string, isActive: boolean): Promise<void> {
+  static async toggleListing(listingId: string, isActive: boolean, sellerId: string): Promise<void> {
     const { error } = await supabase
       .from('store_listings' as any)
       .update({ is_active: isActive })
-      .eq('id', listingId);
+      .eq('id', listingId)
+      .eq('seller_id', sellerId);
     if (error) throw new Error(error.message);
   }
 

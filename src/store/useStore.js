@@ -386,13 +386,13 @@ export const useStore = create((set, get) => ({
       set({ user: updatesOrUser });
       return updatesOrUser;
     }
-    const updated = await AuthService.updateProfile(user.id, updatesOrUser);
+    const updated = await AuthService.updateProfile(updatesOrUser);
     set({ user: updated });
     return updated;
   },
 
-  togglePrivateAccount: async (userId, isPrivate) => {
-    const updated = await AuthService.togglePrivateAccount(userId, isPrivate);
+  togglePrivateAccount: async (isPrivate) => {
+    const updated = await AuthService.togglePrivateAccount(isPrivate);
     set({ user: updated });
     return updated;
   },

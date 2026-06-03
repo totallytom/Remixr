@@ -1,5 +1,6 @@
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 const { createClient } = require('@supabase/supabase-js');
+const { isUUID, isEmail } = require('./_validate');
 
 const supabase = createClient(
   process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL,
@@ -19,6 +20,8 @@ module.exports = async (req, res) => {
     if (!userId || !email) {
       return res.status(400).json({ error: 'Missing userId or email' });
     }
+    if (!isUUID(userId)) return res.status(400).json({ error: 'Invalid userId' });
+    if (!isEmail(email)) return res.status(400).json({ error: 'Invalid email' });
 
     if (caller.id !== userId) {
       return res.status(403).json({ error: 'Forbidden' });

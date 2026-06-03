@@ -187,15 +187,31 @@ module.exports = async (req, res) => {
     }
 
     const body = typeof req.body === 'object' && req.body ? req.body : {};
-    const { hash, title, artist } = body;
+    const rawTitle = body.title;
+    const rawArtist = body.artist;
+    const rawHash = body.hash;
 
-    const meta = await checkMetadata(String(title || ''), String(artist || ''));
+    if (rawTitle !== undefined && (typeof rawTitle !== 'string' || rawTitle.length > 200)) {
+      return res.status(400).json({ error: 'Invalid title' });
+    }
+    if (rawArtist !== undefined && (typeof rawArtist !== 'string' || rawArtist.length > 200)) {
+      return res.status(400).json({ error: 'Invalid artist' });
+    }
+    if (rawHash !== undefined && (typeof rawHash !== 'string' || rawHash.length > 128)) {
+      return res.status(400).json({ error: 'Invalid hash' });
+    }
+
+    const title = (rawTitle || '').replace(/\0/g, '').slice(0, 200);
+    const artist = (rawArtist || '').replace(/\0/g, '').slice(0, 200);
+    const hash = rawHash ? rawHash.replace(/\0/g, '').slice(0, 128) : undefined;
+
+    const meta = await checkMetadata(title, artist);
     if (meta.blocked) {
       return res.status(200).json({ blocked: true, reason: meta.reason });
     }
 
     if (hash) {
-      const hashResult = await checkHash(String(hash));
+      const hashResult = await checkHash(hash);
       if (hashResult.blocked) {
         return res.status(200).json({ blocked: true, reason: hashResult.reason });
       }

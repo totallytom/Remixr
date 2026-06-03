@@ -24,6 +24,7 @@ dist-ssr
 *.sw?
 
 .env
+.env.*
 .env.local
 
 # Hidden from GitHub
@@ -35,3 +36,4 @@ scripts/
 supabase/
 .vercel
 .env*.local
+.windsurf

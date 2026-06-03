@@ -268,7 +268,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, initialTab }) => 
     setPrivacyLoading(true);
     setErrorMessage('');
     try {
-      const updated = await togglePrivateAccount(user.id, !user.isPrivate);
+      const updated = await togglePrivateAccount(!user.isPrivate);
       setSuccessMessage(`Account is now ${updated.isPrivate ? 'private' : 'public'}`);
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : 'Failed to update privacy');
@@ -809,26 +809,34 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, initialTab }) => 
           <div className="bg-gray-50 border border-gray-200 rounded-xl p-5 space-y-3">
             <div>
               <p className="text-sm font-semibold text-gray-800 mb-0.5">Manage subscription</p>
-              <p className="text-xs text-gray-500">Update your payment method, download invoices, or cancel — all through the Stripe billing portal.</p>
+              <p className="text-xs text-gray-500">
+                {(user as { isAdmin?: boolean })?.isAdmin && !proSubscription
+                  ? 'Admin account — Pro access is permanent and requires no billing.'
+                  : 'Update your payment method, download invoices, or cancel — all through the Stripe billing portal.'}
+              </p>
             </div>
-            <button
-              onClick={handleOpenPortal}
-              disabled={portalLoading}
-              className="flex items-center gap-2 px-4 py-2.5 bg-green-300 hover:bg-orange-600 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
-            >
-              {portalLoading ? (
-                <><div className="w-3.5 h-3.5 border-2 border-white/60 border-t-transparent rounded-full animate-spin" /> Opening portal…</>
-              ) : (
-                <>Open billing portal <span aria-hidden>↗</span></>
-              )}
-            </button>
-            {portalError && (
-              <div className="space-y-1.5">
-                <p className="text-xs text-red-500">{portalError}</p>
-                <p className="text-xs text-gray-500">
-                  If the portal won't open, contact support with the email on your account.
-                </p>
-              </div>
+            {!((user as { isAdmin?: boolean })?.isAdmin && !proSubscription) && (
+              <>
+                <button
+                  onClick={handleOpenPortal}
+                  disabled={portalLoading}
+                  className="flex items-center gap-2 px-4 py-2.5 bg-green-300 hover:bg-orange-600 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
+                >
+                  {portalLoading ? (
+                    <><div className="w-3.5 h-3.5 border-2 border-white/60 border-t-transparent rounded-full animate-spin" /> Opening portal…</>
+                  ) : (
+                    <>Open billing portal <span aria-hidden>↗</span></>
+                  )}
+                </button>
+                {portalError && (
+                  <div className="space-y-1.5">
+                    <p className="text-xs text-red-500">{portalError}</p>
+                    <p className="text-xs text-gray-500">
+                      If the portal won't open, contact support with the email on your account.
+                    </p>
+                  </div>
+                )}
+              </>
             )}
           </div>
         )}

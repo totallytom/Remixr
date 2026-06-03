@@ -11,6 +11,7 @@
 
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 const { createClient } = require('@supabase/supabase-js');
+const { isUUID, resolveAppUrl } = require('./_validate');
 
 const supabase = createClient(
   process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL,
@@ -18,16 +19,6 @@ const supabase = createClient(
 );
 
 const PLATFORM_FEE = Number(process.env.STOREFRONT_PLATFORM_FEE_PERCENT ?? 7) / 100;
-
-function resolveAppUrl(req) {
-  const host = req.headers['x-forwarded-host'] || req.headers.host;
-  const proto = (req.headers['x-forwarded-proto'] || 'https').split(',')[0].trim();
-  if (host) return `${proto}://${host}`;
-  const raw = process.env.APP_URL
-    || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null)
-    || 'https://re-mixed.net';
-  return /^https?:\/\//.test(raw) ? raw : `https://${raw}`;
-}
 
 // Per-user rate limit: max 3 checkout attempts per 60 seconds (best-effort, per-instance).
 const _rlMap = new Map();
@@ -65,6 +56,7 @@ module.exports = async (req, res) => {
   // ── 2. Validate listing ────────────────────────────────────────────────────
   const { listingId } = req.body ?? {};
   if (!listingId) return res.status(400).json({ error: 'Missing listingId' });
+  if (!isUUID(listingId)) return res.status(400).json({ error: 'Invalid listingId' });
 
   const { data: listing, error: listingError } = await supabase
     .from('store_listings')
@@ -99,7 +91,7 @@ module.exports = async (req, res) => {
   const seller     = Array.isArray(listing.users)  ? listing.users[0]  : (listing.users  ?? {});
   const amountCents = Math.round(listing.price * 100);
   const platformFee = Math.round(amountCents * PLATFORM_FEE);
-  const appUrl      = resolveAppUrl(req);
+  const appUrl      = resolveAppUrl();
 
   const licenseLabel = listing.license_type.charAt(0).toUpperCase() + listing.license_type.slice(1);
 

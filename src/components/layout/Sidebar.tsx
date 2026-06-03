@@ -276,6 +276,13 @@ const Sidebar: React.FC = () => {
             </button>
           </div>
         )}
+
+        {/* Copyright */}
+        <div className="px-5 py-3 border-t border-[var(--color-border)]">
+          <p className="text-[10px] text-[var(--color-text-secondary)] opacity-50 leading-tight">
+            © 2026 Amulet Studios LLC. All rights reserved.
+          </p>
+        </div>
       </div>
 
       {/* Mobile bottom tab bar — 6 primary tabs, replaces old top + bottom navs */}

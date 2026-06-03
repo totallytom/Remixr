@@ -22,6 +22,11 @@ function PageContent({ children }) {
       : 'flex-1 min-w-0 overflow-y-auto overflow-x-hidden page-content'
     }>
       {children}
+      {!isFullHeight && (
+        <footer className="lg:hidden pb-16 pt-4 text-center">
+          <p className="text-[10px] text-white/30">© 2026 Amulet Studios LLC. All rights reserved.</p>
+        </footer>
+      )}
     </div>
   );
 }

@@ -4,7 +4,6 @@ import { SwipeStack } from '../components/music/SwipeStack';
 import { useStore } from '../store/useStore';
 import type { Track } from '../store/useStore';
 import { MusicService } from '../services/musicService';
-import { BoostService } from '../services/boostService';
 
 function shuffleTracks<T>(array: T[]): T[] {
   const out = [...array];
@@ -48,21 +47,14 @@ const Discover: React.FC = () => {
           setTimeout(() => reject(new Error('Load timeout')), LOAD_TIMEOUT_MS)
         );
 
-        const [boosted, regular] = await Promise.race([
-          Promise.all([
-            BoostService.getBoostedTracks(4).catch(() => [] as Track[]),
-            MusicService.getTracks(14),
-          ]),
+        const tracks = await Promise.race([
+          MusicService.getTracks(16),
           timeoutPromise,
         ]);
 
         if (cancelled) return;
 
-        // Boosted tracks lead the stack; deduplicate against regular pool
-        const boostedIds = new Set(boosted.map((t) => t.id));
-        const uniqueRegular = shuffleTracks(regular.filter((t) => !boostedIds.has(t.id)));
-        const composed = [...boosted, ...uniqueRegular].slice(0, 16);
-
+        const composed = shuffleTracks(tracks).slice(0, 16);
         setAllTracks(composed);
         if (selectedGenre) {
           const genreFiltered = composed.filter((t) => t.genre === selectedGenre);

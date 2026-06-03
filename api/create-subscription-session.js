@@ -1,5 +1,6 @@
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 const { createClient } = require('@supabase/supabase-js');
+const { isStripeId, isSafeUrl, isEmail, resolveAppUrl } = require('./_validate');
 
 const supabase = createClient(
   process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL,
@@ -19,6 +20,16 @@ module.exports = async (req, res) => {
     if (!plan || !successUrl || !cancelUrl) {
       return res.status(400).json({ error: 'Missing required parameters' });
     }
+    if (plan !== 'monthly' && plan !== 'yearly') {
+      return res.status(400).json({ error: 'Invalid plan' });
+    }
+    const appUrl = resolveAppUrl();
+    if (!isSafeUrl(successUrl, appUrl) || !isSafeUrl(cancelUrl, appUrl)) {
+      return res.status(400).json({ error: 'Invalid redirect URL' });
+    }
+    if (email && !isEmail(email)) {
+      return res.status(400).json({ error: 'Invalid email' });
+    }
 
     // Ensure the session is being created for the authenticated user only
     if (userId && userId !== caller.id) {
@@ -28,6 +39,9 @@ module.exports = async (req, res) => {
 
     if (!customerId) {
       return res.status(400).json({ error: 'Missing customerId' });
+    }
+    if (!isStripeId(customerId)) {
+      return res.status(400).json({ error: 'Invalid customerId' });
     }
 
     // Verify the customerId belongs to the authenticated user

@@ -7,6 +7,7 @@
 // Returns: { downloadUrl: string, filename: string, expiresAt: string }
 
 const { createClient } = require('@supabase/supabase-js');
+const { isUUID } = require('./_validate');
 
 const BUCKET = 'music-files';
 // Public URL prefix produced by Supabase getPublicUrl() — path starts after this.
@@ -63,6 +64,7 @@ module.exports = async (req, res) => {
   // ── 2. Validate query param ────────────────────────────────────────────────
   const listingId = req.query?.listing_id;
   if (!listingId) return res.status(400).json({ error: 'Missing listing_id' });
+  if (!isUUID(listingId)) return res.status(400).json({ error: 'Invalid listing_id' });
 
   // ── 3. Verify completed purchase ───────────────────────────────────────────
   const { data: purchase, error: purchaseError } = await supabase
@@ -100,7 +102,7 @@ module.exports = async (req, res) => {
   // ── 5. Extract storage path and create signed URL ─────────────────────────
   const storagePath = extractStoragePath(track.audio_url);
   if (!storagePath) {
-    console.error('Could not extract storage path from audio_url:', track.audio_url);
+    console.error('Could not extract storage path from audio_url');
     return res.status(500).json({ error: 'Could not resolve audio file location' });
   }
 

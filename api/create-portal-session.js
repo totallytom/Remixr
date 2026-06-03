@@ -1,15 +1,6 @@
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 const { createClient } = require('@supabase/supabase-js');
-
-function resolveAppUrl(req) {
-  const host = req.headers['x-forwarded-host'] || req.headers.host;
-  const proto = (req.headers['x-forwarded-proto'] || 'https').split(',')[0].trim();
-  if (host) return `${proto}://${host}`;
-  const raw = process.env.APP_URL
-    || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null)
-    || 'https://re-mixed.net';
-  return /^https?:\/\//.test(raw) ? raw : `https://${raw}`;
-}
+const { isSafeUrl, resolveAppUrl } = require('./_validate');
 
 const supabase = createClient(
   process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL,
@@ -39,11 +30,15 @@ module.exports = async (req, res) => {
       return res.status(400).json({ error: 'No billing account found' });
     }
 
+    const appUrl = resolveAppUrl();
     const { returnUrl } = req.body;
+    if (returnUrl && !isSafeUrl(returnUrl, appUrl)) {
+      return res.status(400).json({ error: 'Invalid returnUrl' });
+    }
 
     const session = await stripe.billingPortal.sessions.create({
       customer: profile.stripe_customer_id,
-      return_url: returnUrl || `${resolveAppUrl(req)}/upgrade`,
+      return_url: returnUrl || `${appUrl}/upgrade`,
     });
 
     res.json({ url: session.url });

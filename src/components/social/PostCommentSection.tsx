@@ -195,6 +195,7 @@ const PostCommentSection: React.FC<PostCommentSectionProps> = ({ postId, postOwn
                     value={newComment}
                     onChange={(e) => setNewComment(e.target.value)}
                     placeholder="Add a comment..."
+                    maxLength={500}
                     className="w-full bg-dark-700 border border-dark-600 rounded-lg px-3 py-2 text-white placeholder-dark-400 focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm font-sans"
                     style={{ fontFamily: 'Inter, Roboto, Arial, sans-serif' }}
                   />
