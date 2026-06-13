@@ -117,9 +117,6 @@ module.exports = async (req, res) => {
 
   } catch (error) {
     console.error('Account deletion failed:', error);
-    res.status(500).json({
-      error: 'Account deletion failed',
-      details: error.message
-    });
+    res.status(500).json({ error: 'Account deletion failed. Please try again or contact support.' });
   }
 }

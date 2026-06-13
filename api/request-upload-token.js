@@ -231,6 +231,22 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY
 );
 
+// ── Per-user rate limit: max 10 token requests per 60 seconds ────────────────
+const _rlMap = new Map();
+const RL_MAX = 10;
+const RL_WINDOW_MS = 60_000;
+
+function isRateLimited(userId) {
+  const now = Date.now();
+  const cutoff = now - RL_WINDOW_MS;
+  const hits = (_rlMap.get(userId) ?? []).filter(t => t > cutoff);
+  if (hits.length >= RL_MAX) return true;
+  hits.push(now);
+  _rlMap.set(userId, hits);
+  if (_rlMap.size > 10_000) _rlMap.delete(_rlMap.keys().next().value);
+  return false;
+}
+
 // ── Handler ──────────────────────────────────────────────────────────────────
 
 module.exports = async (req, res) => {
@@ -243,6 +259,10 @@ module.exports = async (req, res) => {
 
   const { data: { user }, error: authError } = await supabase.auth.getUser(bearerToken);
   if (authError || !user) return res.status(401).json({ error: 'Invalid or expired token' });
+
+  if (isRateLimited(user.id)) {
+    return res.status(429).json({ error: 'Too many upload requests. Please wait a moment and try again.' });
+  }
 
   // ── Input validation ──
   const body = req.body ?? {};

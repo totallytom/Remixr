@@ -30,6 +30,12 @@ const Login: React.FC = () => {
   const [error, setError] = useState<string>('');
   const [showForgotPassword, setShowForgotPassword] = useState(false);
   const [resetEmailSent, setResetEmailSent] = useState(false);
+  const [mfaRequired, setMfaRequired] = useState(false);
+  const [mfaFactorId, setMfaFactorId] = useState<string | null>(null);
+  const [mfaChallengeId, setMfaChallengeId] = useState<string | null>(null);
+  const [mfaCode, setMfaCode] = useState('');
+  const [mfaLoading, setMfaLoading] = useState(false);
+  const [mfaError, setMfaError] = useState<string | null>(null);
   const { login, register, isAuthenticated, user } = useStore();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
@@ -74,6 +80,22 @@ const Login: React.FC = () => {
 
       await Promise.race([loginPromise, timeoutPromise]);
       console.log('✅ Login completed successfully');
+
+      // Check if MFA is required
+      const { data: aal } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+      if (aal?.nextLevel === 'aal2' && aal?.currentLevel === 'aal1') {
+        const { data: factors } = await supabase.auth.mfa.listFactors();
+        const factor = factors?.totp?.[0];
+        if (factor) {
+          const { data: challenge } = await supabase.auth.mfa.challenge({ factorId: factor.id });
+          setMfaFactorId(factor.id);
+          setMfaChallengeId(challenge?.id ?? null);
+          setMfaRequired(true);
+          setIsLoading(false);
+          return;
+        }
+      }
+
       sessionStorage.removeItem('signup_role');
       sessionStorage.removeItem('signup_pending_onboarding');
     } catch (error) {
@@ -102,26 +124,29 @@ const Login: React.FC = () => {
         artistName: data.artistName,
         bio: data.bio,
       });
-      // After successful registration, create Stripe customer
-      if (user && user.id && user.email) {
-        const { data: { session } } = await supabase.auth.getSession();
-        if (session?.access_token) {
-          await fetch('/api/create-stripe-customer', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${session.access_token}`,
-            },
-            body: JSON.stringify({ userId: user.id, email: user.email }),
-          });
-        }
-      }
     } catch (error) {
       sessionStorage.removeItem('signup_role');
       sessionStorage.removeItem('signup_pending_onboarding');
       setError(error instanceof Error ? error.message : 'Registration failed');
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleMFAVerify = async () => {
+    if (!mfaFactorId || !mfaChallengeId || mfaCode.length !== 6) return;
+    setMfaLoading(true);
+    setMfaError(null);
+    try {
+      const { error } = await supabase.auth.mfa.verify({ factorId: mfaFactorId, challengeId: mfaChallengeId, code: mfaCode });
+      if (error) throw error;
+      sessionStorage.removeItem('signup_role');
+      sessionStorage.removeItem('signup_pending_onboarding');
+      // isAuthenticated effect will navigate
+    } catch {
+      setMfaError('Invalid code. Please try again.');
+    } finally {
+      setMfaLoading(false);
     }
   };
 
@@ -186,8 +211,58 @@ const Login: React.FC = () => {
           )}
 
 
+          {/* MFA Challenge */}
+          {mfaRequired && (
+            <div className="space-y-5">
+              <div className="text-center">
+                <div className="w-12 h-12 bg-primary-500/10 rounded-full flex items-center justify-center mx-auto mb-3">
+                  <Lock size={22} className="text-primary-400" />
+                </div>
+                <h3 className="text-lg font-semibold text-white">Two-Factor Authentication</h3>
+                <p className="text-dark-300 text-sm mt-1">Enter the 6-digit code from your authenticator app.</p>
+              </div>
+              <div>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  maxLength={6}
+                  value={mfaCode}
+                  onChange={(e) => setMfaCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                  placeholder="000000"
+                  className="w-full px-4 py-3 bg-dark-700 border border-dark-600 rounded-lg text-white text-center font-mono text-2xl tracking-widest placeholder-dark-400 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all"
+                  autoFocus
+                />
+                {mfaError && <p className="mt-2 text-sm text-red-400 text-center">{mfaError}</p>}
+              </div>
+              <motion.button
+                type="button"
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+                onClick={handleMFAVerify}
+                disabled={mfaLoading || mfaCode.length !== 6}
+                className="w-full bg-gradient-to-r from-primary-600 to-secondary-600 text-white py-3 px-6 rounded-lg font-medium hover:from-primary-700 hover:to-secondary-700 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 focus:ring-offset-dark-800 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {mfaLoading ? (
+                  <div className="flex items-center justify-center">
+                    <div className="spinner w-5 h-5 mr-2"></div>
+                    Verifying...
+                  </div>
+                ) : (
+                  'Verify'
+                )}
+              </motion.button>
+              <button
+                type="button"
+                onClick={() => { setMfaRequired(false); setMfaCode(''); setMfaError(null); }}
+                className="w-full text-sm text-dark-400 hover:text-white transition-colors"
+              >
+                ← Back to sign in
+              </button>
+            </div>
+          )}
+
           {/* Login Form */}
-          {activeTab === 'login' && !showForgotPassword && (
+          {!mfaRequired && activeTab === 'login' && !showForgotPassword && (
             <form onSubmit={loginForm.handleSubmit(onLoginSubmit)} className="space-y-6">
               <div>
                 <label className="block text-sm font-medium text-white mb-2">
@@ -273,7 +348,7 @@ const Login: React.FC = () => {
           )}
 
           {/* Forgot Password Form */}
-          {activeTab === 'login' && showForgotPassword && (
+          {!mfaRequired && activeTab === 'login' && showForgotPassword && (
             <div className="space-y-6">
               {resetEmailSent ? (
                 <div className="text-center">
@@ -357,7 +432,7 @@ const Login: React.FC = () => {
           )}
 
           {/* Register Form */}
-          {activeTab === 'register' && (
+          {!mfaRequired && activeTab === 'register' && (
             <form onSubmit={registerForm.handleSubmit(onRegisterSubmit)} className="space-y-6">
               <div>
                 <label className="block text-sm font-medium text-white mb-2">
@@ -569,7 +644,7 @@ const Login: React.FC = () => {
           )}
 
           {/* Footer */}
-          <div className="mt-6 text-center">
+          {!mfaRequired && <div className="mt-6 text-center">
             <p className="text-sm text-dark-400">
               {activeTab === 'login' ? (
                 <>
@@ -590,7 +665,7 @@ const Login: React.FC = () => {
                 </>
               )}
             </p>
-          </div>
+          </div>}
         </motion.div>
       </div>
     </div>

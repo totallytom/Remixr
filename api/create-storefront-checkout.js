@@ -63,7 +63,7 @@ module.exports = async (req, res) => {
     .select(`
       id, track_id, seller_id, price, license_type, is_active,
       tracks:track_id (title, artist),
-      users:seller_id (stripe_account_id)
+      users:seller_id (stripe_account_id, is_admin)
     `)
     .eq('id', listingId)
     .maybeSingle();
@@ -94,6 +94,10 @@ module.exports = async (req, res) => {
   const appUrl      = resolveAppUrl();
 
   const licenseLabel = listing.license_type.charAt(0).toUpperCase() + listing.license_type.slice(1);
+
+  if (!seller.stripe_account_id && !seller.is_admin) {
+    return res.status(400).json({ error: 'This seller has not connected a payout account yet and cannot accept payments.' });
+  }
 
   const sessionParams = {
     mode: 'payment',
@@ -136,7 +140,7 @@ module.exports = async (req, res) => {
     session = await stripe.checkout.sessions.create(sessionParams);
   } catch (stripeErr) {
     console.error('Stripe Checkout Session error:', stripeErr);
-    return res.status(500).json({ error: stripeErr.message });
+    return res.status(500).json({ error: 'Failed to create checkout session. Please try again.' });
   }
 
   return res.json({ url: session.url, sessionId: session.id });

@@ -28,6 +28,7 @@ import { AuthService } from '../../services/authService';
 import { DEFAULT_AVATAR_URL, getAvatarUrl } from '../../utils/avatar';
 import { proSubscriptionService, ProSubscription } from '../../services/proSubscriptionService';
 import { PRICING } from '../../config/pricing';
+import { supabase } from '../../services/supabase';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -74,6 +75,17 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, initialTab }) => 
   const [portalLoading, setPortalLoading] = useState(false);
   const [portalError, setPortalError] = useState('');
 
+  // 2FA state
+  const [mfaEnabled, setMfaEnabled] = useState(false);
+  const [mfaFactorId, setMfaFactorId] = useState<string | null>(null);
+  const [mfaLoading, setMfaLoading] = useState(false);
+  const [mfaStep, setMfaStep] = useState<'idle' | 'setup'>('idle');
+  const [mfaQRCode, setMfaQRCode] = useState<string | null>(null);
+  const [mfaSecret, setMfaSecret] = useState<string | null>(null);
+  const [mfaEnrollId, setMfaEnrollId] = useState<string | null>(null);
+  const [mfaCode, setMfaCode] = useState('');
+  const [mfaError, setMfaError] = useState<string | null>(null);
+
   useEffect(() => {
     if (isOpen && initialTab) setActiveTab(initialTab);
   }, [isOpen, initialTab]);
@@ -100,6 +112,73 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, initialTab }) => 
   useEffect(() => {
     if (user?.email) setResetPasswordEmail(user.email);
   }, [user?.email]);
+
+  useEffect(() => {
+    if (!isOpen || activeTab !== 'security') return;
+    supabase.auth.mfa.listFactors().then(({ data }) => {
+      const verified = data?.totp?.find((f: { status: string }) => f.status === 'verified');
+      if (verified) {
+        setMfaEnabled(true);
+        setMfaFactorId(verified.id);
+      } else {
+        setMfaEnabled(false);
+        setMfaFactorId(null);
+      }
+    });
+  }, [isOpen, activeTab]);
+
+  const handleEnableMFA = async () => {
+    setMfaLoading(true);
+    setMfaError(null);
+    try {
+      const { data, error } = await supabase.auth.mfa.enroll({ factorType: 'totp' });
+      if (error) throw error;
+      setMfaQRCode(data.totp.qr_code);
+      setMfaSecret(data.totp.secret);
+      setMfaEnrollId(data.id);
+      setMfaStep('setup');
+    } catch {
+      setMfaError('Failed to start 2FA setup. Please try again.');
+    } finally {
+      setMfaLoading(false);
+    }
+  };
+
+  const handleVerifyMFA = async () => {
+    if (!mfaEnrollId || mfaCode.length !== 6) return;
+    setMfaLoading(true);
+    setMfaError(null);
+    try {
+      const { error } = await supabase.auth.mfa.challengeAndVerify({ factorId: mfaEnrollId, code: mfaCode });
+      if (error) throw error;
+      setMfaEnabled(true);
+      setMfaFactorId(mfaEnrollId);
+      setMfaStep('idle');
+      setMfaQRCode(null);
+      setMfaSecret(null);
+      setMfaCode('');
+    } catch {
+      setMfaError('Invalid code. Please try again.');
+    } finally {
+      setMfaLoading(false);
+    }
+  };
+
+  const handleDisableMFA = async () => {
+    if (!mfaFactorId) return;
+    setMfaLoading(true);
+    setMfaError(null);
+    try {
+      const { error } = await supabase.auth.mfa.unenroll({ factorId: mfaFactorId });
+      if (error) throw error;
+      setMfaEnabled(false);
+      setMfaFactorId(null);
+    } catch {
+      setMfaError('Failed to disable 2FA. Please try again.');
+    } finally {
+      setMfaLoading(false);
+    }
+  };
 
   const [emailForm, setEmailForm] = useState<ChangeEmailForm>({
     currentEmail: user?.email || '',
@@ -671,6 +750,90 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, initialTab }) => 
             </button>
           </form>
         )}
+      </div>
+
+      {/* Two-Factor Authentication */}
+      <div className="bg-gray-50 rounded-lg p-6 border border-gray-200">
+        <p className="text-lg font-semibold text-gray-800 mb-2 flex items-center">
+          <Shield className="mr-2 text-blue-600" size={20} />
+          Two-Factor Authentication
+        </p>
+        <p className="text-gray-600 text-sm mb-4">
+          Add a second layer of security. You'll need an authenticator app (Google Authenticator, Authy) to sign in.
+        </p>
+
+        {mfaStep === 'idle' && (
+          mfaEnabled ? (
+            <div className="space-y-3">
+              <div className="flex items-center gap-2 text-green-600 text-sm font-medium">
+                <Check size={16} />
+                Two-factor authentication is enabled
+              </div>
+              <button
+                onClick={handleDisableMFA}
+                disabled={mfaLoading}
+                className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50 text-sm transition-colors"
+              >
+                {mfaLoading ? 'Disabling...' : 'Disable 2FA'}
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={handleEnableMFA}
+              disabled={mfaLoading}
+              className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 text-sm transition-colors"
+            >
+              {mfaLoading ? 'Setting up...' : 'Enable 2FA'}
+            </button>
+          )
+        )}
+
+        {mfaStep === 'setup' && mfaQRCode && (
+          <div className="space-y-4">
+            <p className="text-sm text-gray-700">Scan this QR code with your authenticator app:</p>
+            <img
+              src={mfaQRCode}
+              alt="2FA QR Code"
+              className="w-40 h-40 rounded-lg border border-gray-200 bg-white p-2"
+            />
+            {mfaSecret && (
+              <p className="text-xs text-gray-500">
+                Can't scan? Manual code: <span className="font-mono font-medium text-gray-800 select-all">{mfaSecret}</span>
+              </p>
+            )}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Enter the 6-digit code to confirm setup
+              </label>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  maxLength={6}
+                  value={mfaCode}
+                  onChange={(e) => setMfaCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                  placeholder="000000"
+                  className="w-32 px-3 py-2 border border-gray-300 rounded-lg text-center font-mono text-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+                <button
+                  onClick={handleVerifyMFA}
+                  disabled={mfaLoading || mfaCode.length !== 6}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 text-sm transition-colors"
+                >
+                  {mfaLoading ? 'Verifying...' : 'Verify & Enable'}
+                </button>
+                <button
+                  onClick={() => { setMfaStep('idle'); setMfaQRCode(null); setMfaCode(''); setMfaError(null); }}
+                  className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 text-sm transition-colors"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {mfaError && <p className="mt-3 text-sm text-red-600">{mfaError}</p>}
       </div>
 
       <div className="bg-gray-50 rounded-lg p-6 border border-gray-200">

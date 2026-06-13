@@ -64,6 +64,6 @@ module.exports = async (req, res) => {
     });
   } catch (error) {
     console.error('Cancel subscription error:', error);
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: 'An unexpected error occurred. Please try again.' });
   }
 };

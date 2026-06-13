@@ -380,9 +380,14 @@ const Storefront: React.FC = () => {
     setIsConnecting(true);
     setConnectError(null);
     try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) throw new Error('Not authenticated');
       const response = await fetch('/api/create-stripe-account', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`,
+        },
         body: JSON.stringify({ userId: user.id }),
       });
       const data = await response.json();
@@ -414,6 +419,7 @@ const Storefront: React.FC = () => {
     purchases: purchaseHistory,
     isLoading: purchaseHistoryLoading,
     error: purchaseHistoryError,
+    reload: reloadPurchaseHistory,
   } = usePurchaseHistory();
 
   // Artist store
@@ -438,7 +444,9 @@ const Storefront: React.FC = () => {
     const listingId = params.get('listing_id');
     if (listingId) {
       markPurchased(listingId);
+      reloadPurchaseHistory();
       setTimeout(refreshPurchasedIds, 8000);
+      setTimeout(reloadPurchaseHistory, 8000);
     }
     addAlert('Purchase successful! Check My Purchases to download your track.', 'success');
     setActiveTab('purchases');
@@ -613,7 +621,24 @@ const Storefront: React.FC = () => {
       {/* ── My Store Tab ── */}
       {activeTab === 'my-store' && isMusicianUser && (
         <div className="space-y-5">
+
+          {/* Stripe Connect gate */}
+          {!stripeAccountId && !user?.isAdmin && (
+            <div className="p-6 bg-dark-800/50 rounded-2xl border border-yellow-500/20 text-center space-y-3">
+              <Building2 className="w-8 h-8 text-yellow-400 mx-auto" />
+              <p className="text-white font-semibold">Connect Stripe to start selling</p>
+              <p className="text-white/40 text-sm">You need a connected payout account before you can list tracks or receive payments.</p>
+              <button
+                onClick={() => setActiveTab('payments')}
+                className="px-5 py-2.5 bg-[#635BFF] hover:bg-[#7A73FF] text-white text-sm font-semibold rounded-xl transition-colors"
+              >
+                Go to Payments → Connect Stripe
+              </button>
+            </div>
+          )}
+
           {/* Stats */}
+          {(stripeAccountId || user?.isAdmin) && (<>
           <div className="grid grid-cols-3 gap-3">
             {[
               { label: 'Listings', value: artistListings.length },
@@ -671,6 +696,7 @@ const Storefront: React.FC = () => {
               ))}
             </div>
           )}
+          </>)}
         </div>
       )}
 

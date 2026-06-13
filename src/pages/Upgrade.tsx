@@ -3,7 +3,6 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useStore } from '../store/useStore';
 import { proSubscriptionService } from '../services/proSubscriptionService';
 import { PRICING } from '../config/pricing';
-import { supabase } from '../services/supabase';
 
 const FREE_FEATURES = [
   'Upload & share tracks (up to 10)',
@@ -114,35 +113,7 @@ export default function Upgrade() {
     setLoading(true);
 
     try {
-      let customerId = user.stripeCustomerId;
-
-      const timeout = (ms: number) => new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error('Request timed out. Please try again.')), ms)
-      );
-
-      // Create Stripe customer if user doesn't have one yet
-      if (!customerId) {
-        const { data: { session } } = await supabase.auth.getSession();
-        if (!session?.access_token) throw new Error('Not authenticated');
-        const res = await Promise.race([
-          fetch('/api/create-stripe-customer', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${session.access_token}`,
-            },
-            body: JSON.stringify({ userId: user.id, email: user.email }),
-          }),
-          timeout(8000),
-        ]);
-        const text = await res.text();
-        let data: Record<string, string> = {};
-        try { data = JSON.parse(text); } catch { throw new Error(`API error (${res.status}): ${text.slice(0, 200)}`); }
-        if (!res.ok || !data.stripeCustomerId) throw new Error(data.error || 'Could not create billing account');
-        customerId = data.stripeCustomerId;
-      }
-
-      await proSubscriptionService.startProCheckout(customerId, plan, user.id, user.email);
+      await proSubscriptionService.startProCheckout(user.stripeCustomerId, plan, user.id, user.email);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Something went wrong. Please try again.');
       setLoading(false);

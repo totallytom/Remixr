@@ -37,21 +37,26 @@ module.exports = async (req, res) => {
     }
     userId = caller.id;
 
-    if (!customerId) {
-      return res.status(400).json({ error: 'Missing customerId' });
-    }
-    if (!isStripeId(customerId)) {
-      return res.status(400).json({ error: 'Invalid customerId' });
-    }
-
-    // Verify the customerId belongs to the authenticated user
+    // Resolve customer ID — verify supplied value, look up from DB, or create fresh
     const { data: userRow } = await supabase
       .from('users')
       .select('stripe_customer_id')
       .eq('id', caller.id)
       .maybeSingle();
-    if (userRow?.stripe_customer_id && userRow.stripe_customer_id !== customerId) {
-      return res.status(403).json({ error: 'Forbidden' });
+
+    if (customerId) {
+      if (!isStripeId(customerId)) return res.status(400).json({ error: 'Invalid customerId' });
+      if (userRow?.stripe_customer_id && userRow.stripe_customer_id !== customerId) {
+        return res.status(403).json({ error: 'Forbidden' });
+      }
+    } else if (userRow?.stripe_customer_id) {
+      customerId = userRow.stripe_customer_id;
+    } else {
+      const effectiveEmail = email || caller.email;
+      if (!effectiveEmail) return res.status(400).json({ error: 'Missing email to create billing account' });
+      const customer = await stripe.customers.create({ email: effectiveEmail, metadata: { userId: caller.id } });
+      customerId = customer.id;
+      await supabase.from('users').update({ stripe_customer_id: customerId }).eq('id', caller.id);
     }
 
     const priceId = plan === 'yearly'
@@ -99,6 +104,6 @@ module.exports = async (req, res) => {
     res.json({ url: session.url });
   } catch (error) {
     console.error('Stripe subscription session error:', error);
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: 'An unexpected error occurred. Please try again.' });
   }
 };

@@ -44,6 +44,6 @@ module.exports = async (req, res) => {
     res.json({ url: session.url });
   } catch (error) {
     console.error('Portal session error:', error);
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: 'An unexpected error occurred. Please try again.' });
   }
 };

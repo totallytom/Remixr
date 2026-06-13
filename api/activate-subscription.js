@@ -59,7 +59,7 @@ module.exports = async (req, res) => {
 
     if (upsertError) {
       console.error('pro_subscriptions upsert failed:', upsertError);
-      return res.status(500).json({ error: `Failed to save subscription: ${upsertError.message}` });
+      return res.status(500).json({ error: 'Failed to save subscription. Please try again.' });
     }
 
     const { error: tierError } = await supabase
@@ -69,12 +69,12 @@ module.exports = async (req, res) => {
 
     if (tierError) {
       console.error('users tier update failed:', tierError);
-      return res.status(500).json({ error: `Failed to update subscription tier: ${tierError.message}` });
+      return res.status(500).json({ error: 'Failed to update subscription tier. Please try again.' });
     }
 
     res.json({ success: true, plan });
   } catch (error) {
     console.error('Activate subscription error:', error);
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: 'An unexpected error occurred. Please try again.' });
   }
 };

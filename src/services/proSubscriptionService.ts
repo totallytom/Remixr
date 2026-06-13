@@ -47,7 +47,7 @@ export const proSubscriptionService = {
     return subscriptionTier === 'pro';
   },
 
-  async startProCheckout(stripeCustomerId: string, plan: 'monthly' | 'yearly', userId?: string, email?: string): Promise<void> {
+  async startProCheckout(stripeCustomerId: string | null | undefined, plan: 'monthly' | 'yearly', userId?: string, email?: string): Promise<void> {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session?.access_token) throw new Error('Not authenticated');
 
@@ -58,7 +58,7 @@ export const proSubscriptionService = {
         'Authorization': `Bearer ${session.access_token}`,
       },
       body: JSON.stringify({
-        customerId: stripeCustomerId,
+        ...(stripeCustomerId ? { customerId: stripeCustomerId } : {}),
         plan,
         userId,
         email,
@@ -69,7 +69,7 @@ export const proSubscriptionService = {
 
     const text = await response.text();
     let data: Record<string, string> = {};
-    try { data = JSON.parse(text); } catch { throw new Error(`API error (${response.status}): ${text.slice(0, 200)}`); }
+    try { data = JSON.parse(text); } catch { throw new Error('Checkout failed. Please try again.'); }
     if (data.url) {
       window.location.href = data.url;
     } else if (data.error === 'already_subscribed') {

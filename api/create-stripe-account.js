@@ -33,7 +33,7 @@ module.exports = async (req, res) => {
       .eq('id', userId);
     if (dbError) {
       console.error('Supabase DB error:', dbError);
-      return res.status(500).json({ error: dbError.message });
+      return res.status(500).json({ error: 'Failed to save account. Please try again.' });
     }
 
     // 3. Create account onboarding link
@@ -48,6 +48,6 @@ module.exports = async (req, res) => {
     res.json({ url: accountLink.url, stripeAccountId: account.id });
   } catch (error) {
     console.error('Stripe onboarding error:', error);
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: 'An unexpected error occurred. Please try again.' });
   }
 }; 

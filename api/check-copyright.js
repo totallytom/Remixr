@@ -220,7 +220,6 @@ module.exports = async (req, res) => {
     return res.status(200).json({ blocked: false });
   } catch (err) {
     console.error('check-copyright error:', err);
-    const message = err && err.message ? err.message : 'Copyright check failed. Please try again.';
-    return res.status(500).json({ error: message });
+    return res.status(500).json({ error: 'Copyright check failed. Please try again.' });
   }
 };

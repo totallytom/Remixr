@@ -13,8 +13,6 @@ import { formatDistanceToNow } from 'date-fns';
 import { supabase } from '../services/supabase';
 import { safeLog } from '../utils/debugUtils';
 import { isMusicianRole } from '../utils/userRole';
-import SubscribeButton from '../components/SubscribeButton';
-
 
 const Home: React.FC = () => {
   const { playTrack, addToQueue, player, user, setSettingsOpen, setSettingsInitialTab } = useStore();
