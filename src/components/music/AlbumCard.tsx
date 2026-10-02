@@ -51,14 +51,14 @@ const AlbumCard: React.FC<AlbumCardProps> = ({
           className="w-12 h-12 rounded-md object-cover"
         />
         <div className="flex-1 min-w-0">
-          <h3 className="text-white font-medium truncate">{album.title}</h3>
+          <h3 className="text-black font-medium truncate">{album.title}</h3>
           <p className="text-dark-400 text-sm truncate">{album.artist}</p>
         </div>
         <div className="flex items-center space-x-2">
           {onPlay && (
             <button
               onClick={() => onPlay(album)}
-              className="p-2 bg-primary-600 text-white rounded-full hover:bg-primary-700 transition-colors"
+              className="p-2 bg-primary-600 text-black rounded-full hover:bg-primary-700 transition-colors"
               title="Play album"
             >
               <Play size={16} />
@@ -69,7 +69,7 @@ const AlbumCard: React.FC<AlbumCardProps> = ({
               {onEdit && (
                 <button
                   onClick={() => onEdit(album)}
-                  className="p-2 text-dark-400 hover:text-white transition-colors"
+                  className="p-2 text-dark-400 hover:text-black transition-colors"
                   title="Edit album"
                 >
                   <Edit3 size={16} />
@@ -111,11 +111,11 @@ const AlbumCard: React.FC<AlbumCardProps> = ({
             onClick={(e) => { e.stopPropagation(); onPlay(album); }}
             className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-50 opacity-0 hover:opacity-100 transition-opacity"
           >
-            <Play size={48} className="text-white" />
+            <Play size={48} className="text-black" />
           </button>
         )}
         {album.price && (
-          <div className="absolute top-2 right-2 bg-primary-600 text-white px-2 py-1 rounded-full text-sm font-medium">
+          <div className="absolute top-2 right-2 bg-primary-600 text-black px-2 py-1 rounded-full text-sm font-medium">
             ${album.price}
           </div>
         )}
@@ -123,7 +123,7 @@ const AlbumCard: React.FC<AlbumCardProps> = ({
 
       {/* Album Info */}
       <div className="p-4">
-        <h3 className="text-white font-semibold text-lg mb-1 truncate" title={album.title}>
+        <h3 className="text-black font-semibold text-lg mb-1 truncate" title={album.title}>
           {album.title}
         </h3>
         <p className="text-dark-300 mb-2 truncate" title={album.artist}>
@@ -157,7 +157,7 @@ const AlbumCard: React.FC<AlbumCardProps> = ({
               {onEdit && (
                 <button
                   onClick={() => onEdit(album)}
-                  className="p-2 text-dark-400 hover:text-white transition-colors"
+                  className="p-2 text-dark-400 hover:text-black transition-colors"
                   title="Edit album"
                 >
                   <Edit3 size={16} />
@@ -181,7 +181,7 @@ const AlbumCard: React.FC<AlbumCardProps> = ({
       {showDeleteConfirm && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-dark-900 rounded-lg p-6 w-full max-w-md">
-            <h2 className="text-xl font-bold text-white mb-4">Delete Album</h2>
+            <h2 className="text-xl font-bold text-black mb-4">Delete Album</h2>
             <p className="text-dark-300 mb-6">
               Are you sure you want to delete "{album.title}"? This action cannot be undone and will also remove all associated tracks.
             </p>
@@ -190,14 +190,14 @@ const AlbumCard: React.FC<AlbumCardProps> = ({
               <button
                 onClick={handleDelete}
                 disabled={isDeleting}
-                className="flex-1 bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50"
+                className="flex-1 bg-red-600 text-black px-4 py-2 rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50"
               >
                 {isDeleting ? 'Deleting...' : 'Delete'}
               </button>
               <button
                 onClick={() => setShowDeleteConfirm(false)}
                 disabled={isDeleting}
-                className="flex-1 bg-dark-700 text-white px-4 py-2 rounded-lg hover:bg-dark-600 transition-colors disabled:opacity-50"
+                className="flex-1 bg-dark-700 text-black px-4 py-2 rounded-lg hover:bg-dark-600 transition-colors disabled:opacity-50"
               >
                 Cancel
               </button>

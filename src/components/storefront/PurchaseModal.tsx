@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, AlertCircle, Music, Shield, Lock, ExternalLink } from 'lucide-react';
 import { StoreListing, StorefrontService } from '../../services/storefrontService';
+import { REFUND_POLICY_SHORT, STOREFRONT_SALES_ENABLED, SALES_PAUSED_MESSAGE } from '../../config/storefrontPolicy';
 
 const LICENSE_DESCRIPTIONS: Record<string, string> = {
   personal:   'For personal, non-commercial use only.',
@@ -98,6 +99,13 @@ const PurchaseModal: React.FC<PurchaseModalProps> = ({ listing, isOpen, onClose 
                   <span className="text-xl font-bold text-black">${listing.price.toFixed(2)}</span>
                 </div>
 
+                {!STOREFRONT_SALES_ENABLED && (
+                  <div className="flex items-start gap-2 p-3 bg-yellow-500/10 border border-yellow-500/20 rounded-lg">
+                    <AlertCircle className="w-4 h-4 text-yellow-400 flex-shrink-0 mt-0.5" />
+                    <p className="text-xs text-black/70">{SALES_PAUSED_MESSAGE}</p>
+                  </div>
+                )}
+
                 {/* Error */}
                 {error && (
                   <div className="flex items-start gap-2 p-3 bg-red-500/10 border border-red-500/20 rounded-lg">
@@ -112,14 +120,14 @@ const PurchaseModal: React.FC<PurchaseModalProps> = ({ listing, isOpen, onClose 
                     type="button"
                     onClick={onClose}
                     disabled={isRedirecting}
-                    className="flex-1 py-2.5 rounded-xl text-sm font-medium text-black hover:text-white bg-white/5 hover:bg-white/10 transition-colors disabled:opacity-50"
+                    className="flex-1 py-2.5 rounded-xl text-sm font-medium text-black hover:text-black bg-white/5 hover:bg-white/10 transition-colors disabled:opacity-50"
                   >
                     Cancel
                   </button>
                   <button
                     type="button"
                     onClick={handlePay}
-                    disabled={isRedirecting}
+                    disabled={isRedirecting || !STOREFRONT_SALES_ENABLED}
                     className="flex-1 py-2.5 rounded-xl text-sm font-semibold text-black bg-primary-500 hover:bg-primary-400 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
                   >
                     {isRedirecting ? (
@@ -140,6 +148,7 @@ const PurchaseModal: React.FC<PurchaseModalProps> = ({ listing, isOpen, onClose 
                   <ExternalLink className="w-2.5 h-2.5" />
                   You'll be redirected to Stripe's secure payment page
                 </p>
+                <p className="text-center text-[10px] text-black/50">{REFUND_POLICY_SHORT}</p>
               </div>
             </div>
           </motion.div>

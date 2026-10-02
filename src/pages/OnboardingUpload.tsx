@@ -8,6 +8,7 @@ import {
 import { useStore } from '../store/useStore';
 import { useAlerts } from '../contexts/AlertContext';
 import { supabase } from '../services/supabase';
+import { requestUploadToken, confirmUpload } from '../services/api';
 import { isMusicianRole } from '../utils/userRole';
 import { scheduleRecoveryThenSignupRedirect } from '../utils/authRedirect';
 import { transcodeWavOrAiffToM4a, shouldTranscodeToM4a } from '../utils/transcodeAudio';
@@ -66,58 +67,6 @@ async function extractSample(file: File): Promise<string> {
   });
 }
 
-const UPLOAD_ERROR_MESSAGES: Record<string, string> = {
-  copyright_blocked: '',
-  token_invalid:     'Upload session expired. Please try again.',
-  token_expired:     'Upload session expired. Please try again.',
-  file_not_found:    'Upload did not complete. Please try again.',
-  file_invalid:      'The uploaded file appears to be invalid. Please try a different file.',
-  forbidden:         'Access denied.',
-};
-
-function resolveUploadError(data: any): string {
-  const code = data?.code as string | undefined;
-  if (code === 'copyright_blocked') return data?.error || 'This track cannot be uploaded due to copyright restrictions.';
-  if (code && UPLOAD_ERROR_MESSAGES[code]) return UPLOAD_ERROR_MESSAGES[code];
-  return 'Upload failed. Please try again.';
-}
-
-async function requestUploadToken(
-  file: File,
-  metadata: { title: string; artist: string },
-  sessionToken: string
-): Promise<{ signedUrl: string; token: string; path: string; uploadToken: string }> {
-  const sampleBase64 = await extractSample(file);
-  const res = await fetch('/api/request-upload-token', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${sessionToken}` },
-    body: JSON.stringify({
-      title: metadata.title, artist: metadata.artist,
-      filename: file.name, fileSize: file.size,
-      fileType: file.type || 'audio/mpeg', sampleBase64,
-    }),
-  });
-  const data = await res.json();
-  if (!res.ok) throw new Error(resolveUploadError(data));
-  return data;
-}
-
-async function confirmUpload(
-  payload: {
-    uploadToken: string; album?: string;
-    genre: string; duration: number; coverUrl: string;
-    albumId?: string; previewStartSec?: number; previewDurationSec?: number;
-  },
-  sessionToken: string
-): Promise<void> {
-  const res = await fetch('/api/confirm-upload', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${sessionToken}` },
-    body: JSON.stringify(payload),
-  });
-  const data = await res.json();
-  if (!res.ok) throw new Error(resolveUploadError(data));
-}
 
 type ReleaseType = 'single' | 'album';
 
@@ -167,14 +116,14 @@ const DropZone: React.FC<{
             <UploadCloud size={28} className={isDragging ? 'text-primary-400' : 'text-dark-400'} />
           </motion.div>
           <div className="text-center">
-            <p className="font-semibold text-white mb-1">
+            <p className="font-semibold text-black mb-1">
               {isDragging ? 'Release to add' : 'Drop your track here'}
             </p>
-            <p className="text-sm text-white/40">
+            <p className="text-sm text-black/40">
               MP3, WAV, AIFF · Max {MAX_MB} MB
             </p>
           </div>
-          <span className="text-xs px-3 py-1.5 rounded-full bg-dark-700 text-white/50">
+          <span className="text-xs px-3 py-1.5 rounded-full bg-dark-700 text-black/50">
             or click to browse
           </span>
         </button>
@@ -187,8 +136,8 @@ const DropZone: React.FC<{
                 <Music2 size={14} className="text-primary-400" />
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-sm text-white truncate">{t.file.name}</p>
-                <p className="text-xs text-white/35">
+                <p className="text-sm text-black truncate">{t.file.name}</p>
+                <p className="text-xs text-black/35">
                   {t.duration ? fmtDuration(t.duration) : '—'} · {fileSizeMB(t.file)} MB
                 </p>
               </div>
@@ -206,7 +155,7 @@ const DropZone: React.FC<{
             type="button"
             onClick={onClick}
             disabled={isTranscoding}
-            className="w-full py-2 text-xs text-white/30 hover:text-white/60 transition-colors flex items-center justify-center gap-1.5"
+            className="w-full py-2 text-xs text-black/30 hover:text-black/60 transition-colors flex items-center justify-center gap-1.5"
           >
             <UploadCloud size={12} />
             {isTranscoding ? 'Converting…' : 'Add more tracks'}
@@ -357,11 +306,12 @@ const OnboardingUpload: React.FC = () => {
         const track = files[0];
 
         // Step 1 — server copyright check + signed URL
-        const { token: supabaseToken, path, uploadToken } = await requestUploadToken(
-          track.file,
-          { title: trackTitle, artist },
-          session.access_token
-        );
+        const sampleBase64 = await extractSample(track.file);
+        const { token: supabaseToken, path, uploadToken } = await requestUploadToken({
+          title: trackTitle, artist,
+          filename: track.file.name, fileSize: track.file.size,
+          fileType: track.file.type || 'audio/mpeg', sampleBase64,
+        });
         setUploadProgress(25);
 
         // Step 2 — upload audio via signed URL
@@ -385,7 +335,7 @@ const OnboardingUpload: React.FC = () => {
         setUploadProgress(75);
 
         // Step 4 — confirm: server inserts track row
-        await confirmUpload({ uploadToken, genre, duration: track.duration, coverUrl }, session.access_token);
+        await confirmUpload({ uploadToken, genre, duration: track.duration, coverUrl });
 
       } else {
         /* Album path */
@@ -404,11 +354,12 @@ const OnboardingUpload: React.FC = () => {
         // Request signed URLs (copyright checked per track)
         const signedTokens: { signedUrl: string; token: string; path: string; uploadToken: string }[] = [];
         for (let i = 0; i < files.length; i++) {
-          signedTokens.push(await requestUploadToken(
-            files[i].file,
-            { title: files[i].title || albumTitle, artist },
-            session.access_token
-          ));
+          const sampleBase64 = await extractSample(files[i].file);
+          signedTokens.push(await requestUploadToken({
+            title: files[i].title || albumTitle, artist,
+            filename: files[i].file.name, fileSize: files[i].file.size,
+            fileType: files[i].file.type || 'audio/mpeg', sampleBase64,
+          }));
           setUploadProgress(10 + ((i + 1) / files.length) * 20);
         }
 
@@ -436,7 +387,7 @@ const OnboardingUpload: React.FC = () => {
             album: albumTitle.trim(), genre,
             duration: files[i].duration, coverUrl,
             albumId: albumData.id,
-          }, session.access_token);
+          });
           setUploadProgress(70 + ((i + 1) / files.length) * 28);
         }
       }
@@ -472,7 +423,7 @@ const OnboardingUpload: React.FC = () => {
   if (!user) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-dark-900 via-dark-800 to-primary-900 flex items-center justify-center">
-        <div className="flex flex-col items-center gap-3 text-white/40">
+        <div className="flex flex-col items-center gap-3 text-black/40">
           <Loader2 size={28} className="animate-spin" />
           <p className="text-sm">Loading…</p>
         </div>
@@ -542,7 +493,7 @@ const OnboardingUpload: React.FC = () => {
                   >
                     {/* Release type */}
                     <div>
-                      <label className="block text-sm font-medium text-white mb-3">Release type</label>
+                      <label className="block text-sm font-medium text-black mb-3">Release type</label>
                       <div className="grid grid-cols-2 gap-2">
                         {(['single', 'album'] as ReleaseType[]).map(type => (
                           <button
@@ -551,8 +502,8 @@ const OnboardingUpload: React.FC = () => {
                             onClick={() => setReleaseType(type)}
                             className={`flex items-center justify-center gap-2 py-2.5 rounded-xl border-2 text-sm font-medium transition-all ${
                               releaseType === type
-                                ? 'border-primary-500 bg-primary-500/10 text-white'
-                                : 'border-dark-600 text-dark-400 hover:border-dark-500 hover:text-white'
+                                ? 'border-primary-500 bg-primary-500/10 text-black'
+                                : 'border-dark-600 text-dark-400 hover:border-dark-500 hover:text-black'
                             }`}
                           >
                             {type === 'single' ? <Music2 size={15} /> : <Disc3 size={15} />}
@@ -565,7 +516,7 @@ const OnboardingUpload: React.FC = () => {
                     {/* Track / album title */}
                     {isAlbumMode ? (
                       <div>
-                        <label className="block text-sm font-medium text-white mb-2">
+                        <label className="block text-sm font-medium text-black mb-2">
                           Album title <span className="text-red-400">*</span>
                         </label>
                         <input
@@ -574,12 +525,12 @@ const OnboardingUpload: React.FC = () => {
                           onChange={e => setAlbumTitle(e.target.value)}
                           placeholder="Album name"
                           maxLength={100}
-                          className="w-full px-4 py-3 bg-dark-700 border border-dark-600 rounded-lg text-white placeholder-dark-400 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all"
+                          className="w-full px-4 py-3 bg-dark-700 border border-dark-600 rounded-lg text-black placeholder-dark-400 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all"
                         />
                       </div>
                     ) : (
                       <div>
-                        <label className="block text-sm font-medium text-white mb-2">
+                        <label className="block text-sm font-medium text-black mb-2">
                           Track title <span className="text-red-400">*</span>
                         </label>
                         <input
@@ -588,14 +539,14 @@ const OnboardingUpload: React.FC = () => {
                           onChange={e => setTrackTitle(e.target.value)}
                           placeholder="Track name"
                           maxLength={100}
-                          className="w-full px-4 py-3 bg-dark-700 border border-dark-600 rounded-lg text-white placeholder-dark-400 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all"
+                          className="w-full px-4 py-3 bg-dark-700 border border-dark-600 rounded-lg text-black placeholder-dark-400 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all"
                         />
                       </div>
                     )}
 
                     {/* Genre */}
                     <div>
-                      <label className="block text-sm font-medium text-white mb-2">
+                      <label className="block text-sm font-medium text-black mb-2">
                         Genre <span className="text-red-400">*</span>
                       </label>
                       <div className="flex flex-wrap gap-2">
@@ -607,7 +558,7 @@ const OnboardingUpload: React.FC = () => {
                             className={`text-xs px-3 py-1.5 rounded-full border transition-all ${
                               genre === g
                                 ? 'border-primary-500 bg-primary-500/15 text-primary-300'
-                                : 'border-dark-600 text-dark-400 hover:border-dark-500 hover:text-white'
+                                : 'border-dark-600 text-dark-400 hover:border-dark-500 hover:text-black'
                             }`}
                           >
                             {g}
@@ -618,16 +569,16 @@ const OnboardingUpload: React.FC = () => {
 
                     {/* Cover art */}
                     <div>
-                      <label className="block text-sm font-medium text-white mb-2">
+                      <label className="block text-sm font-medium text-black mb-2">
                         Cover art
                         {isAlbumMode && <span className="text-red-400"> *</span>}
-                        {!isAlbumMode && <span className="ml-1.5 text-xs font-normal text-white/30">· optional</span>}
+                        {!isAlbumMode && <span className="ml-1.5 text-xs font-normal text-black/30">· optional</span>}
                       </label>
                       {!coverPreview ? (
                         <button
                           type="button"
                           onClick={() => coverInputRef.current?.click()}
-                          className="w-full flex items-center justify-center gap-2 py-3 rounded-xl border-2 border-dashed border-dark-600 hover:border-dark-500 text-sm text-white/40 hover:text-white/70 transition-all"
+                          className="w-full flex items-center justify-center gap-2 py-3 rounded-xl border-2 border-dashed border-dark-600 hover:border-dark-500 text-sm text-black/40 hover:text-black/70 transition-all"
                         >
                           <ImageIcon size={16} />
                           {isAlbumMode ? 'Add album cover' : 'Add cover art'}
@@ -640,7 +591,7 @@ const OnboardingUpload: React.FC = () => {
                             className="w-14 h-14 rounded-lg object-cover flex-shrink-0"
                           />
                           <div className="flex-1 min-w-0">
-                            <p className="text-sm text-white truncate">{coverFile?.name}</p>
+                            <p className="text-sm text-black truncate">{coverFile?.name}</p>
                             <button
                               type="button"
                               onClick={() => { setCoverFile(null); setCoverPreview(null); }}
@@ -668,7 +619,7 @@ const OnboardingUpload: React.FC = () => {
                     {/* Progress bar */}
                     {isUploading && (
                       <div className="space-y-1.5">
-                        <div className="flex justify-between text-xs text-white/40">
+                        <div className="flex justify-between text-xs text-black/40">
                           <span>Uploading…</span><span>{uploadProgress}%</span>
                         </div>
                         <div className="h-1.5 bg-dark-700 rounded-full overflow-hidden">
@@ -697,7 +648,7 @@ const OnboardingUpload: React.FC = () => {
                         disabled={isUploading || !canSubmit}
                         whileHover={{ scale: isUploading || !canSubmit ? 1 : 1.02 }}
                         whileTap={{ scale: isUploading || !canSubmit ? 1 : 0.98 }}
-                        className="w-full flex items-center justify-center gap-2 py-3.5 rounded-xl bg-gradient-to-r from-primary-600 to-secondary-600 text-white font-semibold disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+                        className="w-full flex items-center justify-center gap-2 py-3.5 rounded-xl bg-gradient-to-r from-primary-600 to-secondary-600 text-black font-semibold disabled:opacity-40 disabled:cursor-not-allowed transition-all"
                       >
                         {isUploading ? (
                           <><Loader2 size={16} className="animate-spin" /> Publishing…</>
@@ -712,14 +663,14 @@ const OnboardingUpload: React.FC = () => {
 
               {/* Skip */}
               {!hasFiles && (
-                <p className="text-center text-xs text-white/20 mt-2">
+                <p className="text-center text-xs text-black/20 mt-2">
                   <button
                     type="button"
                     onClick={() =>
                       navigate(
                         `/profile/${user.username?.trim() ? encodeURIComponent(user.username.trim()) : user.id}`,
                       )}
-                    className="hover:text-white/45 transition-colors underline underline-offset-2"
+                    className="hover:text-black/45 transition-colors underline underline-offset-2"
                   >
                     Skip for now — go to my profile
                   </button>

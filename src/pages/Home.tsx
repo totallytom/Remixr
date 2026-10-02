@@ -2,16 +2,14 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { motion } from 'framer-motion';
-import { Play, Bookmark, Share2, Clock, TrendingUp, Loader, Zap, Star, Users, Music, List, MessageCircle, X, CreditCard, Lock, CheckCircle, AlertCircle, ThumbsUp, FolderOpen, Search } from 'lucide-react';
+import { Play, Clock, TrendingUp, Loader, Music, List, ThumbsUp, FolderOpen, Search /* , ShoppingBag — Storefront paused */ } from 'lucide-react';
 import { useStore } from '../store/useStore';
 import TrackCard from '../components/music/TrackCard';
-import UserCard from '../components/social/UserCard';
-import { Track, User } from '../store/useStore';
+import { Track } from '../store/useStore';
 import { MusicService } from '../services/musicService';
 import { AlbumService, Album } from '../services/albumService';
 import { formatDistanceToNow } from 'date-fns';
 import { supabase } from '../services/supabase';
-import { safeLog } from '../utils/debugUtils';
 import { isMusicianRole } from '../utils/userRole';
 
 const Home: React.FC = () => {
@@ -20,20 +18,8 @@ const Home: React.FC = () => {
   const [recommendedTracks, setRecommendedTracks] = useState<Track[]>([]);
   const [recentTracks, setRecentTracks] = useState<{ track: Track, playedAt: string }[]>([]);
   const [popularTracks, setPopularTracks] = useState<Track[]>([]);
-  const [publishedTracks, setPublishedTracks] = useState<Track[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isLoadingRecommendations, setIsLoadingRecommendations] = useState(true);
-  const [isLoadingPublished, setIsLoadingPublished] = useState(true);
-  const [showBoostModal, setShowBoostModal] = useState(false);
-  const [showPaymentModal, setShowPaymentModal] = useState(false);
-  const [paymentStep, setPaymentStep] = useState<'details' | 'processing' | 'success' | 'error'>('details');
-  const [cardNumber, setCardNumber] = useState('');
-  const [expiryDate, setExpiryDate] = useState('');
-  const [cvv, setCvv] = useState('');
-  const [cardholderName, setCardholderName] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [mostPlayedTracks, setMostPlayedTracks] = useState<{ track: Track, playCount: number }[]>([]);
   const [publicFeed, setPublicFeed] = useState<Track[]>([]); // NEW: other users' public tracks
   const [topChartsTracks, setTopChartsTracks] = useState<{ track: Track, likes: number }[]>([]);
   const [isLoadingTopCharts, setIsLoadingTopCharts] = useState(false);
@@ -61,10 +47,10 @@ const Home: React.FC = () => {
           { data: topChartsData, error: topChartsError },
           { data: publicData, error: publicErr },
         ] = await Promise.all([
-          supabase.from('tracks').select('id, title, artist, album, cover, genre, audio_url, duration, price, created_at').limit(8).order('created_at', { ascending: false }),
+          supabase.from('tracks').select('id, title, artist, album, cover, genre, audio_url, duration, license_type, allow_remix, remix_parent_id, user_id, price, created_at').limit(8).order('created_at', { ascending: false }),
           supabase.rpc('get_popular_tracks', { limit_count: 4 }),
-          supabase.from('tracks').select('id, title, artist, album, cover, genre, audio_url, duration, price, likes, liked_by').order('likes', { ascending: false, nullsFirst: false }).limit(10),
-          supabase.from('tracks').select('id, title, artist, album, cover, genre, audio_url, duration, price, created_at').order('created_at', { ascending: false }).limit(12),
+          supabase.from('tracks').select('id, title, artist, album, cover, genre, audio_url, duration, license_type, allow_remix, remix_parent_id, user_id, price, likes, liked_by').order('likes', { ascending: false, nullsFirst: false }).limit(10),
+          supabase.from('tracks').select('id, title, artist, album, cover, genre, audio_url, duration, license_type, allow_remix, remix_parent_id, user_id, price, created_at').order('created_at', { ascending: false }).limit(12),
         ]);
 
         if (cancelled) return;
@@ -83,6 +69,10 @@ const Home: React.FC = () => {
             cover: t.cover,
             genre: t.genre,
             audioUrl: t.audio_url,
+            licenseType: t.license_type,
+            allowRemix: t.allow_remix,
+            remixParentId: t.remix_parent_id,
+            userId: t.user_id,
             price: t.price || 0,
             boosted: false,
             createdAt: t.created_at ? new Date(t.created_at) : undefined,
@@ -103,6 +93,10 @@ const Home: React.FC = () => {
             cover: t.cover,
             genre: t.genre,
             audioUrl: t.audio_url,
+            licenseType: t.license_type,
+            allowRemix: t.allow_remix,
+            remixParentId: t.remix_parent_id,
+            userId: t.user_id,
             price: t.price || 0,
             boosted: false,
             createdAt: t.created_at ? new Date(t.created_at) : undefined,
@@ -126,6 +120,10 @@ const Home: React.FC = () => {
                   cover: t.cover,
                   genre: t.genre,
                   audioUrl: t.audio_url,
+                  licenseType: t.license_type,
+                  allowRemix: t.allow_remix,
+                  remixParentId: t.remix_parent_id,
+                  userId: t.user_id,
                   price: t.price || 0,
                   boosted: false
                 },
@@ -150,6 +148,10 @@ const Home: React.FC = () => {
             cover: t.cover,
             genre: t.genre,
             audioUrl: t.audio_url,
+            licenseType: t.license_type,
+            allowRemix: t.allow_remix,
+            remixParentId: t.remix_parent_id,
+            userId: t.user_id,
             price: t.price || 0,
             boosted: false,
             createdAt: t.created_at ? new Date(t.created_at) : undefined,
@@ -177,9 +179,6 @@ const Home: React.FC = () => {
   useEffect(() => {
     if (!user) {
       setRecentTracks([]);
-      setMostPlayedTracks([]);
-      setPublishedTracks([]);
-      setIsLoadingPublished(false);
       return;
     }
 
@@ -187,102 +186,51 @@ const Home: React.FC = () => {
 
     const loadUserData = async () => {
       try {
-        setIsLoadingPublished(true);
-
-        const [
-          { data: playHistory, error: playHistoryError },
-          { data: publishedData, error: publishedError },
-        ] = await Promise.all([
-          supabase.from('user_play_history').select(`played_at, tracks:track_id (id, title, artist, album, cover, genre, audio_url, duration)`).eq('user_id', user.id).order('played_at', { ascending: false }).limit(50),
-          supabase.from('tracks').select('id, title, artist, album, cover, genre, audio_url, duration, price').eq('user_id', user.id).order('created_at', { ascending: false }).limit(4),
-        ]);
+        const { data: playHistory, error: playHistoryError } = await supabase
+          .from('user_play_history')
+          .select(`played_at, tracks:track_id (id, title, artist, album, cover, genre, audio_url, duration, license_type, allow_remix, remix_parent_id, user_id)`)
+          .eq('user_id', user.id)
+          .order('played_at', { ascending: false })
+          .limit(50);
 
         if (cancelled) return;
 
-        // Play history
         if (playHistoryError) {
           console.error('Error fetching playHistory:', playHistoryError);
-        } else {
-          let uniqueRecent: { track: Track, playedAt: string }[] = [];
-          const seen = new Set();
-          for (const entry of playHistory || []) {
-            const t = entry.tracks;
-            if (t && !seen.has(t.id)) {
-              uniqueRecent.push({
-                track: {
-                  id: t.id,
-                  title: t.title,
-                  artist: t.artist,
-                  album: t.album,
-                  duration: t.duration ?? 0,
-                  cover: t.cover,
-                  genre: t.genre,
-                  audioUrl: t.audio_url,
-                  boosted: false
-                },
-                playedAt: entry.played_at,
-              });
-              seen.add(t.id);
-            }
-            if (uniqueRecent.length >= 8) break;
-          }
-          setRecentTracks(uniqueRecent);
-
-          const playCountMap = new Map<string, { track: Track, playCount: number }>();
-          for (const entry of playHistory || []) {
-            const t = entry.tracks;
-            if (t) {
-              const id = t.id;
-              if (!playCountMap.has(id)) {
-                playCountMap.set(id, {
-                  track: {
-                    id: t.id,
-                    title: t.title,
-                    artist: t.artist,
-                    album: t.album,
-                    duration: t.duration ?? 0,
-                    cover: t.cover,
-                    genre: t.genre,
-                    audioUrl: t.audio_url,
-                    boosted: false
-                  },
-                  playCount: 1,
-                });
-              } else {
-                playCountMap.get(id)!.playCount += 1;
-              }
-            }
-          }
-          setMostPlayedTracks(
-            Array.from(playCountMap.values()).sort((a, b) => b.playCount - a.playCount).slice(0, 8)
-          );
+          return;
         }
 
-        // Published tracks
-        if (publishedError) {
-          console.error('Error fetching published tracks:', publishedError);
-          setPublishedTracks([]);
-        } else {
-          setPublishedTracks((publishedData || []).map(t => ({
-            id: t.id,
-            title: t.title,
-            artist: t.artist,
-            album: t.album,
-            duration: t.duration || 0,
-            cover: t.cover,
-            genre: t.genre,
-            audioUrl: t.audio_url,
-            price: t.price || 0,
-            boosted: false
-          })));
+        let uniqueRecent: { track: Track, playedAt: string }[] = [];
+        const seen = new Set();
+        for (const entry of playHistory || []) {
+          const t = entry.tracks;
+          if (t && !seen.has(t.id)) {
+            uniqueRecent.push({
+              track: {
+                id: t.id,
+                title: t.title,
+                artist: t.artist,
+                album: t.album,
+                duration: t.duration ?? 0,
+                cover: t.cover,
+                genre: t.genre,
+                audioUrl: t.audio_url,
+                licenseType: t.license_type,
+                allowRemix: t.allow_remix,
+                remixParentId: t.remix_parent_id,
+                userId: t.user_id,
+                boosted: false
+              },
+              playedAt: entry.played_at,
+            });
+            seen.add(t.id);
+          }
+          if (uniqueRecent.length >= 8) break;
         }
+        setRecentTracks(uniqueRecent);
       } catch (error) {
         console.error('Failed to load user home data:', error);
         setRecentTracks([]);
-        setMostPlayedTracks([]);
-        setPublishedTracks([]);
-      } finally {
-        if (!cancelled) setIsLoadingPublished(false);
       }
     };
 
@@ -315,14 +263,6 @@ const Home: React.FC = () => {
     navigate(`/albums/${albumId}`);
   };
 
-  // Place this at the top level, not inside return/JSX!
-  useEffect(() => {
-    try {
-      // @ts-ignore
-      (window.adsbygoogle = window.adsbygoogle || []).push({});
-    } catch (e) {}
-  }, []);
-
   const handlePlayTrack = (track: Track) => {
     playTrack(track);
     if (user) {
@@ -340,109 +280,12 @@ const Home: React.FC = () => {
     addToQueue(track);
   };
 
-  const formatCardNumber = (value: string) => {
-    const v = value.replace(/\s+/g, '').replace(/[^0-9]/gi, '');
-    const matches = v.match(/\d{4,16}/g);
-    const match = matches?.[0] ?? '';
-    const parts = [];
-    for (let i = 0, len = match.length; i < len; i += 4) {
-      parts.push(match.substring(i, i + 4));
-    }
-    if (parts.length) {
-      return parts.join(' ');
-    } else {
-      return v;
-    }
-  };
-
-  const formatExpiryDate = (value: string) => {
-    const v = value.replace(/\s+/g, '').replace(/[^0-9]/gi, '');
-    if (v.length >= 2) {
-      return v.substring(0, 2) + '/' + v.substring(2, 4);
-    }
-    return v;
-  };
-
-  const handlePaymentSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
-    setError(null);
-    setPaymentStep('processing');
-
-    try {
-      // Simulate payment processing
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      
-      // Here you would integrate with your payment service
-      // For now, we'll simulate a successful payment
-      setPaymentStep('success');
-      
-      // Close modals after success
-      setTimeout(() => {
-        setShowPaymentModal(false);
-        setPaymentStep('details');
-        setCardNumber('');
-        setExpiryDate('');
-        setCvv('');
-        setCardholderName('');
-      }, 3000);
-      
-    } catch (err) {
-      setPaymentStep('error');
-      setError(err instanceof Error ? err.message : 'Payment failed. Please try again.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Get trending users from Supabase
-  const [trendingUsers, setTrendingUsers] = useState<User[]>([]);
-
-  // Load trending users
-  useEffect(() => {
-    const loadTrendingUsers = async () => {
-      try {
-        const { data: users, error } = await supabase
-          .from('users')
-          .select('*')
-          .order('followers', { ascending: false })
-          .limit(3);
-
-        if (error) {
-          console.error('Error fetching trending users:', error);
-          setTrendingUsers([]);
-          return;
-        }
-
-        setTrendingUsers(users.map(u => ({
-          id: u.id,
-          username: u.username,
-          email: u.email,
-          avatar: u.avatar,
-          followers: u.followers || 0,
-          following: u.following || 0,
-          role: u.role || 'consumer',
-          isVerified: u.is_verified || false,
-          isPrivate: u.is_private || false,
-          artistName: u.artist_name || u.username,
-          bio: u.bio || '',
-          genres: u.genres || [],
-        })));
-      } catch (error) {
-        console.error('Failed to load trending users:', error);
-        setTrendingUsers([]);
-      }
-    };
-
-    loadTrendingUsers();
-  }, []);
-
   if (isLoading) {
     return (
       <div className="p-4 sm:p-6 flex items-center justify-center min-h-[50vh] sm:min-h-screen">
         <div className="flex items-center space-x-2">
           <Loader className="animate-spin text-primary-400" size={24} />
-          <span className="text-white text-sm sm:text-base">{t('home.loading')}</span>
+          <span className="text-black text-sm sm:text-base">{t('home.loading')}</span>
         </div>
       </div>
     );
@@ -451,39 +294,50 @@ const Home: React.FC = () => {
   return (
     <div className="px-3 py-4 sm:px-5 sm:py-5 md:px-6 md:py-6 lg:px-8 space-y-6 sm:space-y-7 md:space-y-8 w-full min-w-0 box-border">
 
-      {/* Remixr Logo Header */}
+      {/* Re-Mixed Logo Header */}
       <div className="flex items-center gap-3">
         <img
           src="/logo/logo.png"
-          alt="Remixr"
+          alt="Re-Mixed"
           className="h-10 sm:h-12 w-10 sm:w-12 object-cover rounded-full"
         />
-        <h1>Remixr</h1>
-        <button
-          onClick={() => navigate('/search')}
-          className="lg:hidden ml-auto flex items-center justify-center w-10 h-10 rounded-xl text-white/70 hover:text-white hover:bg-dark-700 active:scale-95 transition-all duration-200"
-          aria-label="Search"
-        >
-          <Search size={22} strokeWidth={2} />
-        </button>
+        <h1>Re-Mixed</h1>
+        <div className="ml-auto flex items-center gap-2">
+          <button
+            onClick={() => navigate('/search')}
+            className="flex items-center justify-center w-10 h-10 rounded-xl text-black/70 hover:text-black hover:bg-dark-700 active:scale-95 transition-all duration-200"
+            aria-label="Search"
+          >
+            <Search size={22} strokeWidth={2} />
+          </button>
+          {/* Storefront paused — link hidden until sales reopen.
+          <button
+            onClick={() => navigate('/storefront')}
+            className="flex items-center justify-center w-10 h-10 rounded-xl text-black/70 hover:text-black hover:bg-dark-700 active:scale-95 transition-all duration-200"
+            aria-label="Storefront"
+          >
+            <ShoppingBag size={22} strokeWidth={2} />
+          </button>
+          */}
+        </div>
       </div>
 
       {/* Pro banner — upgrade CTA for free users, status for pro users */}
       {user && (
-        user.subscriptionTier === 'pro' ? (
+        user.subscriptionTier === 'artist' ? (
           <button
             type="button"
             onClick={() => { setSettingsInitialTab('pro'); setSettingsOpen(true); }}
-            className="w-full flex items-center justify-between gap-3 px-4 py-3 rounded-2xl bg-gradient-to-r from-yellow-500/15 to-yellow-600/5 border border-yellow-500/40 hover:border-yellow-500/70 hover:from-yellow-500/20 transition-all text-left"
+            className="w-full flex items-center justify-between gap-3 px-4 py-3 rounded-2xl bg-gradient-to-r from-yellow-500/15 to-yellow-600/5 border border-yellow-500/40 hover:border-yellow-500/70 hover:from-yellow-500/20 shadow-md transition-all text-left"
           >
             <div className="flex items-center gap-3 min-w-0">
               <span className="text-xl flex-shrink-0">★</span>
               <div className="min-w-0">
-                <p className="text-sm font-semibold text-yellow-400 leading-tight">Subscribed to Remixr Pro!</p>
-                <p className="text-xs text-white/40 truncate mt-0.5">Unlimited uploads · Priority Discover · Analytics</p>
+                <p className="text-sm font-semibold text-black leading-tight">Subscribed to Re-Mixed Pro!</p>
+                <p className="text-xs text-black/40 truncate mt-0.5">Unlimited uploads · Priority Discover · Analytics</p>
               </div>
             </div>
-            <span className="flex-shrink-0 text-xs font-bold text-yellow-400 bg-yellow-500/20 border border-yellow-500/30 px-2.5 py-1 rounded-full whitespace-nowrap">
+            <span className="flex-shrink-0 text-xs font-bold text-black bg-yellow-500/20 border border-yellow-500/30 px-2.5 py-1 rounded-full whitespace-nowrap">
               Manage subscription
             </span>
           </button>
@@ -491,13 +345,13 @@ const Home: React.FC = () => {
           <button
             type="button"
             onClick={() => navigate('/upgrade')}
-            className="w-full flex items-center justify-between gap-3 px-4 py-3 rounded-2xl bg-gradient-to-r from-yellow-500/10 to-yellow-600/5 border border-yellow-500/30 hover:border-yellow-500/60 hover:from-yellow-500/15 transition-all text-left"
+            className="w-full flex items-center justify-between gap-3 px-4 py-3 rounded-2xl bg-gradient-to-r from-yellow-500/10 to-yellow-600/5 border border-yellow-500/30 hover:border-yellow-500/60 hover:from-yellow-500/15 shadow-md transition-all text-left"
           >
             <div className="flex items-center gap-3 min-w-0">
               <span className="text-xl flex-shrink-0">★</span>
               <div className="min-w-0">
-                <p className="text-sm font-semibold text-yellow-400 leading-tight">Unlock Remixr Pro</p>
-                <p className="text-xs text-white/40 truncate mt-0.5">Unlimited uploads · Priority Discover · Analytics</p>
+                <p className="text-sm font-semibold text-yellow-400 leading-tight">Unlock Re-Mixed Pro</p>
+                <p className="text-xs text-black/40 truncate mt-0.5">Unlimited uploads · Priority Discover · Analytics</p>
               </div>
             </div>
             <span className="flex-shrink-0 text-xs font-bold text-yellow-400 bg-yellow-500/20 border border-yellow-500/30 px-2.5 py-1 rounded-full whitespace-nowrap">
@@ -512,7 +366,7 @@ const Home: React.FC = () => {
         <motion.section
           initial={{ opacity: 0, y: -8 }}
           animate={{ opacity: 1, y: 0 }}
-          className="lg:hidden rounded-2xl overflow-hidden relative border border-dark-700"
+          className="lg:hidden rounded-2xl overflow-hidden relative border border-dark-700 shadow-lg"
         >
           {/* Blurred album art background */}
           <div
@@ -536,11 +390,11 @@ const Home: React.FC = () => {
               />
             </button>
             <div className="flex-1 min-w-0">
-              <p className="text-[10px] font-semibold text-white/50 uppercase tracking-widest mb-0.5">
+              <p className="text-[10px] font-semibold text-black/50 uppercase tracking-widest mb-0.5">
                 {player.isPlaying ? t('home.nowPlaying') : t('home.paused')}
               </p>
-              <p className="text-white font-bold truncate">{player.currentTrack.title}</p>
-              <p className="text-white/60 text-sm truncate">{player.currentTrack.artist}</p>
+              <p className="text-black font-bold truncate">{player.currentTrack.title}</p>
+              <p className="text-black/60 text-sm truncate">{player.currentTrack.artist}</p>
             </div>
           </div>
         </motion.section>
@@ -565,10 +419,10 @@ const Home: React.FC = () => {
               <Music size={22} strokeWidth={2} />
             </div>
             <div>
-              <h2 className="text-xl sm:text-2xl font-bold font-kyobo bg-gradient-to-r from-white via-white to-dark-300 bg-clip-text text-transparent">
+              <h2 className="text-xl sm:text-2xl font-bold font-kyobo text-black">
                 {t('home.recentDrops')}
               </h2>
-              <h3 className="text-white text-xs sm:text-sm mt-0.5">
+              <h3 className="text-black text-xs sm:text-sm mt-0.5">
                 {t('home.recentDropsSubtitle')}
               </h3>
             </div>
@@ -614,7 +468,7 @@ const Home: React.FC = () => {
           transition={{ duration: 0.4 }}
           className="mb-8"
         >
-          <h2 className="text-xl lg:text-2xl font-bold text-white mb-4 flex items-center font-kyobo">
+          <h2 className="text-xl lg:text-2xl font-bold text-black mb-4 flex items-center font-kyobo">
             <FolderOpen className="mr-2 text-amber-400" />
             {t('home.topAlbumChart')}
           </h2>
@@ -625,11 +479,11 @@ const Home: React.FC = () => {
                 key={album.id}
                 type="button"
                 onClick={() => handleAlbumClick(album.id)}
-                className="group text-left rounded-xl overflow-hidden bg-dark-800 border border-dark-600 hover:border-amber-500/50 hover:bg-dark-700 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-amber-500/50 focus:ring-offset-2 focus:ring-offset-dark-900"
+                className="group text-left rounded-xl overflow-hidden bg-dark-800 border border-dark-600 hover:border-amber-500/50 hover:bg-dark-700 shadow-sm hover:shadow-md transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-amber-500/50 focus:ring-offset-2 focus:ring-offset-dark-900"
               >
                 {/* Folder-style: tab + body */}
                 <div className="relative pt-2 px-2">
-                  <div className="h-2 w-12 rounded-t bg-dark-600 group-hover:bg-amber-600/30 transition-colors" aria-hidden />
+                  <div className="h-2 w-12 rounded-t bg-white group-hover:bg-amber-600/30 transition-colors" aria-hidden />
                 </div>
                 <div className="relative aspect-square -mt-1 mx-2 mb-2 rounded-lg overflow-hidden bg-dark-700">
                   <img
@@ -638,14 +492,14 @@ const Home: React.FC = () => {
                     className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
                   />
                   <div className="absolute inset-0 bg-gradient-to-t from-black/70 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end justify-center pb-2">
-                    <span className="flex items-center gap-1.5 text-white text-sm font-medium">
+                    <span className="flex items-center gap-1.5 text-black text-sm font-medium">
                       <Play size={18} fill="currentColor" />
                       {t('home.openAlbum')}
                     </span>
                   </div>
                 </div>
                 <div className="px-3 pb-3">
-                  <h3 className="text-white font-semibold truncate" title={album.title}>{album.title}</h3>
+                  <h3 className="text-black font-semibold truncate" title={album.title}>{album.title}</h3>
                   <p className="text-dark-400 text-xs truncate">{album.artist}</p>
                   <p className="text-dark-500 text-xs mt-0.5">{t('home.tracks', { count: album.trackCount ?? 0 })}</p>
                 </div>
@@ -660,7 +514,7 @@ const Home: React.FC = () => {
         <div className="flex items-center justify-between mb-5">
           <div className="flex items-center space-x-3">
             <TrendingUp className="text-primary-400" size={24} />
-            <h2 className="text-2xl font-bold text-white font-kyobo">{t('home.top10Charts')}</h2>
+            <h2 className="text-2xl font-bold text-black font-kyobo">{t('home.top10Charts')}</h2>
           </div>
           {isLoadingTopCharts && (
             <Loader className="animate-spin text-primary-400" size={20} />
@@ -671,7 +525,7 @@ const Home: React.FC = () => {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ delay: 0.1 }}
-            className="bg-dark-800 rounded-xl p-6 space-y-3"
+            className="space-y-3"
           >
             {topChartsTracks.map(({ track, likes }, index) => (
               <motion.div
@@ -679,22 +533,22 @@ const Home: React.FC = () => {
                 initial={{ opacity: 0, x: -20 }}
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ delay: 0.1 + index * 0.05 }}
-                className="flex items-center space-x-4 p-4 bg-dark-700 rounded-lg hover:bg-dark-600 transition-colors cursor-pointer group"
+                className="flex items-center space-x-4 p-4 rounded-lg bg-white hover:bg-green-300 shadow-sm hover:shadow-md transition-shadow cursor-pointer group"
                 onClick={() => handlePlayTrack(track)}
               >
                 {/* Rank Number */}
                 <div className={`flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center font-bold text-lg ${
-                  index === 0 
-                    ? 'bg-gradient-to-r from-yellow-400 to-yellow-600 text-black' 
+                  index === 0
+                    ? 'bg-gradient-to-r from-yellow-400 to-yellow-600 text-black'
                     : index === 1
                     ? 'bg-gradient-to-r from-gray-300 to-gray-400 text-black'
                     : index === 2
-                    ? 'bg-gradient-to-r from-orange-400 to-orange-600 text-white'
-                    : 'bg-dark-600 text-white'
+                    ? 'bg-gradient-to-r from-orange-400 to-orange-600 text-black'
+                    : 'bg-gray-200 text-black'
                 }`}>
                   {index + 1}
                 </div>
-                
+
                 {/* Track Cover */}
                 <div className="flex-shrink-0 w-16 h-16 rounded-lg overflow-hidden">
                   <img
@@ -708,36 +562,36 @@ const Home: React.FC = () => {
                       const parent = target.parentElement;
                       if (parent && !parent.querySelector('.fallback-cover-charts')) {
                         const fallback = document.createElement('div');
-                        fallback.className = 'fallback-cover-charts w-full h-full flex items-center justify-center bg-dark-600 text-2xl';
+                        fallback.className = 'fallback-cover-charts w-full h-full flex items-center justify-center bg-gray-200 text-2xl';
                         fallback.textContent = '🎵';
                         parent.appendChild(fallback);
                       }
                     }}
                   />
                 </div>
-                
+
                 {/* Track Info */}
                 <div className="flex-1 min-w-0">
-                  <p className="text-base font-semibold text-white truncate font-kotra">
+                  <p className="text-base font-semibold text-black truncate font-kotra">
                     {track.title}
                   </p>
-                  <p className="text-sm text-dark-400 truncate">
+                  <p className="text-sm text-gray-500 truncate">
                     {track.artist} {track.album && `• ${track.album}`}
                   </p>
                   {track.genre && (
                     <p className="text-xs text-primary-400 truncate mt-1">{track.genre}</p>
                   )}
                 </div>
-                
+
                 {/* Likes Count */}
-                <div className="flex-shrink-0 flex items-center space-x-2 px-3 py-1.5 bg-dark-600 rounded-full">
+                <div className="flex-shrink-0 flex items-center space-x-2 px-3 py-1.5 bg-gray-100 rounded-full">
                   <ThumbsUp size={16} className="text-primary-400" fill="currentColor" />
-                  <span className="text-sm font-semibold text-white">{likes}</span>
+                  <span className="text-sm font-semibold text-black">{likes}</span>
                 </div>
-                
+
                 {/* Play Button */}
                 <button
-                  className="flex-shrink-0 p-3 rounded-full bg-primary-600 text-white hover:bg-primary-700 transition-colors opacity-0 group-hover:opacity-100"
+                  className="flex-shrink-0 p-3 rounded-full bg-primary-600 text-black hover:bg-primary-700 transition-colors opacity-0 group-hover:opacity-100"
                   onClick={(e) => {
                     e.stopPropagation();
                     handlePlayTrack(track);
@@ -749,21 +603,21 @@ const Home: React.FC = () => {
             ))}
           </motion.div>
         ) : !isLoadingTopCharts ? (
-          <div className="bg-dark-800 rounded-xl p-6 sm:p-8 text-center">
-            <p className="text-dark-400 text-sm sm:text-base">{t('home.noTracksWithLikes')}</p>
+          <div className="bg-white rounded-xl p-6 sm:p-8 text-center shadow-sm">
+            <p className="text-gray-500 text-sm sm:text-base">{t('home.noTracksWithLikes')}</p>
           </div>
         ) : null}
       </section>
       {/* Recommended Tracks - horizontal side scroll */}
       <section>
         <div className="flex items-center justify-between mb-4 sm:mb-5 gap-2">
-          <h2 className="text-xl sm:text-2xl font-bold text-white font-kyobo truncate">{t('home.recommendedForYou')}</h2>
+          <h2 className="text-xl sm:text-2xl font-bold text-black font-kyobo truncate">{t('home.recommendedForYou')}</h2>
           {isLoadingRecommendations && (
             <Loader className="animate-spin text-primary-400 flex-shrink-0" size={20} />
           )}
         </div>
         {recommendedTracks.length === 0 && !isLoadingRecommendations ? (
-          <div className="bg-dark-800 rounded-xl p-6 text-center">
+          <div className="bg-dark-800 rounded-xl p-6 text-center shadow-sm">
             <p className="text-dark-400 text-sm">{t('home.noTracksAvailable')}</p>
           </div>
         ) : (
@@ -801,7 +655,7 @@ const Home: React.FC = () => {
       {recentTracks.length > 0 && (
         <section>
           <div className="flex items-center justify-between mb-4 sm:mb-6 gap-2">
-            <h2 className="text-xl sm:text-2xl font-bold text-white font-kyobo truncate">{t('home.recentlyPlayed')}</h2>
+            <h2 className="text-xl sm:text-2xl font-bold text-black font-kyobo truncate">{t('home.recentlyPlayed')}</h2>
             <Clock className="text-dark-400 flex-shrink-0 w-5 h-5 sm:w-5 sm:h-5" size={20} />
           </div>
           <motion.div
@@ -816,7 +670,7 @@ const Home: React.FC = () => {
                 initial={{ opacity: 0, x: -20 }}
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ delay: 0.7 + index * 0.1 }}
-                className="flex items-center gap-3 sm:gap-4 p-3 sm:p-4 bg-dark-800 rounded-lg hover:bg-dark-700 transition-colors cursor-pointer"
+                className="flex items-center gap-3 sm:gap-4 p-3 sm:p-4 bg-white rounded-lg hover:bg-green-300 shadow-sm hover:shadow-md transition-shadow cursor-pointer"
                 onClick={() => handlePlayTrack(track)}
               >
                 <img
@@ -850,7 +704,7 @@ const Home: React.FC = () => {
                 </div>
                 <div className="flex items-center gap-1 sm:gap-2 flex-shrink-0">
                   <button 
-                    className="p-1.5 sm:p-2 rounded-full bg-primary-600 text-white hover:bg-primary-700 transition-colors"
+                    className="p-1.5 sm:p-2 rounded-full bg-primary-600 text-black hover:bg-primary-700 transition-colors"
                     onClick={(e) => {
                       e.stopPropagation();
                       handlePlayTrack(track);
@@ -859,7 +713,7 @@ const Home: React.FC = () => {
                     <Play size={14} className="sm:w-4 sm:h-4" />
                   </button>
                   <button 
-                    className="p-1.5 sm:p-2 rounded-full text-dark-400 hover:text-white transition-colors"
+                    className="p-1.5 sm:p-2 rounded-full text-dark-400 hover:text-black transition-colors"
                     onClick={(e) => {
                       e.stopPropagation();
                       handleAddToQueue(track);
@@ -877,11 +731,11 @@ const Home: React.FC = () => {
       {/* Popular Tracks - horizontal side scroll */}
       <section>
         <div className="flex items-center justify-between mb-4 sm:mb-6 gap-2">
-          <h2 className="text-xl sm:text-2xl font-bold text-white font-kyobo truncate">{t('home.popularTracks')}</h2>
+          <h2 className="text-xl sm:text-2xl font-bold text-black font-kyobo truncate">{t('home.popularTracks')}</h2>
           <TrendingUp className="text-primary-400 flex-shrink-0 w-5 h-5 sm:w-6 sm:h-6" size={24} />
         </div>
         {popularTracks.length === 0 ? (
-          <div className="bg-dark-800 rounded-xl p-6 text-center">
+          <div className="bg-dark-800 rounded-xl p-6 text-center shadow-sm">
             <p className="text-dark-400 text-sm">{t('home.noPopularTracks')}</p>
           </div>
         ) : (

@@ -159,63 +159,6 @@ export class MusicService {
     }
   }
 
-  /** Tracks that were forked/remixed from this track (requires remix_parent_id column). */
-  static async getRemixesOfTrack(trackId: string): Promise<Track[]> {
-    try {
-      const { data, error } = await supabase
-        .from('tracks')
-        .select('*')
-        .eq('remix_parent_id', trackId)
-        .order('created_at', { ascending: false });
-
-      if (error) {
-        if (error.message?.includes('remix_parent_id') || error.code === '42703') return [];
-        throw new Error(error.message);
-      }
-      return (data || []).map((t) => this.transformTrack(t));
-    } catch {
-      return [];
-    }
-  }
-
-  /** Version history: current track as single entry; can be extended later with version table. */
-  static async getVersionHistory(trackId: string): Promise<Track[]> {
-    try {
-      const track = await this.getTrackById(trackId);
-      return [track];
-    } catch {
-      return [];
-    }
-  }
-
-  /** Create a remix (fork) of a track: new track with same audio/cover, linked to parent. */
-  static async createRemix(parentTrack: Track, userId: string, artistName: string): Promise<Track> {
-    try {
-      const { data, error } = await supabase
-        .from('tracks')
-        .insert({
-          title: `Remix of ${parentTrack.title}`,
-          artist: artistName,
-          album: parentTrack.album,
-          duration: parentTrack.duration,
-          cover: parentTrack.cover,
-          audio_url: parentTrack.audioUrl,
-          genre: parentTrack.genre,
-          user_id: userId,
-          remix_parent_id: parentTrack.id,
-          version_label: 'remix',
-          remix_open: true,
-        })
-        .select()
-        .single();
-
-      if (error) throw new Error(error.message);
-      return this.transformTrack(data);
-    } catch (error) {
-      throw new Error(error instanceof Error ? error.message : 'Failed to create remix');
-    }
-  }
-
   static async getUserTracks(userId: string): Promise<Track[]> {
     try {
       safeLog('MusicService.getUserTracks called with userId:', userId);
@@ -680,74 +623,22 @@ export class MusicService {
     }
   }
 
-  static async likeTrack(trackId: string, userId: string): Promise<void> {
-    try {
-      // First get the current track to check if user already liked it
-      const { data: currentTrack, error: fetchError } = await supabase
-        .from('tracks')
-        .select('likes, liked_by')
-        .eq('id', trackId)
-        .single();
-
-      if (fetchError) throw new Error(fetchError.message);
-
-      const currentLikes = currentTrack.likes || 0;
-      const currentLikedBy = currentTrack.liked_by || [];
-      const isAlreadyLiked = currentLikedBy.includes(userId);
-
-      let newLikes: number;
-      let newLikedBy: string[];
-
-      if (isAlreadyLiked) {
-        // Unlike
-        newLikes = currentLikes - 1;
-        newLikedBy = currentLikedBy.filter((id: string) => id !== userId);
-      } else {
-        // Like
-        newLikes = currentLikes + 1;
-        newLikedBy = [...currentLikedBy, userId];
-      }
-
-      const { error } = await supabase
-        .from('tracks')
-        .update({
-          likes: newLikes,
-          liked_by: newLikedBy
-        })
-        .eq('id', trackId);
-
-      if (error) throw new Error(error.message);
-    } catch (error) {
-      throw new Error(error instanceof Error ? error.message : 'Failed to like/unlike track');
-    }
+  /**
+   * Like or unlike (toggle) as the signed-in user. Likes are stored in
+   * track_likes; tracks.likes / liked_by are kept in sync by the database.
+   * userId is kept for API compatibility — the server uses the session user.
+   */
+  static async likeTrack(trackId: string, _userId?: string): Promise<{ liked: boolean; likes: number }> {
+    const { data, error } = await supabase.rpc('toggle_track_like', { p_track_id: trackId });
+    if (error) throw new Error(error.message || 'Failed to like/unlike track');
+    return data as { liked: boolean; likes: number };
   }
 
-  /** Add a like for this track (no-op if user already liked). Use for swipe-right / discover. */
-  static async addTrackLike(trackId: string, userId: string): Promise<void> {
-    try {
-      const { data: currentTrack, error: fetchError } = await supabase
-        .from('tracks')
-        .select('likes, liked_by')
-        .eq('id', trackId)
-        .single();
-
-      if (fetchError) throw new Error(fetchError.message);
-
-      const currentLikedBy = currentTrack.liked_by || [];
-      if (currentLikedBy.includes(userId)) return;
-
-      const newLikes = (currentTrack.likes || 0) + 1;
-      const newLikedBy = [...currentLikedBy, userId];
-
-      const { error } = await supabase
-        .from('tracks')
-        .update({ likes: newLikes, liked_by: newLikedBy })
-        .eq('id', trackId);
-
-      if (error) throw new Error(error.message);
-    } catch (error) {
-      throw new Error(error instanceof Error ? error.message : 'Failed to add track like');
-    }
+  /** Add a like (no-op if already liked). Use for swipe-right / discover. */
+  static async addTrackLike(trackId: string, _userId?: string): Promise<{ liked: boolean; likes: number }> {
+    const { data, error } = await supabase.rpc('set_track_like', { p_track_id: trackId, p_liked: true });
+    if (error) throw new Error(error.message || 'Failed to add track like');
+    return data as { liked: boolean; likes: number };
   }
 
   static async getTrackLikes(trackId: string): Promise<{ likes: number; likedBy: string[] }> {
@@ -962,25 +853,6 @@ export class MusicService {
     }
   }
 
-  static async getUserPlayHistory(userId: string, limit = 20): Promise<Track[]> {
-    try {
-      const { data, error } = await supabase
-        .from('user_play_history')
-        .select(`
-          tracks!user_play_history_track_id_fkey (*)
-        `)
-        .eq('user_id', userId)
-        .order('played_at', { ascending: false })
-        .limit(limit);
-
-      if (error) throw new Error(error.message);
-
-      return (data || []).map((ph: any) => this.transformTrack(ph.tracks));
-    } catch (error) {
-      throw new Error(error instanceof Error ? error.message : 'Failed to get user play history');
-    }
-  }
-
   static async getAvailableGenres(): Promise<string[]> {
     try {
       const { data, error } = await supabase
@@ -1010,13 +882,15 @@ export class MusicService {
       audioUrl: dbTrack.audio_url,
       price: dbTrack.price,
       genre: dbTrack.genre,
-      remixParentId: dbTrack.remix_parent_id,
-      versionLabel: dbTrack.version_label,
-      remixOpen: dbTrack.remix_open !== false,
+      remixParentId: dbTrack.remix_parent_id ?? undefined,
+      allowRemix: dbTrack.allow_remix ?? undefined,
       createdAt: dbTrack.created_at ? new Date(dbTrack.created_at) : undefined,
       bpm: dbTrack.bpm != null ? Number(dbTrack.bpm) : undefined,
       previewStartSec: dbTrack.preview_start_sec != null ? Number(dbTrack.preview_start_sec) : undefined,
       previewDurationSec: dbTrack.preview_duration_sec != null ? Number(dbTrack.preview_duration_sec) : undefined,
+      userId: dbTrack.user_id ?? undefined,
+      downloadPolicy: dbTrack.download_policy ?? undefined,
+      licenseType: dbTrack.license_type ?? undefined,
     };
   }
 

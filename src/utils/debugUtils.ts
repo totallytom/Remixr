@@ -1,47 +1,6 @@
 import { useEffect } from 'react';
 
-// Debug utility for Supabase errors
-export const debugSupabaseError = (error: any, context: string) => {
-  console.error(`[${context}] Supabase Error:`, {
-    message: error.message,
-    details: error.details,
-    hint: error.hint,
-    code: error.code,
-    context
-  });
-  
-  // Check if it's the specific error we're looking for
-  if (error.message?.includes('JSON object requested, multiple (or no) rows returned')) {
-    console.error(`[${context}] This is the "multiple (or no) rows returned" error!`);
-    console.error(`[${context}] This usually means .single() was used on a query that returned 0 or >1 rows`);
-  }
-};
-
-// Wrapper for Supabase queries to add better error handling
-export const safeSupabaseQuery = async <T>(
-  queryFn: () => Promise<{ data: T | null; error: any }>,
-  context: string
-): Promise<{ data: T | null; error: any }> => {
-  try {
-    const result = await queryFn();
-    
-    if (result.error) {
-      debugSupabaseError(result.error, context);
-    }
-    
-    return result;
-  } catch (error) {
-    debugSupabaseError(error, context);
-    return { data: null, error };
-  }
-}; 
-
-/**
- * Hides UUIDs from being displayed in the UI or console logs
- * @param text - The text that might contain UUIDs
- * @returns The text with UUIDs replaced with "***"
- */
-export const hideUUIDs = (text: string): string => {
+const hideUUIDs = (text: string): string => {
   // UUID pattern: 8-4-4-4-12 hexadecimal characters
   const uuidPattern = /[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}/gi;
   return text.replace(uuidPattern, '***');
@@ -77,7 +36,7 @@ export const createDisplayName = (uuid: string): string => {
  * @param url - The URL that might contain UUIDs
  * @returns The URL with UUIDs masked
  */
-export const maskUrlUUIDs = (url: string): string => {
+const maskUrlUUIDs = (url: string): string => {
   const uuidPattern = /[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}/gi;
   return url.replace(uuidPattern, '***');
 };

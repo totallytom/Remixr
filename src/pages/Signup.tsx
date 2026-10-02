@@ -5,6 +5,23 @@ import { useNavigate, Link } from 'react-router-dom';
 import { Mail, Lock, Eye, EyeOff, Mic2, Headphones, ArrowRight, Music2 } from 'lucide-react';
 import { AuthService } from '../services/authService';
 import { useStore } from '../store/useStore';
+import {
+  AGE_BLOCK_MESSAGE,
+  MIN_SIGNUP_AGE,
+  ageInYears,
+  blockSignup,
+  isSignupBlocked,
+  parseDateOfBirth,
+  toIsoDate,
+} from '../utils/ageGate';
+
+const MONTHS = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December',
+];
+const THIS_YEAR = new Date().getFullYear();
+const YEARS = Array.from({ length: 121 }, (_, i) => THIS_YEAR - i);
+const DAYS = Array.from({ length: 31 }, (_, i) => i + 1);
 
 type Role = 'musician' | 'consumer';
 
@@ -50,6 +67,11 @@ const Signup: React.FC = () => {
   const [selectedRole, setSelectedRole] = useState<Role | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
+  // Date of birth — empty by default so nothing nudges toward an answer.
+  const [dobMonth, setDobMonth] = useState('');
+  const [dobDay, setDobDay] = useState('');
+  const [dobYear, setDobYear] = useState('');
+  const [ageBlocked, setAgeBlocked] = useState(isSignupBlocked);
   const { isAuthenticated } = useStore();
   const navigate = useNavigate();
 
@@ -70,6 +92,22 @@ const Signup: React.FC = () => {
   }, [isAuthenticated, navigate]);
 
   const onSubmit = async (data: SignupForm) => {
+    if (ageBlocked) return;
+
+    const dob = parseDateOfBirth(Number(dobYear), Number(dobMonth), Number(dobDay));
+    if (!dob) {
+      setError('Please enter a valid date of birth.');
+      return;
+    }
+    // Under the minimum age: stop here. Nothing is sent to the server, and
+    // the block is remembered on this device.
+    if (ageInYears(dob) < MIN_SIGNUP_AGE) {
+      blockSignup();
+      setAgeBlocked(true);
+      setError('');
+      return;
+    }
+
     if (!selectedRole) {
       setError('Please choose your role to continue.');
       return;
@@ -92,6 +130,7 @@ const Signup: React.FC = () => {
         email: data.email,
         password: data.password,
         role: selectedRole,
+        dateOfBirth: toIsoDate(dob),
       });
       useStore.getState().applySessionUser(registeredUser);
       navigate(selectedRole === 'musician' ? '/onboarding' : '/');
@@ -120,14 +159,20 @@ const Signup: React.FC = () => {
               transition={{ delay: 0.15, type: 'spring', stiffness: 220 }}
               className="w-16 h-16 rounded-full mx-auto mb-4 overflow-hidden ring-2 ring-primary-500/40"
             >
-              <img src="/logo/logo.png" alt="Remixr" className="w-full h-full object-cover" />
+              <img src="/logo/logo.png" alt="Re-Mixed" className="w-full h-full object-cover" />
             </motion.div>
-            <h1 className="h2 text-gradient-neon mb-1">Join Remixr</h1>
+            <h1 className="h2 text-gradient-neon mb-1">Join Re-Mixed</h1>
             <p className="text-sm" style={{ color: 'black' }}>
               Create your account in seconds.
             </p>
           </div>
 
+          {ageBlocked ? (
+            <div className="glass-effect rounded-2xl p-8 text-center space-y-2">
+              <p className="text-base font-semibold text-black">{AGE_BLOCK_MESSAGE}</p>
+              <p className="text-sm text-black/50">Thanks for your interest in Re-Mixed.</p>
+            </div>
+          ) : (
           <form onSubmit={handleSubmit(onSubmit)} noValidate>
             <div className="glass-effect rounded-2xl p-8 space-y-6">
 
@@ -148,7 +193,7 @@ const Signup: React.FC = () => {
 
               {/* Email */}
               <div>
-                <label className="block text-sm font-medium text-white mb-2">Email</label>
+                <label className="block text-sm font-medium text-black mb-2">Email</label>
                 <div className="relative">
                   <Mail size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-dark-400" />
                   <input
@@ -162,7 +207,7 @@ const Signup: React.FC = () => {
                     type="email"
                     placeholder="you@example.com"
                     autoComplete="email"
-                    className="w-full pl-10 pr-4 py-3 bg-dark-700 border border-dark-600 rounded-lg text-white placeholder-dark-400 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all"
+                    className="w-full pl-10 pr-4 py-3 bg-dark-700 border border-dark-600 rounded-lg text-black placeholder-dark-400 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all"
                   />
                 </div>
                 {errors.email && (
@@ -172,7 +217,7 @@ const Signup: React.FC = () => {
 
               {/* Password */}
               <div>
-                <label className="block text-sm font-medium text-white mb-2">Password</label>
+                <label className="block text-sm font-medium text-black mb-2">Password</label>
                 <div className="relative">
                   <Lock size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-dark-400" />
                   <input
@@ -183,12 +228,12 @@ const Signup: React.FC = () => {
                     type={showPassword ? 'text' : 'password'}
                     placeholder="Min. 6 characters"
                     autoComplete="new-password"
-                    className="w-full pl-10 pr-11 py-3 bg-dark-700 border border-dark-600 rounded-lg text-white placeholder-dark-400 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all"
+                    className="w-full pl-10 pr-11 py-3 bg-dark-700 border border-dark-600 rounded-lg text-black placeholder-dark-400 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all"
                   />
                   <button
                     type="button"
                     onClick={() => setShowPassword(v => !v)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-dark-400 hover:text-white transition-colors"
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-dark-400 hover:text-black transition-colors"
                     tabIndex={-1}
                   >
                     {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
@@ -199,9 +244,43 @@ const Signup: React.FC = () => {
                 )}
               </div>
 
+              {/* Date of birth */}
+              <fieldset>
+                <legend className="block text-sm font-medium text-black mb-2">Date of birth</legend>
+                <div className="grid grid-cols-[1.4fr_1fr_1.2fr] gap-2">
+                  {[
+                    {
+                      label: 'Month', value: dobMonth, onChange: setDobMonth,
+                      options: MONTHS.map((m, i) => ({ value: String(i + 1), label: m })),
+                    },
+                    {
+                      label: 'Day', value: dobDay, onChange: setDobDay,
+                      options: DAYS.map(d => ({ value: String(d), label: String(d) })),
+                    },
+                    {
+                      label: 'Year', value: dobYear, onChange: setDobYear,
+                      options: YEARS.map(y => ({ value: String(y), label: String(y) })),
+                    },
+                  ].map(field => (
+                    <select
+                      key={field.label}
+                      aria-label={field.label}
+                      value={field.value}
+                      onChange={e => { field.onChange(e.target.value); setError(''); }}
+                      className="w-full px-3 py-3 bg-dark-700 border border-dark-600 rounded-lg text-black focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all"
+                    >
+                      <option value="" disabled>{field.label}</option>
+                      {field.options.map(o => (
+                        <option key={o.value} value={o.value}>{o.label}</option>
+                      ))}
+                    </select>
+                  ))}
+                </div>
+              </fieldset>
+
               {/* Role selector */}
               <div>
-                <label className="block text-sm font-medium text-white mb-3">I am a…</label>
+                <label className="block text-sm font-medium text-black mb-3">I am a…</label>
                 <div className="grid grid-cols-2 gap-3">
                   {ROLE_OPTIONS.map((opt) => {
                     const active = selectedRole === opt.value;
@@ -222,16 +301,16 @@ const Signup: React.FC = () => {
                       >
 
                         {/* Icon */}
-                        <div className={`transition-colors ${active ? 'text-white' : 'text-dark-400'}`}>
+                        <div className={`transition-colors ${active ? 'text-black' : 'text-dark-400'}`}>
                           {opt.icon}
                         </div>
 
                         {/* Labels */}
                         <div>
-                          <p className={`text-sm font-semibold transition-colors ${active ? 'text-white' : 'text-dark-300'}`}>
+                          <p className={`text-sm font-semibold transition-colors ${active ? 'text-black' : 'text-dark-300'}`}>
                             {opt.label}
                           </p>
-                          <p className={`text-xs mt-0.5 transition-colors ${active ? 'text-white/60' : 'text-dark-500'}`}>
+                          <p className={`text-xs mt-0.5 transition-colors ${active ? 'text-black/60' : 'text-dark-500'}`}>
                             {opt.sublabel}
                           </p>
                         </div>
@@ -243,7 +322,7 @@ const Signup: React.FC = () => {
                             animate={{ opacity: 1, y: 0 }}
                             className="mt-1 px-2 py-1 rounded-md bg-white/5 w-full"
                           >
-                            <p className="text-[10px] text-white/50 flex items-center gap-1 justify-center">
+                            <p className="text-[10px] text-black/50 flex items-center gap-1 justify-center">
                               <Music2 size={10} />
                               {opt.nextHint}
                             </p>
@@ -261,7 +340,7 @@ const Signup: React.FC = () => {
                 disabled={isLoading}
                 whileHover={{ scale: isLoading ? 1 : 1.02 }}
                 whileTap={{ scale: isLoading ? 1 : 0.98 }}
-                className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-primary-600 to-secondary-600 text-white py-3 px-6 rounded-lg font-semibold hover:from-primary-700 hover:to-secondary-700 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 focus:ring-offset-dark-800 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-primary-600 to-secondary-600 text-black py-3 px-6 rounded-lg font-semibold hover:from-primary-700 hover:to-secondary-700 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 focus:ring-offset-dark-800 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {isLoading ? (
                   <>
@@ -277,6 +356,7 @@ const Signup: React.FC = () => {
               </motion.button>
             </div>
           </form>
+          )}
 
           {/* Sign in link */}
           <p className="mt-6 text-center text-sm" style={{ color: 'rgba(255,255,255,0.4)' }}>

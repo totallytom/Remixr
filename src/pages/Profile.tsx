@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { isSafeUrl } from '../utils/sanitize';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useStore } from '../store/useStore';
-import { Music, User as UserIcon, ListMusic, Mic, Headphones, ArrowLeft, MessageCircle, UserPlus, UserMinus, Edit, Trash2, Settings, Lock, Unlock, MoreVertical, Play, Edit3, Share2, Users, Calendar, MapPin, X, Bookmark, ThumbsUp, Check, Globe, Camera, AtSign } from 'lucide-react';
+import { Music, User as UserIcon, ListMusic, MessageCircle, UserPlus, UserMinus, Edit, Trash2, Settings, Lock, Play, Share2, Users, Calendar, MapPin, X, Bookmark, ThumbsUp, Check, Globe, Camera, AtSign, Flag } from 'lucide-react';
 import { ChatService } from '../services/chatService';
 import { FollowService, FollowStats } from '../services/followService';
 import { MusicService } from '../services/musicService';
@@ -16,12 +16,12 @@ import AlbumCard from '../components/music/AlbumCard';
 import Modal from '../components/Modal'; // (Assume you have a Modal component, or use a simple div for modal)
 import FollowRequestCard from '../components/social/FollowRequestCard';
 import VerifiedBadge from '../components/VerifiedBadge';
-import { createDisplayName, useUUIDMasking } from '../utils/debugUtils';
+import ReportDialog from '../components/moderation/ReportDialog';
 import { getAvatarUrl } from '../utils/avatar';
 
 const Profile: React.FC = () => {
   const { userId, handle } = useParams<{ userId: string; handle: string }>();
-  const { user: currentUser, isAuthenticated, setUser, changeUsername, changeEmail, togglePrivateAccount, updateProfile, playTrack, playQueue, playPlaylist, setSettingsOpen } = useStore();
+  const { user: currentUser, isAuthenticated, setUser, togglePrivateAccount, updateProfile, playTrack, playQueue, playPlaylist, setSettingsOpen } = useStore();
   const [profileUser, setProfileUser] = useState<UserType | null>(null);
   const [userTracks, setUserTracks] = useState<Track[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -54,7 +54,6 @@ const Profile: React.FC = () => {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState<string | null>(null);
   
   const navigate = useNavigate();
-  const [stripeLoading, setStripeLoading] = useState(false);
 
   const [playlists, setPlaylists] = useState<Playlist[]>([]);
   const [isLoadingPlaylists, setIsLoadingPlaylists] = useState(false);
@@ -78,7 +77,6 @@ const Profile: React.FC = () => {
   });
 
   // Concert editing states
-  const [isEditingConcerts, setIsEditingConcerts] = useState(false);
   const [editingConcert, setEditingConcert] = useState<Concert | null>(null);
   const [isAddingConcert, setIsAddingConcert] = useState(false);
   const [concertForm, setConcertForm] = useState({
@@ -124,6 +122,7 @@ const Profile: React.FC = () => {
   const [isSavingLinks, setIsSavingLinks] = useState(false);
 
   const [profileLinkCopied, setProfileLinkCopied] = useState(false);
+  const [showReportDialog, setShowReportDialog] = useState(false);
   const profileLinkCopyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Avatar upload
@@ -134,7 +133,7 @@ const Profile: React.FC = () => {
   const bannerInputRef = useRef<HTMLInputElement>(null);
   const [isUploadingBanner, setIsUploadingBanner] = useState(false);
 
-  const isCurrentUserPro = currentUser?.subscriptionTier === 'pro';
+  const isCurrentUserPro = currentUser?.subscriptionTier === 'artist';
   const FREE_CONCERT_LIMIT = 1;
   const atConcertLimit = !isCurrentUserPro && concerts.length >= FREE_CONCERT_LIMIT;
 
@@ -740,31 +739,6 @@ const Profile: React.FC = () => {
     setIsEditing(false);
   };
 
-  const handleStripeOnboard = async () => {
-    if (!currentUser) return;
-    
-    setStripeLoading(true);
-    try {
-      const response = await fetch('/api/create-stripe-account', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId: currentUser.id })
-      });
-      
-      const data = await response.json();
-      
-      if (data.url) {
-        window.location.href = data.url;
-      } else {
-        console.error('Failed to create Stripe account:', data.error);
-      }
-    } catch (error) {
-      console.error('Failed to onboard with Stripe:', error);
-    } finally {
-      setStripeLoading(false);
-    }
-  };
-
   const handleSaveLinks = async () => {
     if (!currentUser) return;
     const trimmed = linkInputs.map((u) => u.trim()).filter((u) => u && isSafeUrl(u));
@@ -1083,11 +1057,11 @@ const Profile: React.FC = () => {
     return (
       <div className="p-3 lg:p-6">
         <div className="flex flex-col items-center justify-center min-h-[400px] gap-5 text-center">
-          <div className="w-24 h-24 bg-dark-800 rounded-full flex items-center justify-center border border-dark-700">
+          <div className="w-24 h-24 bg-white rounded-full flex items-center justify-center border border-dark-700">
             <UserIcon size={40} className="text-gray-500" />
           </div>
           <div>
-            <h2 className="text-2xl font-bold text-white mb-2">Your Profile</h2>
+            <h2 className="text-2xl font-bold text-black mb-2">Your Profile</h2>
             <p className="text-gray-400 max-w-sm text-sm">
               Create your artist or listener profile to upload music, follow artists, and connect with the community.
             </p>
@@ -1095,13 +1069,13 @@ const Profile: React.FC = () => {
           <div className="flex flex-col sm:flex-row gap-3 w-full max-w-xs">
             <button
               onClick={() => navigate('/signup')}
-              className="flex-1 px-5 py-3 bg-primary-600 hover:bg-primary-500 text-white rounded-xl font-semibold transition-colors"
+              className="flex-1 px-5 py-3 bg-primary-600 hover:bg-primary-500 text-black rounded-xl font-semibold transition-colors"
             >
               Sign Up Free
             </button>
             <button
               onClick={() => navigate('/login')}
-              className="flex-1 px-5 py-3 bg-dark-700 hover:bg-dark-600 text-white rounded-xl font-semibold transition-colors"
+              className="flex-1 px-5 py-3 bg-white-700 hover:bg-white-600 text-black rounded-xl font-semibold transition-colors"
             >
               Sign In
             </button>
@@ -1148,15 +1122,15 @@ const Profile: React.FC = () => {
                 className="w-full h-full flex flex-col items-center justify-center gap-2 border-2 border-dashed border-white/20 bg-white/5 cursor-pointer hover:border-violet-400 hover:bg-white/10 transition-colors"
                 onClick={() => bannerInputRef.current?.click()}
               >
-                <Camera size={22} className="text-white/40" />
-                <span className="text-white/40 text-sm">Add a banner image</span>
+                <Camera size={22} className="text-black/40" />
+                <span className="text-black/40 text-sm">Add a banner image</span>
               </div>
             )}
             {isCurrentUser && isCurrentUserPro && (profileUser as any).bannerUrl && (
               <button
                 type="button"
                 onClick={() => bannerInputRef.current?.click()}
-                className="absolute top-3 right-3 flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-black/60 text-white text-xs font-medium hover:bg-black/80 transition-colors backdrop-blur-sm"
+                className="absolute top-3 right-3 flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-black/60 text-black text-xs font-medium hover:bg-black/80 transition-colors backdrop-blur-sm"
               >
                 {isUploadingBanner
                   ? <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
@@ -1188,7 +1162,7 @@ const Profile: React.FC = () => {
                 <div className="absolute inset-0 rounded-full bg-black/50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
                   {isUploadingAvatar
                     ? <div className="w-6 h-6 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                    : <Camera size={24} className="text-white" />
+                    : <Camera size={24} className="text-black" />
                   }
                 </div>
               )}
@@ -1208,9 +1182,9 @@ const Profile: React.FC = () => {
               <div className="flex-1">
                 <div className="flex flex-col lg:flex-row lg:items-center space-y-2 lg:space-y-0 lg:space-x-3 mb-2">
                   <div className="flex items-center justify-center lg:justify-start gap-2 flex-wrap">
-                    <h1 className="text-2xl lg:text-3xl font-bold text-white font-kyobo">{profileUser.username}</h1>
+                    <h1 className="text-2xl lg:text-3xl font-bold text-black font-kyobo">{profileUser.username}</h1>
                     <VerifiedBadge verified={profileUser.isVerified || (profileUser as { isVerifiedArtist?: boolean }).isVerifiedArtist} size={20} />
-                    {(profileUser as { subscriptionTier?: string }).subscriptionTier === 'pro' && (
+                    {(profileUser as { subscriptionTier?: string }).subscriptionTier === 'artist' && (
                       <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold bg-yellow-500/20 text-yellow-400 border border-yellow-500/30">
                         PRO
                       </span>
@@ -1223,7 +1197,7 @@ const Profile: React.FC = () => {
                   </div>
                 </div>
                 
-                <h2 className="text-white/70 mb-2 text-sm lg:text-base">
+                <h2 className="text-black/70 mb-2 text-sm lg:text-base">
                   {profileUser.bio || (profileUser.role === 'musician' ? 'Musician' : 'Listener')}
                 </h2>
                 {(profileUser as any).vanityUrl && (
@@ -1243,7 +1217,7 @@ const Profile: React.FC = () => {
                           href={link}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="flex items-center gap-1.5 px-2.5 py-1 bg-white/5 border border-white/10 rounded-lg text-xs text-white/60 hover:text-white hover:bg-white/10 transition-colors"
+                          className="flex items-center gap-1.5 px-2.5 py-1 bg-white/5 border border-white/10 rounded-lg text-xs text-black/60 hover:text-black hover:bg-white/10 transition-colors"
                         >
                           <Globe size={11} />
                           {hostname}
@@ -1260,7 +1234,7 @@ const Profile: React.FC = () => {
                   <>
                     <button
                       onClick={handleEditProfile}
-                      className="w-full lg:w-auto flex items-center justify-center space-x-2 px-4 lg:px-6 py-2 bg-primary-600 text-white rounded-full hover:bg-primary-700 transition-colors font-medium text-sm"
+                      className="w-full lg:w-auto flex items-center justify-center space-x-2 px-4 lg:px-6 py-2 bg-primary-600 text-black rounded-full hover:bg-primary-700 transition-colors font-medium text-sm"
                     >
                       <Edit size={16} />
                       <span>Edit Profile</span>
@@ -1272,14 +1246,14 @@ const Profile: React.FC = () => {
                       followRequestPending ? (
                         <button
                           onClick={handleCancelRequest}
-                          className="w-full lg:w-auto px-4 lg:px-6 py-2 rounded-full font-medium transition-colors bg-dark-700 text-white text-sm"
+                          className="w-full lg:w-auto px-4 lg:px-6 py-2 rounded-full font-medium transition-colors bg-white-700 text-black text-sm"
                         >
                           Request Pending
                         </button>
                       ) : (
                         <button
                           onClick={handleRequestFollow}
-                          className="w-full lg:w-auto px-4 lg:px-6 py-2 rounded-full font-medium transition-colors bg-primary-600 text-white hover:bg-primary-700 text-sm"
+                          className="w-full lg:w-auto px-4 lg:px-6 py-2 rounded-full font-medium transition-colors bg-primary-600 text-black hover:bg-primary-700 text-sm"
                         >
                           Request Follow
                         </button>
@@ -1290,8 +1264,8 @@ const Profile: React.FC = () => {
                         disabled={isFollowingLoading}
                         className={`w-full lg:w-auto px-4 lg:px-6 py-2 rounded-full font-medium transition-colors text-sm ${
                           followStats.isFollowing
-                            ? 'bg-dark-700 text-white hover:bg-dark-600'
-                            : 'bg-primary-600 text-white hover:bg-primary-700'
+                            ? 'bg-white-700 text-black hover:bg-white-600'
+                            : 'bg-primary-600 text-black hover:bg-primary-700'
                         }`}
                       >
                         {isFollowingLoading ? (
@@ -1306,7 +1280,7 @@ const Profile: React.FC = () => {
                     <button
                       type="button"
                       onClick={handleStartChat}
-                      className="w-full lg:w-auto p-2 rounded-full bg-dark-700 text-white hover:bg-dark-600 transition-colors"
+                      className="w-full lg:w-auto p-2 rounded-full bg-white-700 text-black hover:bg-white-600 transition-colors"
                       title="Message"
                       aria-label="Send message"
                     >
@@ -1315,12 +1289,23 @@ const Profile: React.FC = () => {
                     <button
                       type="button"
                       onClick={handleCopyProfileLink}
-                      className="w-full lg:w-auto p-2 rounded-full bg-dark-700 text-white hover:bg-dark-600 transition-colors"
+                      className="w-full lg:w-auto p-2 rounded-full bg-white-700 text-black hover:bg-white-600 transition-colors"
                       title={profileLinkCopied ? 'Link copied' : 'Copy profile link'}
                       aria-label={profileLinkCopied ? 'Profile link copied' : 'Copy profile link'}
                     >
                       {profileLinkCopied ? <Check size={20} className="text-emerald-400" /> : <Share2 size={20} />}
                     </button>
+                    {currentUser && (
+                      <button
+                        type="button"
+                        onClick={() => setShowReportDialog(true)}
+                        className="w-full lg:w-auto p-2 rounded-full bg-white-700 text-black hover:bg-white-600 hover:text-red-500 transition-colors"
+                        title="Report user"
+                        aria-label="Report user"
+                      >
+                        <Flag size={20} />
+                      </button>
+                    )}
                   </>
                 )}
               </div>
@@ -1332,7 +1317,7 @@ const Profile: React.FC = () => {
                 <button
                   type="button"
                   onClick={handleCopyProfileLink}
-                  className="p-2.5 rounded-full bg-dark-700 text-white hover:bg-dark-600 transition-colors"
+                  className="p-2.5 rounded-full bg-white-700 text-black hover:bg-white-600 transition-colors"
                   title={profileLinkCopied ? 'Link copied' : 'Copy profile link'}
                   aria-label={profileLinkCopied ? 'Profile link copied' : 'Copy profile link'}
                 >
@@ -1341,7 +1326,7 @@ const Profile: React.FC = () => {
                 <button
                   type="button"
                   onClick={openExternalLinksModal}
-                  className="p-2.5 rounded-full bg-dark-700 text-white hover:bg-dark-600 transition-colors"
+                  className="p-2.5 rounded-full bg-white-700 text-black hover:bg-white-600 transition-colors"
                   title="Website & social links"
                   aria-label="Edit website and social links"
                 >
@@ -1350,7 +1335,7 @@ const Profile: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setSettingsOpen(true)}
-                  className="p-2.5 rounded-full bg-dark-700 text-white hover:bg-dark-600 transition-colors"
+                  className="p-2.5 rounded-full bg-white-700 text-black hover:bg-white-600 transition-colors"
                   title="Settings"
                   aria-label="Open settings"
                 >
@@ -1368,7 +1353,7 @@ const Profile: React.FC = () => {
               >
                 <Users className="text-primary-400 bg-white rounded-full p-1 w-8 h-8" size={18} />
                 <div className="text-center">
-                  <h2 className="text-xl lg:text-2xl font-bold text-white">
+                  <h2 className="text-xl lg:text-2xl font-bold text-black">
                     {followStats.followers >= 1000
                       ? `${(followStats.followers / 1000).toFixed(1)}K`
                       : followStats.followers}
@@ -1383,7 +1368,7 @@ const Profile: React.FC = () => {
               >
                 <UserIcon className="text-secondary-400 bg-white rounded-full p-1 w-8 h-8" size={18} />
                 <div className="text-center">
-                  <h2 className="text-xl lg:text-2xl font-bold text-white">{followStats.following}</h2>
+                  <h2 className="text-xl lg:text-2xl font-bold text-black">{followStats.following}</h2>
                   <h2 className="text-xs lg:text-sm text-dark-400">Following</h2>
                 </div>
               </button>
@@ -1395,7 +1380,7 @@ const Profile: React.FC = () => {
                 >
                   <UserPlus className="text-amber-400 bg-white rounded-full p-1 w-8 h-8" size={18} />
                   <div className="text-center">
-                    <h2 className="text-xl lg:text-2xl font-bold text-white">{pendingRequests.length}</h2>
+                    <h2 className="text-xl lg:text-2xl font-bold text-black">{pendingRequests.length}</h2>
                     <h2 className="text-xs lg:text-sm text-dark-400">Requests</h2>
                   </div>
                 </button>
@@ -1418,7 +1403,7 @@ const Profile: React.FC = () => {
                         href={url}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-dark-700 text-dark-300 hover:text-white hover:bg-dark-600 transition-colors text-xs font-medium truncate max-w-[160px]"
+                        className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-white-700 text-dark-300 hover:text-black hover:bg-white-600 transition-colors text-xs font-medium truncate max-w-[160px]"
                       >
                         <Globe size={12} className="flex-shrink-0" />
                         {label}
@@ -1474,7 +1459,7 @@ const Profile: React.FC = () => {
               )}
 
               <div>
-                <label className="block text-white font-medium mb-2">Bio</label>
+                <label className="block text-black font-medium mb-2">Bio</label>
                 <textarea
                   value={editForm.bio}
                   onChange={(e) => setEditForm(prev => ({ ...prev, bio: e.target.value }))}
@@ -1489,13 +1474,13 @@ const Profile: React.FC = () => {
               <button
                 onClick={handleSaveProfile}
                 disabled={isSaving}
-                className="flex-1 bg-primary-600 text-white px-4 py-2 rounded-lg hover:bg-primary-700 transition-colors disabled:opacity-50 text-sm"
+                className="flex-1 bg-primary-600 text-black px-4 py-2 rounded-lg hover:bg-primary-700 transition-colors disabled:opacity-50 text-sm"
               >
                 {isSaving ? 'Saving...' : 'Save Changes'}
               </button>
               <button
                 onClick={handleCancelEdit}
-                className="flex-1 bg-dark-700 text-white px-4 py-2 rounded-lg hover:bg-dark-600 transition-colors text-sm"
+                className="flex-1 bg-white-700 text-black px-4 py-2 rounded-lg hover:bg-white-600 transition-colors text-sm"
               >
                 Cancel
               </button>
@@ -1505,14 +1490,14 @@ const Profile: React.FC = () => {
       )}
 
       {/* Tab Navigation — sticky on mobile so tabs stay visible while scrolling content */}
-      <div className="lg:sticky top-0 z-10 bg-dark-900/95 backdrop-blur-sm border-b border-dark-700/60 -mx-3 lg:mx-0 px-3 lg:px-0 py-2 lg:py-0 mb-2 lg:mb-0">
-      <div className="flex flex-wrap space-x-1 bg-dark-800 rounded-lg p-1 overflow-x-auto">
+      <div className="lg:sticky top-0 z-10 bg-white-900/95 backdrop-blur-sm border-b border-dark-700/60 -mx-3 lg:mx-0 px-3 lg:px-0 py-2 lg:py-0 mb-2 lg:mb-0">
+      <div className="flex flex-wrap space-x-1 bg-white-800 rounded-lg p-1 overflow-x-auto">
         <button
           onClick={() => setActiveTab('music')}
           className={`flex-shrink-0 py-2 px-3 lg:px-4 rounded-md text-xs lg:text-sm font-medium transition-colors ${
             activeTab === 'music'
-              ? 'bg-primary-600 text-white'
-              : 'text-dark-400 hover:text-white'
+              ? 'bg-primary-600 text-black'
+              : 'text-dark-400 hover:text-black'
           }`}
         >
           Music
@@ -1521,8 +1506,8 @@ const Profile: React.FC = () => {
           onClick={() => setActiveTab('playlists')}
           className={`flex-shrink-0 py-2 px-3 lg:px-4 rounded-md text-xs lg:text-sm font-medium transition-colors ${
             activeTab === 'playlists'
-              ? 'bg-primary-600 text-white'
-              : 'text-dark-400 hover:text-white'
+              ? 'bg-primary-600 text-black'
+              : 'text-dark-400 hover:text-black'
           }`}
         >
           Playlists
@@ -1532,8 +1517,8 @@ const Profile: React.FC = () => {
           onClick={() => setActiveTab('albums')}
           className={`flex-shrink-0 py-2 px-3 lg:px-4 rounded-md text-xs lg:text-sm font-medium transition-colors ${
             activeTab === 'albums'
-              ? 'bg-primary-600 text-white'
-              : 'text-dark-400 hover:text-white'
+              ? 'bg-primary-600 text-black'
+              : 'text-dark-400 hover:text-black'
           }`}
         >
           {profileUser?.role === 'musician' ? 'Albums' : 'Preferences'}
@@ -1544,8 +1529,8 @@ const Profile: React.FC = () => {
             onClick={() => setActiveTab('concerts')}
             className={`flex-shrink-0 py-2 px-3 lg:px-4 rounded-md text-xs lg:text-sm font-medium transition-colors ${
               activeTab === 'concerts'
-                ? 'bg-primary-600 text-white'
-                : 'text-dark-400 hover:text-white'
+                ? 'bg-primary-600 text-black'
+                : 'text-dark-400 hover:text-black'
             }`}
           >
             Concerts
@@ -1557,8 +1542,8 @@ const Profile: React.FC = () => {
             onClick={() => setActiveTab('bookmark')}
             className={`flex-shrink-0 py-2 px-3 lg:px-4 rounded-md text-xs lg:text-sm font-medium transition-colors ${
               activeTab === 'bookmark'
-                ? 'bg-primary-600 text-white'
-                : 'text-dark-400 hover:text-white'
+                ? 'bg-primary-600 text-black'
+                : 'text-dark-400 hover:text-black'
             }`}
           >
             Bookmark
@@ -1570,8 +1555,8 @@ const Profile: React.FC = () => {
             onClick={() => setActiveTab('liked')}
             className={`flex-shrink-0 py-2 px-3 lg:px-4 rounded-md text-xs lg:text-sm font-medium transition-colors ${
               activeTab === 'liked'
-                ? 'bg-primary-600 text-white'
-                : 'text-dark-400 hover:text-white'
+                ? 'bg-primary-600 text-black'
+                : 'text-dark-400 hover:text-black'
             }`}
           >
             Liked
@@ -1587,7 +1572,7 @@ const Profile: React.FC = () => {
             <>
               {/* Music Uploads */}
               <section>
-                <h2 className="text-xl lg:text-2xl font-bold text-white mb-4 flex items-center font-kyobo">
+                <h2 className="text-xl lg:text-2xl font-bold text-black mb-4 flex items-center font-kyobo">
                   <Music className="mr-2 text-primary-400" />
                   {profileUser?.role === 'musician' 
                     ? (isCurrentUser ? 'My Music' : `${profileUser?.artistName || profileUser?.username || 'User'}'s Music`)
@@ -1636,7 +1621,7 @@ const Profile: React.FC = () => {
 
           {activeTab === 'playlists' && (
             <section>
-              <h2 className="text-xl lg:text-2xl font-bold text-white mb-4 flex items-center font-kyobo">
+              <h2 className="text-xl lg:text-2xl font-bold text-black mb-4 flex items-center font-kyobo">
                 <ListMusic className="mr-2 text-secondary-400" />
                 {profileUser?.role === 'musician' 
                   ? (isCurrentUser ? 'My Playlists' : `${profileUser?.artistName || profileUser?.username || 'User'}'s Playlists`)
@@ -1666,7 +1651,7 @@ const Profile: React.FC = () => {
                   )}
                 </div>
               ) : (
-                <div className="space-y-3">
+                <div className="grid grid-cols-[repeat(auto-fill,minmax(180px,1fr))] gap-3 sm:gap-4">
                   {playlists.map(playlist => (
                     <div
                       key={playlist.id}
@@ -1699,7 +1684,7 @@ const Profile: React.FC = () => {
           {activeTab === 'albums' && profileUser?.role === 'consumer' && (
             <section>
               <div className="mb-4">
-                <h2 className="text-xl lg:text-2xl font-bold text-white flex items-center font-kyobo">
+                <h2 className="text-xl lg:text-2xl font-bold text-black flex items-center font-kyobo">
                   <Music className="mr-2 text-primary-400" />
                   {isCurrentUser ? 'My Music Preferences' : `${profileUser?.username || 'User'}'s Music Preferences`}
                 </h2>
@@ -1720,7 +1705,7 @@ const Profile: React.FC = () => {
           {activeTab === 'albums' && profileUser?.role === 'musician' && (
             <section>
               <div className="mb-4">
-                <h2 className="text-xl lg:text-2xl font-bold text-white flex items-center font-kyobo">
+                <h2 className="text-xl lg:text-2xl font-bold text-black flex items-center font-kyobo">
                   <Music className="mr-2 text-primary-400" />
                   {isCurrentUser ? 'My Albums' : `${profileUser?.artistName || profileUser?.username || 'User'}'s Albums`}
                 </h2>
@@ -1748,7 +1733,7 @@ const Profile: React.FC = () => {
                     <div key={album.id} className="flex-shrink-0 w-[200px] sm:w-[220px]">
                       {editingAlbum?.id === album.id ? (
                         // Edit form for existing album
-                        <div className="bg-dark-800 rounded-lg p-4 border border-dark-700 min-w-[200px]">
+                        <div className="bg-white-800 rounded-lg p-4 border border-dark-700 min-w-[200px]">
                           <div className="space-y-4">
                             <div>
                               <label className="block text-dark-200 font-medium mb-2 text-sm">Album Title</label>
@@ -1805,13 +1790,13 @@ const Profile: React.FC = () => {
                             <div className="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-2">
                               <button
                                 onClick={handleSaveAlbum}
-                                className="flex-1 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors text-sm"
+                                className="flex-1 px-4 py-2 bg-primary-600 text-black rounded-lg hover:bg-primary-700 transition-colors text-sm"
                               >
                                 Save Changes
                               </button>
                               <button
                                 onClick={handleCancelAlbumEdit}
-                                className="flex-1 px-4 py-2 bg-dark-700 text-white rounded-lg hover:bg-dark-600 transition-colors text-sm"
+                                className="flex-1 px-4 py-2 bg-white-700 text-black rounded-lg hover:bg-white-600 transition-colors text-sm"
                               >
                                 Cancel
                               </button>
@@ -1839,7 +1824,7 @@ const Profile: React.FC = () => {
           {activeTab === 'concerts' && (
             <section>
               <div className="flex items-center justify-between mb-4">
-                <h2 className="text-xl lg:text-2xl font-bold text-white flex items-center font-kyobo">
+                <h2 className="text-xl lg:text-2xl font-bold text-black flex items-center font-kyobo">
                   <Calendar className="mr-2 text-primary-400" />
                   {isCurrentUser ? 'My Concerts' : `${profileUser?.artistName || profileUser?.username || 'User'}'s Concerts`}
                 </h2>
@@ -1861,7 +1846,7 @@ const Profile: React.FC = () => {
                     ) : (
                       <button
                         onClick={handleAddConcert}
-                        className="flex items-center space-x-2 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
+                        className="flex items-center space-x-2 px-4 py-2 bg-primary-600 text-black rounded-lg hover:bg-primary-700 transition-colors"
                       >
                         <Calendar size={16} />
                         <span>Add Concert</span>
@@ -1889,7 +1874,7 @@ const Profile: React.FC = () => {
               ) : (
                 <div className="space-y-4">
                   {concerts.map(concert => (
-                    <div key={concert.id} className="bg-dark-800 rounded-lg p-6 border border-dark-700">
+                    <div key={concert.id} className="bg-white-800 rounded-lg p-6 border border-dark-700">
                       {editingConcert?.id === concert.id ? (
                         // Edit form for existing concert
                         <div className="space-y-4">
@@ -1900,7 +1885,7 @@ const Profile: React.FC = () => {
                                 type="text"
                                 value={concertForm.title}
                                 onChange={(e) => setConcertForm(prev => ({ ...prev, title: e.target.value }))}
-                                className="w-full px-4 py-2 bg-dark-700 border border-dark-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
+                                className="w-full px-4 py-2 bg-white-700 border border-dark-600 rounded-lg text-black focus:outline-none focus:ring-2 focus:ring-primary-500"
                                 placeholder="Concert title"
                               />
                             </div>
@@ -1910,7 +1895,7 @@ const Profile: React.FC = () => {
                                 type="date"
                                 value={concertForm.date}
                                 onChange={(e) => setConcertForm(prev => ({ ...prev, date: e.target.value }))}
-                                className="w-full px-4 py-2 bg-dark-700 border border-dark-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
+                                className="w-full px-4 py-2 bg-white-700 border border-dark-600 rounded-lg text-black focus:outline-none focus:ring-2 focus:ring-primary-500"
                               />
                             </div>
                             <div>
@@ -1919,7 +1904,7 @@ const Profile: React.FC = () => {
                                 type="text"
                                 value={concertForm.venue}
                                 onChange={(e) => setConcertForm(prev => ({ ...prev, venue: e.target.value }))}
-                                className="w-full px-4 py-2 bg-dark-700 border border-dark-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
+                                className="w-full px-4 py-2 bg-white-700 border border-dark-600 rounded-lg text-black focus:outline-none focus:ring-2 focus:ring-primary-500"
                                 placeholder="Venue name"
                               />
                             </div>
@@ -1929,7 +1914,7 @@ const Profile: React.FC = () => {
                                 type="text"
                                 value={concertForm.location}
                                 onChange={(e) => setConcertForm(prev => ({ ...prev, location: e.target.value }))}
-                                className="w-full px-4 py-2 bg-dark-700 border border-dark-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
+                                className="w-full px-4 py-2 bg-white-700 border border-dark-600 rounded-lg text-black focus:outline-none focus:ring-2 focus:ring-primary-500"
                                 placeholder="City, State/Country"
                               />
                             </div>
@@ -1939,7 +1924,7 @@ const Profile: React.FC = () => {
                                 type="number"
                                 value={concertForm.ticketPrice}
                                 onChange={(e) => setConcertForm(prev => ({ ...prev, ticketPrice: e.target.value }))}
-                                className="w-full px-4 py-2 bg-dark-700 border border-dark-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
+                                className="w-full px-4 py-2 bg-white-700 border border-dark-600 rounded-lg text-black focus:outline-none focus:ring-2 focus:ring-primary-500"
                                 placeholder="Price (optional)"
                               />
                             </div>
@@ -1949,7 +1934,7 @@ const Profile: React.FC = () => {
                                 type="url"
                                 value={concertForm.ticketUrl}
                                 onChange={(e) => setConcertForm(prev => ({ ...prev, ticketUrl: e.target.value }))}
-                                className="w-full px-4 py-2 bg-dark-700 border border-dark-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
+                                className="w-full px-4 py-2 bg-white-700 border border-dark-600 rounded-lg text-black focus:outline-none focus:ring-2 focus:ring-primary-500"
                                 placeholder="https://tickets.example.com"
                               />
                             </div>
@@ -1960,20 +1945,20 @@ const Profile: React.FC = () => {
                               value={concertForm.description}
                               onChange={(e) => setConcertForm(prev => ({ ...prev, description: e.target.value }))}
                               rows={3}
-                              className="w-full px-4 py-2 bg-dark-700 border border-dark-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
+                              className="w-full px-4 py-2 bg-white-700 border border-dark-600 rounded-lg text-black focus:outline-none focus:ring-2 focus:ring-primary-500"
                               placeholder="Concert description (optional)"
                             />
                           </div>
                           <div className="flex space-x-3">
                             <button
                               onClick={handleSaveConcert}
-                              className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
+                              className="px-4 py-2 bg-primary-600 text-black rounded-lg hover:bg-primary-700 transition-colors"
                             >
                               Save Changes
                             </button>
                             <button
                               onClick={handleCancelConcertEdit}
-                              className="px-4 py-2 bg-dark-700 text-white rounded-lg hover:bg-dark-600 transition-colors"
+                              className="px-4 py-2 bg-white-700 text-black rounded-lg hover:bg-white-600 transition-colors"
                             >
                               Cancel
                             </button>
@@ -2013,7 +1998,7 @@ const Profile: React.FC = () => {
                                   href={concert.ticketUrl}
                                   target="_blank"
                                   rel="noopener noreferrer"
-                                  className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors text-sm"
+                                  className="px-4 py-2 bg-primary-600 text-black rounded-lg hover:bg-primary-700 transition-colors text-sm"
                                 >
                                   Get Tickets
                                 </a>
@@ -2024,7 +2009,7 @@ const Profile: React.FC = () => {
                             <div className="flex items-center space-x-2 ml-4">
                               <button
                                 onClick={() => handleEditConcert(concert)}
-                                className="p-2 text-dark-400 hover:text-white transition-colors"
+                                className="p-2 text-dark-400 hover:text-black transition-colors"
                                 title="Edit concert"
                               >
                                 <Edit size={16} />
@@ -2045,8 +2030,8 @@ const Profile: React.FC = () => {
 
                   {/* Add concert form */}
                   {isAddingConcert && (
-                    <div className="bg-dark-800 rounded-lg p-6 border border-dark-700">
-                      <p className="text-lg font-semibold text-white mb-4">Add New Concert</p>
+                    <div className="bg-white-800 rounded-lg p-6 border border-dark-700">
+                      <p className="text-lg font-semibold text-black mb-4">Add New Concert</p>
                       <div className="space-y-4">
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                           <div>
@@ -2055,7 +2040,7 @@ const Profile: React.FC = () => {
                               type="text"
                               value={concertForm.title}
                               onChange={(e) => setConcertForm(prev => ({ ...prev, title: e.target.value }))}
-                              className="w-full px-4 py-2 bg-dark-700 border border-dark-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
+                              className="w-full px-4 py-2 bg-white-700 border border-dark-600 rounded-lg text-black focus:outline-none focus:ring-2 focus:ring-primary-500"
                               placeholder="Concert title"
                             />
                           </div>
@@ -2065,7 +2050,7 @@ const Profile: React.FC = () => {
                               type="date"
                               value={concertForm.date}
                               onChange={(e) => setConcertForm(prev => ({ ...prev, date: e.target.value }))}
-                              className="w-full px-4 py-2 bg-dark-700 border border-dark-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
+                              className="w-full px-4 py-2 bg-white-700 border border-dark-600 rounded-lg text-black focus:outline-none focus:ring-2 focus:ring-primary-500"
                             />
                           </div>
                           <div>
@@ -2074,7 +2059,7 @@ const Profile: React.FC = () => {
                               type="text"
                               value={concertForm.venue}
                               onChange={(e) => setConcertForm(prev => ({ ...prev, venue: e.target.value }))}
-                              className="w-full px-4 py-2 bg-dark-700 border border-dark-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
+                              className="w-full px-4 py-2 bg-white-700 border border-dark-600 rounded-lg text-black focus:outline-none focus:ring-2 focus:ring-primary-500"
                               placeholder="Venue name"
                             />
                           </div>
@@ -2084,7 +2069,7 @@ const Profile: React.FC = () => {
                               type="text"
                               value={concertForm.location}
                               onChange={(e) => setConcertForm(prev => ({ ...prev, location: e.target.value }))}
-                              className="w-full px-4 py-2 bg-dark-700 border border-dark-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
+                              className="w-full px-4 py-2 bg-white-700 border border-dark-600 rounded-lg text-black focus:outline-none focus:ring-2 focus:ring-primary-500"
                               placeholder="City, State/Country"
                             />
                           </div>
@@ -2094,7 +2079,7 @@ const Profile: React.FC = () => {
                               type="number"
                               value={concertForm.ticketPrice}
                               onChange={(e) => setConcertForm(prev => ({ ...prev, ticketPrice: e.target.value }))}
-                              className="w-full px-4 py-2 bg-dark-700 border border-dark-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
+                              className="w-full px-4 py-2 bg-white-700 border border-dark-600 rounded-lg text-black focus:outline-none focus:ring-2 focus:ring-primary-500"
                               placeholder="Price (optional)"
                             />
                           </div>
@@ -2104,7 +2089,7 @@ const Profile: React.FC = () => {
                               type="url"
                               value={concertForm.ticketUrl}
                               onChange={(e) => setConcertForm(prev => ({ ...prev, ticketUrl: e.target.value }))}
-                              className="w-full px-4 py-2 bg-dark-700 border border-dark-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
+                              className="w-full px-4 py-2 bg-white-700 border border-dark-600 rounded-lg text-black focus:outline-none focus:ring-2 focus:ring-primary-500"
                               placeholder="https://tickets.example.com"
                             />
                           </div>
@@ -2115,20 +2100,20 @@ const Profile: React.FC = () => {
                             value={concertForm.description}
                             onChange={(e) => setConcertForm(prev => ({ ...prev, description: e.target.value }))}
                             rows={3}
-                            className="w-full px-4 py-2 bg-dark-700 border border-dark-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
+                            className="w-full px-4 py-2 bg-white-700 border border-dark-600 rounded-lg text-black focus:outline-none focus:ring-2 focus:ring-primary-500"
                             placeholder="Concert description (optional)"
                           />
                         </div>
                         <div className="flex space-x-3">
                           <button
                             onClick={handleSaveConcert}
-                            className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
+                            className="px-4 py-2 bg-primary-600 text-black rounded-lg hover:bg-primary-700 transition-colors"
                           >
                             Add Concert
                           </button>
                           <button
                             onClick={handleCancelConcertEdit}
-                            className="px-4 py-2 bg-dark-700 text-white rounded-lg hover:bg-dark-600 transition-colors"
+                            className="px-4 py-2 bg-white-700 text-black rounded-lg hover:bg-white-600 transition-colors"
                           >
                             Cancel
                           </button>
@@ -2143,7 +2128,7 @@ const Profile: React.FC = () => {
 
           {activeTab === 'bookmark' && (
             <section>
-              <h2 className="text-xl lg:text-2xl font-bold text-white mb-4 flex items-center font-kyobo">
+              <h2 className="text-xl lg:text-2xl font-bold text-black mb-4 flex items-center font-kyobo">
                 <Bookmark className="mr-2 text-primary-400" />
                 {isCurrentUser ? 'My Bookmarks' : `${profileUser?.username || 'User'}'s Bookmarks`}
               </h2>
@@ -2168,7 +2153,7 @@ const Profile: React.FC = () => {
                   {bookmarks.length >= 1 && (
                     <button
                       onClick={() => playQueue(bookmarks)}
-                      className="mb-4 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors font-semibold text-sm"
+                      className="mb-4 px-4 py-2 bg-primary-600 text-black rounded-lg hover:bg-primary-700 transition-colors font-semibold text-sm"
                     >
                       {bookmarks.length === 1 ? 'Play Bookmark' : 'Play All Bookmarks'}
                     </button>
@@ -2189,7 +2174,7 @@ const Profile: React.FC = () => {
 
           {activeTab === 'liked' && (
             <section>
-              <h2 className="text-xl lg:text-2xl font-bold text-white mb-4 flex items-center font-kyobo">
+              <h2 className="text-xl lg:text-2xl font-bold text-black mb-4 flex items-center font-kyobo">
                 <ThumbsUp className="mr-2 text-primary-400" />
                 {isCurrentUser ? 'Liked Tracks' : `${profileUser?.username || 'User'}'s Liked Tracks`}
               </h2>
@@ -2214,7 +2199,7 @@ const Profile: React.FC = () => {
                   {likedTracks.length > 1 && (
                     <button
                       onClick={() => playQueue(likedTracks)}
-                      className="mb-4 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors font-semibold text-sm"
+                      className="mb-4 px-4 py-2 bg-primary-600 text-black rounded-lg hover:bg-primary-700 transition-colors font-semibold text-sm"
                     >
                       Play All Liked
                     </button>
@@ -2235,14 +2220,14 @@ const Profile: React.FC = () => {
 
           <section>
               <div className="flex items-center justify-between mb-4">
-                <h2 className="text-2xl font-bold text-white flex items-center font-kyobo">
+                <h2 className="text-2xl font-bold text-black flex items-center font-kyobo">
                   <UserIcon className="mr-2 text-primary-400" />
                   About {profileUser?.artistName || profileUser?.username || 'User'}
                 </h2>
                 {isCurrentUser && (
                   <button
                     onClick={handleEditAbout}
-                    className="flex items-center space-x-2 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
+                    className="flex items-center space-x-2 px-4 py-2 bg-primary-600 text-black rounded-lg hover:bg-primary-700 transition-colors"
                   >
                     <Edit size={16} />
                     <span>Edit About</span>
@@ -2252,30 +2237,30 @@ const Profile: React.FC = () => {
 
               {isEditingAbout ? (
                 <div className="space-y-6">
-                  <div className="bg-dark-800 rounded-lg p-6">
+                  <div className="bg-white-800 rounded-lg p-6">
                     <p className="text-lg font-semibold text-black mb-3">Edit Biography</p>
                     <textarea
                       value={aboutForm.bio}
                       onChange={(e) => setAboutForm(prev => ({ ...prev, bio: e.target.value }))}
                       rows={4}
-                      className="w-full px-4 py-2 bg-dark-700 border border-dark-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
+                      className="w-full px-4 py-2 bg-white-700 border border-dark-600 rounded-lg text-black focus:outline-none focus:ring-2 focus:ring-primary-500"
                       placeholder="Tell your fans about yourself, your musical journey, and what inspires you..."
                     />
                   </div>
 
-                  <div className="bg-dark-800 rounded-lg p-6">
+                  <div className="bg-white-800 rounded-lg p-6">
                     <p className="text-lg font-semibold text-black mb-3">Edit Musical Genres</p>
                     <div className="space-y-4">
                       <div className="flex flex-wrap gap-2">
                         {aboutForm.genres.map((genre, index) => (
                           <span
                             key={index}
-                            className="flex items-center space-x-2 px-3 py-1 bg-primary-600 text-white rounded-full text-sm"
+                            className="flex items-center space-x-2 px-3 py-1 bg-primary-600 text-black rounded-full text-sm"
                           >
                             <span>{genre}</span>
                             <button
                               onClick={() => handleRemoveGenre(genre)}
-                              className="text-white hover:text-red-300 transition-colors"
+                              className="text-black hover:text-red-300 transition-colors"
                             >
                               <X size={14} />
                             </button>
@@ -2290,7 +2275,7 @@ const Profile: React.FC = () => {
                               e.target.value = '';
                             }
                           }}
-                          className="px-4 py-2 bg-dark-700 border border-dark-600 rounded-lg text-black focus:outline-none focus:ring-2 focus:ring-primary-500"
+                          className="px-4 py-2 bg-white-700 border border-dark-600 rounded-lg text-black focus:outline-none focus:ring-2 focus:ring-primary-500"
                         >
                           <option value="">Add a genre...</option>
                           <option value="Electronic">Electronic</option>
@@ -2316,13 +2301,13 @@ const Profile: React.FC = () => {
                   <div className="flex space-x-3">
                     <button
                       onClick={handleSaveAbout}
-                      className="px-6 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
+                      className="px-6 py-2 bg-primary-600 text-black rounded-lg hover:bg-primary-700 transition-colors"
                     >
                       Save Changes
                     </button>
                     <button
                       onClick={handleCancelAboutEdit}
-                      className="px-6 py-2 bg-dark-700 text-white rounded-lg hover:bg-dark-600 transition-colors"
+                      className="px-6 py-2 bg-white-700 text-black rounded-lg hover:bg-white-600 transition-colors"
                     >
                       Cancel
                     </button>
@@ -2331,7 +2316,7 @@ const Profile: React.FC = () => {
               ) : (
                 <div className="space-y-6">
                   {/* Bio Section */}
-                  <div className="bg-dark-800 rounded-lg p-6">
+                  <div className="bg-white border-2 border-black rounded-lg p-6">
                     <h1 className="text-lg font-semibold text-black">Biography</h1>
                     <p className="text-black leading-relaxed">
                       {profileUser?.bio || ` Follow to stay updated with their latest discoveries.`}
@@ -2343,13 +2328,13 @@ const Profile: React.FC = () => {
                     const genres = profileUser?.genres ?? [];
                     if (!Array.isArray(genres) || genres.length === 0) return null;
                     return (
-                    <div className="bg-dark-800 rounded-lg p-6">
+                    <div className="bg-white border-2 border-black rounded-lg p-6">
                       <p className="text-lg font-semibold text-black">Favorite Genres</p>
                       <div className="flex flex-wrap gap-3">
                         {genres.map((genre, index) => (
                           <span
                             key={index}
-                            className="px-4 py-2 bg-primary-600 text-white rounded-full text-sm font-medium"
+                            className="px-4 py-2 bg-primary-600 text-black rounded-full text-sm font-medium"
                           >
                             {genre}
                           </span>
@@ -2360,14 +2345,14 @@ const Profile: React.FC = () => {
                   })()}
 
                   {/* Contact/Social Section */}
-                  <div className="bg-dark-800 rounded-lg p-6">
+                  <div className="bg-white border-2 border-black rounded-lg p-6">
                     <p className="text-lg font-semibold text-black">Connect</p>
                     <div className="flex flex-wrap items-center gap-3">
                       {!isCurrentUser && (
                         <button 
                           type="button"
                           onClick={handleStartChat}
-                          className="flex items-center space-x-2 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
+                          className="flex items-center space-x-2 px-4 py-2 bg-primary-600 text-black rounded-lg hover:bg-primary-700 transition-colors"
                         >
                           <MessageCircle size={16} />
                           <span>Message</span>
@@ -2376,7 +2361,7 @@ const Profile: React.FC = () => {
                       <button
                         type="button"
                         onClick={handleCopyProfileLink}
-                        className="flex items-center space-x-2 px-4 py-2 bg-violet-700 text-white hover:bg-dark-600 transition-colors"
+                        className="flex items-center space-x-2 px-4 py-2 bg-violet-700 text-black hover:bg-white-600 transition-colors"
                         title={profileLinkCopied ? 'Link copied' : 'Copy profile link to share'}
                       >
                         {profileLinkCopied ? (
@@ -2413,7 +2398,7 @@ const Profile: React.FC = () => {
       ) : (
         <div className="text-center py-12">
           <Lock className="text-dark-400 mb-4 mx-auto" size={48} />
-          <h2 className="text-2xl font-bold text-white mb-2">This account is private</h2>
+          <h2 className="text-2xl font-bold text-black mb-2">This account is private</h2>
           <p className="text-dark-400">Only approved followers can view this user's music and playlists.</p>
         </div>
       )}
@@ -2421,8 +2406,8 @@ const Profile: React.FC = () => {
       {/* Delete Confirmation Modal */}
       {showDeleteConfirm && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-dark-900 rounded-lg p-6 w-full max-w-md">
-            <h2 className="text-xl font-bold text-white mb-4">Delete Track</h2>
+          <div className="bg-white-900 rounded-lg p-6 w-full max-w-md">
+            <h2 className="text-xl font-bold text-black mb-4">Delete Track</h2>
             <p className="text-dark-300 mb-6">
               Are you sure you want to delete this track? This action cannot be undone.
             </p>
@@ -2431,14 +2416,14 @@ const Profile: React.FC = () => {
               <button
                 onClick={() => handleDeleteTrack(showDeleteConfirm)}
                 disabled={deletingTrackId === showDeleteConfirm}
-                className="flex-1 bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50"
+                className="flex-1 bg-red-600 text-black px-4 py-2 rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50"
               >
                 {deletingTrackId === showDeleteConfirm ? 'Deleting...' : 'Delete'}
               </button>
               <button
                 onClick={handleCancelDelete}
                 disabled={deletingTrackId === showDeleteConfirm}
-                className="flex-1 bg-dark-700 text-white px-4 py-2 rounded-lg hover:bg-dark-600 transition-colors disabled:opacity-50"
+                className="flex-1 bg-white-700 text-black px-4 py-2 rounded-lg hover:bg-white-600 transition-colors disabled:opacity-50"
               >
                 Cancel
               </button>
@@ -2467,7 +2452,7 @@ const Profile: React.FC = () => {
                 <li key={f.id} className="flex items-center justify-between gap-3 p-3">
                   <div className="flex items-center space-x-3 min-w-0 flex-1">
                     <img src={getAvatarUrl(f.avatar)} alt={f.username} className="w-8 h-8 rounded-full object-cover flex-shrink-0" />
-                    <span className="text-white font-medium truncate">{f.username}</span>
+                    <span className="text-black font-medium truncate">{f.username}</span>
                     <VerifiedBadge verified={f.isVerified || (f as { isVerifiedArtist?: boolean }).isVerifiedArtist} size={16} />
                   </div>
                   {isCurrentUser && (
@@ -2499,14 +2484,14 @@ const Profile: React.FC = () => {
                 <li key={f.id} className="flex items-center justify-between gap-3 p-3">
                   <div className="flex items-center space-x-3 min-w-0 flex-1">
                     <img src={getAvatarUrl(f.avatar)} alt={f.username} className="w-8 h-8 rounded-full object-cover flex-shrink-0" />
-                    <span className="text-white font-medium truncate">{f.username}</span>
+                    <span className="text-black font-medium truncate">{f.username}</span>
                     <VerifiedBadge verified={f.isVerified || (f as { isVerifiedArtist?: boolean }).isVerifiedArtist} size={16} />
                   </div>
                   {isCurrentUser && (
                     <button
                       type="button"
                       onClick={() => handleUnfollowFromFollowingList(f.id)}
-                      className="flex-shrink-0 px-3 py-1.5 text-sm font-medium text-dark-400 hover:text-white hover:bg-dark-600 rounded-lg transition-colors flex items-center gap-1.5"
+                      className="flex-shrink-0 px-3 py-1.5 text-sm font-medium text-dark-400 hover:text-black hover:bg-white-600 rounded-lg transition-colors flex items-center gap-1.5"
                       title="Unfollow"
                     >
                       <UserMinus size={14} />
@@ -2559,7 +2544,7 @@ const Profile: React.FC = () => {
                 }}
                 placeholder={`Link ${i + 1}`}
                 maxLength={2048}
-                className="w-full px-3 py-2 bg-dark-700 border border-dark-600 rounded-lg text-white placeholder-dark-500 focus:outline-none focus:ring-2 focus:ring-primary-500"
+                className="w-full px-3 py-2 bg-white-700 border border-dark-600 rounded-lg text-black placeholder-dark-500 focus:outline-none focus:ring-2 focus:ring-primary-500"
               />
             ))}
           </div>
@@ -2567,7 +2552,7 @@ const Profile: React.FC = () => {
             <button
               type="button"
               onClick={() => setShowLinksModal(false)}
-              className="px-4 py-2 rounded-lg bg-dark-600 text-white hover:bg-dark-500 transition-colors"
+              className="px-4 py-2 rounded-lg bg-white-600 text-black hover:bg-white-500 transition-colors"
             >
               Cancel
             </button>
@@ -2575,12 +2560,19 @@ const Profile: React.FC = () => {
               type="button"
               onClick={handleSaveLinks}
               disabled={isSavingLinks}
-              className="px-4 py-2 rounded-lg bg-primary-600 text-white hover:bg-primary-700 transition-colors disabled:opacity-50"
+              className="px-4 py-2 rounded-lg bg-primary-600 text-black hover:bg-primary-700 transition-colors disabled:opacity-50"
             >
               {isSavingLinks ? 'Saving...' : 'Save'}
             </button>
           </div>
         </Modal>
+      )}
+
+      {showReportDialog && profileUser && (
+        <ReportDialog
+          target={{ userId: profileUser.id, username: profileUser.username }}
+          onClose={() => setShowReportDialog(false)}
+        />
       )}
     </div>
   );

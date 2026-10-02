@@ -1,23 +1,15 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState } from 'react';
 import { motion } from 'framer-motion';
-import { 
-  Play, 
-  Heart, 
-  MoreVertical, 
-  Users, 
-  Clock,
-  Music,
+import {
+  Play,
   Plus,
   Trash2,
   Edit3,
-  Settings,
   X,
-  Save,
-  Check
+  Save
 } from 'lucide-react';
 import { useStore } from '../../store/useStore';
 import { Playlist, Track } from '../../store/useStore';
-import { AuthService } from '../../services/authService';
 import { MusicService } from '../../services/musicService';
 interface PlaylistCardProps {
   playlist: Playlist;
@@ -28,7 +20,6 @@ interface PlaylistCardProps {
   onUpdatePlaylist?: (playlistId: string, updates: any) => void;
   onRemoveTrack?: (playlistId: string, trackId: string) => void;
   showActions?: boolean;
-  compact?: boolean;
 }
 
 const PlaylistCard: React.FC<PlaylistCardProps> = ({
@@ -39,81 +30,15 @@ const PlaylistCard: React.FC<PlaylistCardProps> = ({
   onAddTrack,
   onUpdatePlaylist,
   onRemoveTrack,
-  showActions = true,
-  compact = false
+  showActions = true
 }) => {
-  const { user, playPlaylist, playlists, setPlaylists, setTheme, setUser, setAuthenticated, setUserAvatar, deletePlaylist, addTrackToPlaylist, removeTrackFromPlaylist, playPlaylist: play, updateProfile, changePassword, changeUsername, changeEmail, togglePrivateAccount, setChats, setActiveChat, addMessage, createNewChat, deleteChat, addComment, likeComment, unlikeComment, deleteComment, deletePost, addTrackToPlaylist: addTrackTo, removeTrackFromPlaylist: removeTrackFrom, clearQueue, playQueue, toggleSidebar, setCurrentView, setSettingsOpen } = useStore();
-  const [showMenu, setShowMenu] = useState(false);
-  const [isLiked, setIsLiked] = useState(false);
+  const { user, playlists, setPlaylists, deletePlaylist, playPlaylist } = useStore();
   const [isEditing, setIsEditing] = useState(false);
   const [editForm, setEditForm] = useState({
     name: playlist.name
   });
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [isUpdating, setIsUpdating] = useState(false);
-
-  const menuRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!showMenu) return;
-    const handler = (e: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
-        setShowMenu(false);
-      }
-    };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, [showMenu]);
-
-  // Collaboration modal state
-  const [showInviteModal, setShowInviteModal] = useState(false);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [searchResults, setSearchResults] = useState<any>([]);
-  const [isSearching, setIsSearching] = useState(false);
-  const [inviteError, setInviteError] = useState('');
-
-  // Dummy user search (replace with real API call)
-  const handleSearch = async () => {
-    setIsSearching(true);
-    setInviteError('');
-    try {
-      const results = await AuthService.searchUsersByUsername(searchTerm);
-      setSearchResults(results.filter(u => u.id !== user?.id && !playlist.collaborators.includes(u.id)));
-      setIsSearching(false);
-    } catch (e) {
-      setInviteError('Search failed');
-      setIsSearching(false);
-    }
-  };
-
-  const handleAddCollaborator = async (userId: string) => {
-    if (!playlist.collaborators.includes(userId)) {
-      const newCollaborators = [...playlist.collaborators, userId];
-      try {
-        await MusicService.updatePlaylist(playlist.id, playlist.createdBy, { collaborators: newCollaborators });
-        const updated = playlists.map(p =>
-          p.id === playlist.id ? { ...p, collaborators: newCollaborators } : p
-        );
-        setPlaylists(updated);
-      } catch (e) {
-        alert('Failed to add collaborator.');
-      }
-    }
-    setShowInviteModal(false);
-  };
-
-  const handleRemoveCollaborator = async (userId: string) => {
-    const newCollaborators = playlist.collaborators.filter(id => id !== userId);
-    try {
-      await MusicService.updatePlaylist(playlist.id, playlist.createdBy, { collaborators: newCollaborators });
-      const updated = playlists.map(p =>
-        p.id === playlist.id ? { ...p, collaborators: newCollaborators } : p
-      );
-      setPlaylists(updated);
-    } catch (e) {
-      alert('Failed to remove collaborator.');
-    }
-  };
 
   const handlePlay = () => {
     if (onPlay) {
@@ -123,13 +48,8 @@ const PlaylistCard: React.FC<PlaylistCardProps> = ({
     }
   };
 
-  const handleLike = () => {
-    setIsLiked(!isLiked);
-  };
-
   const handleEdit = () => {
     setIsEditing(true);
-    setShowMenu(false);
   };
 
   const handleSaveEdit = async () => {
@@ -160,7 +80,6 @@ const PlaylistCard: React.FC<PlaylistCardProps> = ({
 
   const handleDelete = () => {
     setShowDeleteConfirm(true);
-    setShowMenu(false);
   };
 
   const confirmDelete = () => {
@@ -199,151 +118,116 @@ const PlaylistCard: React.FC<PlaylistCardProps> = ({
   return (
     <>
       <motion.div
-        whileHover={{ scale: 1.01 }}
-        whileTap={{ scale: 0.99 }}
-        className={`playlist-card flex items-center gap-3 lg:gap-4 rounded-lg overflow-hidden cursor-pointer group p-3
-          border-l-4 border-l-violet-500 bg-violet-500/10 md:border-l-0 md:bg-dark-800 hover:bg-dark-700 transition-colors w-full min-w-0`}
+        whileHover={{ scale: 1.02 }}
+        whileTap={{ scale: 0.98 }}
+        className="playlist-card rounded-2xl bg-white p-[7px] cursor-pointer w-full max-w-[220px]"
+        style={{ border: '3px solid #000', boxShadow: '4px 4px 0 0 #000' }}
         onClick={() => {/* Parent handles navigation */}}
-        style={compact ? { maxWidth: 320 } : {}}
       >
-        {/* Cover Image - same as Profile layout */}
-        <div className="relative w-12 h-12 lg:w-16 lg:h-16 flex-shrink-0 rounded-md overflow-hidden bg-dark-700">
-          <img
-            src={getCoverImage()}
-            alt={playlist.name}
-            className="w-full h-full object-cover"
-            onError={(e) => {
-              const target = e.target as HTMLImageElement;
-              target.style.display = 'none';
-              const parent = target.parentElement;
-              if (parent && !parent.querySelector('.fallback-cover-playlist')) {
-                const fallback = document.createElement('div');
-                fallback.className = 'fallback-cover-playlist w-full h-full flex items-center justify-center bg-dark-600 text-2xl';
-                fallback.textContent = '🎵';
-                parent.appendChild(fallback);
-              }
-            }}
-            onLoad={(e) => {
-              const target = e.target as HTMLImageElement;
-              const parent = target.parentElement;
-              const fallback = parent?.querySelector('.fallback-cover-playlist');
-              if (fallback) fallback.remove();
-            }}
-          />
-          <div className="absolute top-0.5 left-0.5 bg-black/70 text-white text-xs px-1.5 py-0.5 rounded font-medium">
-            {playlist.tracks.length}
+        <div className="rounded-xl border-2 border-black overflow-hidden bg-white">
+          {/* Square cover art */}
+          <div className="relative w-full bg-gray-800" style={{ paddingBottom: '100%' }}>
+            <img
+              src={getCoverImage()}
+              alt={playlist.name}
+              className="absolute inset-0 w-full h-full object-cover"
+              onError={(e) => {
+                const target = e.target as HTMLImageElement;
+                target.style.display = 'none';
+                const parent = target.parentElement;
+                if (parent && !parent.querySelector('.fallback-cover-playlist')) {
+                  const fallback = document.createElement('div');
+                  fallback.className = 'fallback-cover-playlist absolute inset-0 flex items-center justify-center bg-gray-800 text-2xl';
+                  fallback.textContent = '🎵';
+                  parent.appendChild(fallback);
+                }
+              }}
+              onLoad={(e) => {
+                const target = e.target as HTMLImageElement;
+                const parent = target.parentElement;
+                const fallback = parent?.querySelector('.fallback-cover-playlist');
+                if (fallback) fallback.remove();
+              }}
+            />
+
+            {/* Track count / private badges */}
+            <div className="absolute top-2 left-2 bg-black/70 text-white text-xs px-1.5 py-0.5 rounded font-medium">
+              {playlist.tracks.length}
+            </div>
+            {!playlist.isPublic && (
+              <div className="absolute bottom-2 left-2 bg-violet-600 text-white text-[10px] px-1.5 py-0.5 rounded">
+                Private
+              </div>
+            )}
           </div>
-          {!playlist.isPublic && (
-            <div className="absolute top-0.5 right-0.5 bg-violet-600 text-white text-[10px] px-1 rounded">
-              Private
-            </div>
-          )}
-        </div>
 
-        {/* Playlist Info - same as Profile */}
-        <div className="flex-1 min-w-0">
-          <div className="text-black font-semibold truncate text-sm lg:text-base font-kotra">{playlist.name}</div>
-          <p className="text-dark-400 text-xs lg:text-sm truncate">
-            {playlist.tracks.length} track{playlist.tracks.length !== 1 ? 's' : ''}
-            {playlist.description && ` • ${playlist.description}`}
-          </p>
-        </div>
+          <div className="h-0.5 bg-black" />
 
-        {/* Actions */}
-        <div className="flex items-center gap-1 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
-          <button
-            onClick={(e) => { e.stopPropagation(); handlePlay(); }}
-            className="p-2 bg-primary-600 text-white rounded-full hover:bg-primary-700 transition-colors"
-            title="Play playlist"
-          >
-            <Play size={15} fill="currentColor" />
-          </button>
+          {/* Playlist info */}
+          <div className="p-2.5">
+            <div className="font-bold text-[13px] text-black truncate">{playlist.name}</div>
+            <p className="text-gray-700 text-[11px] truncate mt-0.5">
+              {playlist.tracks.length} track{playlist.tracks.length !== 1 ? 's' : ''}
+              {playlist.description && ` • ${playlist.description}`}
+            </p>
+            {playlist.tracks.length > 0 && (
+              <span className="text-gray-500 text-[11px] mt-1 block">{formatDuration(playlist.tracks)}</span>
+            )}
 
-          {/* Desktop: individual buttons */}
-          {showActions && canEdit && (
-            <div className="hidden md:flex items-center gap-1">
+            {/* Action buttons row */}
+            <div className="flex gap-1.5 mt-2.5" onClick={(e) => e.stopPropagation()}>
               <button
-                onClick={(e) => { e.stopPropagation(); handleEdit(); }}
-                className="p-2 text-dark-400 hover:text-white transition-colors rounded-full"
-                title="Edit playlist"
+                onClick={(e) => { e.stopPropagation(); handlePlay(); }}
+                className="flex-1 py-1.5 rounded-lg bg-black text-white flex items-center justify-center"
+                title="Play playlist"
               >
-                <Edit3 size={15} />
+                <Play size={15} fill="currentColor" />
               </button>
-              <button
-                onClick={(e) => { e.stopPropagation(); handleDelete(); }}
-                className="p-2 text-red-400 hover:text-red-300 transition-colors rounded-full"
-                title="Delete playlist"
-              >
-                <Trash2 size={15} />
-              </button>
-            </div>
-          )}
-          {onAddTrack && showActions && (
-            <button
-              onClick={(e) => { e.stopPropagation(); onAddTrack(playlist); }}
-              className="hidden md:flex p-2 text-dark-400 hover:text-primary-400 transition-colors rounded-full"
-              title="Add tracks"
-            >
-              <Plus size={15} />
-            </button>
-          )}
-
-          {/* Mobile: collapsed menu */}
-          {showActions && (canEdit || onAddTrack) && (
-            <div className="relative md:hidden" ref={menuRef}>
-              <button
-                onClick={(e) => { e.stopPropagation(); setShowMenu(v => !v); }}
-                className="p-2 text-dark-400 hover:text-white transition-colors rounded-full"
-                title="More options"
-              >
-                <MoreVertical size={15} />
-              </button>
-              {showMenu && (
-                <div className="absolute right-0 top-9 bg-dark-800 border border-dark-600 rounded-lg shadow-xl z-50 min-w-[140px] overflow-hidden">
-                  {canEdit && (
-                    <button
-                      onClick={(e) => { e.stopPropagation(); handleEdit(); setShowMenu(false); }}
-                      className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-white hover:bg-dark-700 transition-colors"
-                    >
-                      <Edit3 size={14} /> Edit
-                    </button>
-                  )}
-                  {onAddTrack && (
-                    <button
-                      onClick={(e) => { e.stopPropagation(); onAddTrack(playlist); setShowMenu(false); }}
-                      className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-white hover:bg-dark-700 transition-colors"
-                    >
-                      <Plus size={14} /> Add tracks
-                    </button>
-                  )}
-                  {canEdit && (
-                    <button
-                      onClick={(e) => { e.stopPropagation(); handleDelete(); setShowMenu(false); }}
-                      className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-red-400 hover:bg-dark-700 transition-colors"
-                    >
-                      <Trash2 size={14} /> Delete
-                    </button>
-                  )}
-                </div>
+              {onAddTrack && showActions && (
+                <button
+                  onClick={(e) => { e.stopPropagation(); onAddTrack(playlist); }}
+                  className="flex-1 py-1.5 rounded-lg bg-white border border-black text-black flex items-center justify-center"
+                  title="Add tracks"
+                >
+                  <Plus size={15} />
+                </button>
+              )}
+              {canEdit && showActions && (
+                <button
+                  onClick={(e) => { e.stopPropagation(); handleEdit(); }}
+                  className="flex-1 py-1.5 rounded-lg bg-white border border-black text-black flex items-center justify-center"
+                  title="Edit playlist"
+                >
+                  <Edit3 size={15} />
+                </button>
+              )}
+              {canEdit && showActions && (
+                <button
+                  onClick={(e) => { e.stopPropagation(); handleDelete(); }}
+                  className="flex-1 py-1.5 rounded-lg bg-white border border-black text-red-500 hover:bg-red-500 hover:text-white flex items-center justify-center transition-colors"
+                  title="Delete playlist"
+                >
+                  <Trash2 size={15} />
+                </button>
               )}
             </div>
-          )}
+          </div>
         </div>
       </motion.div>
 
       {/* Edit Playlist Modal */}
       {isEditing && canEdit && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={(e) => e.stopPropagation()}>
-          <div className="bg-dark-800 rounded-lg p-6 w-full max-w-md shadow-xl border border-dark-600" onClick={(e) => e.stopPropagation()}>
-            <h2 className="text-xl font-bold text-white mb-4">Edit Playlist</h2>
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50" onClick={(e) => e.stopPropagation()}>
+          <div className="bg-white rounded-lg p-6 w-full max-w-md shadow-2xl border border-gray-200" onClick={(e) => e.stopPropagation()}>
+            <h2 className="text-xl font-bold text-black mb-4">Edit Playlist</h2>
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-dark-300 mb-2">Playlist Name</label>
+                <label className="block text-sm font-medium text-gray-500 mb-2">Playlist Name</label>
                 <input
                   type="text"
                   value={editForm.name}
                   onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
-                  className="w-full px-3 py-2 bg-dark-700 border border-dark-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-violet-500"
+                  className="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-black focus:outline-none focus:ring-2 focus:ring-violet-500"
                   placeholder="Playlist name"
                 />
               </div>
@@ -358,7 +242,7 @@ const PlaylistCard: React.FC<PlaylistCardProps> = ({
                 </button>
                 <button
                   onClick={(e) => { e.stopPropagation(); handleCancelEdit(); }}
-                  className="px-4 py-2 bg-dark-700 text-white rounded-lg hover:bg-dark-600 transition-colors"
+                  className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-black rounded-lg transition-colors"
                 >
                   Cancel
                 </button>
@@ -370,13 +254,13 @@ const PlaylistCard: React.FC<PlaylistCardProps> = ({
 
       {/* Delete Confirmation Modal */}
       {showDeleteConfirm && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-dark-800 border border-dark-600 rounded-lg p-6 w-full max-w-md mx-4 shadow-xl">
-            <h2 className="text-xl font-bold text-white mb-4">Delete Playlist</h2>
-            <p className="text-dark-300 mb-6">
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50" onClick={(e) => e.stopPropagation()}>
+          <div className="bg-white border border-gray-200 rounded-lg p-6 w-full max-w-md mx-4 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <h2 className="text-xl font-bold text-black mb-4">Delete Playlist</h2>
+            <p className="text-gray-500 mb-6">
               Are you sure you want to delete "{playlist.name}"? This action cannot be undone.
             </p>
-            
+
             <div className="flex space-x-3">
               <button
                 onClick={e => { e.stopPropagation(); confirmDelete(); }}
@@ -385,7 +269,7 @@ const PlaylistCard: React.FC<PlaylistCardProps> = ({
               </button>
               <button
                 onClick={e => { e.stopPropagation(); setShowDeleteConfirm(false); }}
-                className="flex-1 bg-dark-700 text-white px-4 py-2 rounded-lg hover:bg-dark-600 transition-colors">
+                className="flex-1 bg-gray-100 hover:bg-gray-200 text-black px-4 py-2 rounded-lg transition-colors">
                 Cancel
               </button>
             </div>

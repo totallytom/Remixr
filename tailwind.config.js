@@ -44,15 +44,6 @@ module.exports = {
           800: 'var(--color-dark-800, #1e293b)',
           900: 'var(--color-dark-900, #0f172a)',
         },
-        // Theme-specific colors
-        background: 'var(--color-background)',
-        surface: 'var(--color-surface)',
-        text: 'var(--color-text)',
-        'text-secondary': 'var(--color-text-secondary)',
-        border: 'var(--color-border)',
-        accent: 'var(--color-accent)',
-        warm: 'var(--color-warm)',
-        glow: 'var(--color-glow)',
       },
       fontFamily: {
         sans: ['Inter', 'system-ui', 'sans-serif'],

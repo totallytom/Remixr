@@ -30,7 +30,7 @@ const StoreFiltersBar: React.FC<StoreFiltersProps> = ({ filters, genres, onChang
   <div className={`space-y-3 ${className ?? ''}`}>
     {/* Search */}
     <div className="relative">
-      <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30 pointer-events-none" />
+      <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-black/30 pointer-events-none" />
       <input
         type="text"
         value={filters.query}

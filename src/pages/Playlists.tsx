@@ -330,7 +330,7 @@ const Playlists: React.FC = () => {
 
   if (isLoading || (!user && isLoadingGuest)) {
     return (
-      <div className="py-20 flex items-center flex-col gap-4 justify-center">
+      <div className="bg-white min-h-full py-20 flex items-center flex-col gap-4 justify-center">
         <div className="spinner w-8 h-8"></div>
         <span className="ml-2 text-gray-500">Loading playlists...</span>
       </div>
@@ -340,16 +340,16 @@ const Playlists: React.FC = () => {
   // Guest view — show public playlists with a sign-up CTA
   if (!user) {
     return (
-      <div className="flex flex-col h-full bg-dark-900">
+      <div className="flex flex-col h-full bg-white">
         {/* Sign-up banner */}
         <div className="flex-shrink-0 mx-5 sm:mx-8 mt-6 mb-2 flex items-center justify-between gap-3 px-4 py-3 bg-primary-900/30 border border-primary-700/40 rounded-xl">
           <div className="min-w-0">
-            <p className="text-white text-sm font-medium">Explore public playlists</p>
+            <p className="text-black text-sm font-medium">Explore public playlists</p>
             <p className="text-primary-300 text-xs truncate">Sign up to create and manage your own collections</p>
           </div>
           <button
             onClick={() => navigate('/signup')}
-            className="flex-shrink-0 px-4 py-2 bg-primary-600 hover:bg-primary-500 text-white rounded-full text-sm font-medium transition-colors"
+            className="flex-shrink-0 px-4 py-2 bg-primary-600 hover:bg-primary-500 text-black rounded-full text-sm font-medium transition-colors"
           >
             Sign Up Free
           </button>
@@ -357,24 +357,24 @@ const Playlists: React.FC = () => {
 
         {/* Header */}
         <div className="flex-shrink-0 px-5 sm:px-8 pt-4 pb-4">
-          <p className="text-2xl sm:text-3xl font-bold text-white font-kyobo leading-tight">Public Playlists</p>
-          <p className="text-white text-sm mt-0.5">Music collections shared by the community</p>
+          <p className="text-2xl sm:text-3xl font-bold text-black font-kyobo leading-tight">Public Playlists</p>
+          <p className="text-black text-sm mt-0.5">Music collections shared by the community</p>
         </div>
 
         {/* Playlist grid */}
         <div className="flex-1 overflow-y-auto px-5 sm:px-8 pb-[132px] lg:pb-6 scrollbar-hide">
           {guestPlaylists.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-20 gap-4">
-              <div className="w-16 h-16 bg-dark-800 rounded-full flex items-center justify-center">
+              <div className="w-16 h-16 bg-white-800 rounded-full flex items-center justify-center">
                 <ListMusic size={28} className="text-gray-600" />
               </div>
               <div className="text-center">
-                <p className="text-white font-medium">No public playlists yet</p>
+                <p className="text-black font-medium">No public playlists yet</p>
                 <p className="text-gray-500 text-sm">Be the first to create and share a playlist!</p>
               </div>
               <button
                 onClick={() => navigate('/signup')}
-                className="flex items-center gap-2 px-5 py-2.5 bg-violet-600 hover:bg-violet-500 text-white rounded-full text-sm font-semibold transition-colors"
+                className="flex items-center gap-2 px-5 py-2.5 bg-violet-600 hover:bg-violet-500 text-black rounded-full text-sm font-semibold transition-colors"
               >
                 <UserPlus size={16} /> Create Account
               </button>
@@ -388,12 +388,12 @@ const Playlists: React.FC = () => {
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: index * 0.04 }}
                   onClick={() => navigate('/signup')}
-                  className="cursor-pointer flex items-center gap-4 p-4 bg-dark-800 rounded-xl hover:bg-dark-700 transition-colors border border-dark-700/60"
+                  className="cursor-pointer flex items-center gap-4 p-4 bg-white-800 rounded-xl hover:bg-white-700 transition-colors border border-dark-700/60"
                 >
                   {playlist.cover ? (
                     <img src={playlist.cover} alt={playlist.name} className="w-14 h-14 rounded-lg object-cover flex-shrink-0" />
                   ) : (
-                    <div className="w-14 h-14 rounded-lg bg-dark-700 flex items-center justify-center flex-shrink-0">
+                    <div className="w-14 h-14 rounded-lg bg-white-700 flex items-center justify-center flex-shrink-0">
                       <ListMusic size={22} className="text-gray-600" />
                     </div>
                   )}
@@ -414,17 +414,17 @@ const Playlists: React.FC = () => {
   }
 
   return (
-    <div className="flex flex-col h-full bg-dark-900">
+    <div className="flex flex-col h-full bg-white">
 
       {/* ── Static Header ── */}
       <div className="flex-shrink-0 px-5 sm:px-8 pt-6 pb-4 flex items-center justify-between gap-4">
         <div>
-          <p className="text-2xl sm:text-3xl font-bold text-white font-kyobo leading-tight">My Playlists</p>
+          <p className="text-2xl sm:text-3xl font-bold text-black font-kyobo leading-tight">My Playlists</p>
           <p className="text-gray-500 text-sm mt-0.5">Organize and enjoy your music collections</p>
         </div>
         <button
           onClick={() => setShowCreateModal(true)}
-          className="flex items-center gap-2 px-4 py-2.5 bg-violet-600 hover:bg-violet-500 text-white rounded-full text-sm font-semibold transition-colors flex-shrink-0"
+          className="flex items-center gap-2 px-4 py-2.5 bg-green-600 hover:bg-violet-500 text-black rounded-full text-sm font-semibold transition-colors flex-shrink-0"
         >
           <PlusCircle size={16} />
           <span className="hidden sm:inline">Create Playlist</span>
@@ -441,22 +441,8 @@ const Playlists: React.FC = () => {
             placeholder="Search playlists…"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-9 pr-4 py-2 bg-dark-800 border border-dark-700/60 rounded-xl text-white placeholder-gray-600 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500"
+            className="w-full pl-9 pr-4 py-2 bg-white border-dark-700/60 rounded-xl text-black placeholder-gray-600 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500"
           />
-        </div>
-        <div className="flex items-center gap-1 bg-dark-800 border border-dark-700/60 rounded-xl p-1">
-          <button
-            onClick={() => setViewMode('list')}
-            className={`p-1.5 rounded-lg transition-colors ${viewMode === 'list' ? 'bg-violet-600 text-white' : 'text-gray-500 hover:text-white'}`}
-          >
-            <List size={16} />
-          </button>
-          <button
-            onClick={() => setViewMode('grid')}
-            className={`p-1.5 rounded-lg transition-colors ${viewMode === 'grid' ? 'bg-violet-600 text-white' : 'text-gray-500 hover:text-white'}`}
-          >
-            <Grid size={16} />
-          </button>
         </div>
       </div>
 
@@ -466,7 +452,7 @@ const Playlists: React.FC = () => {
           <div className="flex items-center gap-3 min-w-0">
             <Mail size={18} className="text-blue-400 flex-shrink-0" />
             <div className="min-w-0">
-              <p className="text-white text-sm font-medium truncate">
+              <p className="text-black text-sm font-medium truncate">
                 {pendingInvitations.length} pending invitation{pendingInvitations.length > 1 ? 's' : ''}
               </p>
               <p className="text-blue-300 text-xs">Tap to view and respond</p>
@@ -474,7 +460,7 @@ const Playlists: React.FC = () => {
           </div>
           <button
             onClick={() => { setSelectedInvitation(pendingInvitations[0]); setShowInvitationModal(true); }}
-            className="flex-shrink-0 px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-full text-xs font-medium transition-colors"
+            className="flex-shrink-0 px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-black rounded-full text-xs font-medium transition-colors"
           >
             View
           </button>
@@ -485,16 +471,16 @@ const Playlists: React.FC = () => {
       <div className="flex-1 overflow-y-auto px-5 sm:px-8 pb-[132px] lg:pb-6 scrollbar-hide">
         {filteredPlaylists.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-20 gap-4">
-            <div className="w-16 h-16 bg-dark-800 rounded-full flex items-center justify-center">
+            <div className="w-16 h-16 bg-white-800 rounded-full flex items-center justify-center">
               <ListMusic size={28} className="text-gray-600" />
             </div>
             <div className="text-center">
-              <p className="text-white font-medium mb-1">No playlists yet</p>
+              <p className="text-black font-medium mb-1">No playlists yet</p>
               <p className="text-gray-500 text-sm">Create your first playlist to get started</p>
             </div>
             <button
               onClick={() => setShowCreateModal(true)}
-              className="flex items-center gap-2 px-5 py-2.5 bg-violet-600 hover:bg-violet-500 text-white rounded-full text-sm font-semibold transition-colors"
+              className="flex items-center gap-2 px-5 py-2.5 bg-violet-600 hover:bg-violet-500 text-black rounded-full text-sm font-semibold transition-colors"
             >
               <PlusCircle size={16} /> Create Playlist
             </button>
@@ -503,7 +489,7 @@ const Playlists: React.FC = () => {
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            className="space-y-2"
+            className="grid grid-cols-[repeat(auto-fill,minmax(180px,1fr))] gap-3 sm:gap-4"
           >
             {filteredPlaylists.map((playlist, index) => {
               const isShared = (playlist as any).isShared || safeSharedPlaylists.some(sp => sp.id === playlist.id);
@@ -518,7 +504,7 @@ const Playlists: React.FC = () => {
                   className="cursor-pointer relative"
                 >
                   {isShared && !isOwner && (
-                    <div className="absolute top-2 right-2 z-10 flex items-center gap-1 px-2 py-0.5 bg-blue-600/80 text-white rounded-full text-xs font-semibold">
+                    <div className="absolute top-2 left-2 z-10 flex items-center gap-1 px-2 py-0.5 bg-blue-600/80 text-white rounded-full text-xs font-semibold">
                       <Share2 size={10} />
                       <span>Shared</span>
                     </div>
@@ -543,29 +529,26 @@ const Playlists: React.FC = () => {
       {/* ── Create Playlist Modal ── */}
       {showCreateModal && (
         <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4">
-          <div className="bg-dark-800 border border-dark-700/60 rounded-t-2xl sm:rounded-2xl w-full sm:max-w-md shadow-2xl mb-[136px] sm:mb-0">
-            <div className="flex items-center justify-between px-5 py-4 border-b border-dark-700/60">
+          <div className="bg-white border border-gray-200 rounded-t-2xl sm:rounded-2xl w-full sm:max-w-md shadow-2xl mb-[136px] sm:mb-0">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200">
               <p className="text-base font-semibold text-black">New Playlist</p>
-              <button onClick={() => setShowCreateModal(false)} className="p-1.5 text-gray-500 hover:text-white transition-colors rounded-lg hover:bg-dark-700">
-                <X size={18} />
-              </button>
             </div>
             <div className="p-5 space-y-4">
               <div>
-                <p className="text-xs font-medium text-gray-400 mb-1.5">Name</p>
+                <p className="text-xs font-medium text-dark mb-1.5">Name</p>
                 <input
                   type="text"
                   value={createForm.name}
                   onChange={(e) => setCreateForm(prev => ({ ...prev, name: e.target.value }))}
                   onKeyDown={(e) => e.key === 'Enter' && handleCreatePlaylist()}
-                  className="w-full px-3 py-2.5 bg-dark-700 border border-dark-600 rounded-xl text-white placeholder-gray-600 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500"
+                  className="w-full px-3 py-2.5 bg-gray-50 border border-gray-300 rounded-xl text-black placeholder-gray-400 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500"
                   placeholder="My awesome playlist"
                   autoFocus
                 />
               </div>
               <div className="flex items-center justify-between py-1">
                 <div>
-                  <p className="text-sm text-white font-medium">Public playlist</p>
+                  <p className="text-sm text-black font-medium">Public playlist</p>
                   <p className="text-xs text-gray-500">Anyone can find and listen</p>
                 </div>
                 <label className="relative inline-flex items-center cursor-pointer">
@@ -576,7 +559,7 @@ const Playlists: React.FC = () => {
                     onChange={(e) => setCreateForm(prev => ({ ...prev, isPublic: e.target.checked }))}
                     id="isPublic"
                   />
-                  <div className="w-10 h-6 bg-dark-600 peer-focus:ring-2 peer-focus:ring-violet-500 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-violet-600" />
+                  <div className="w-10 h-6 bg-gray-300 peer-focus:ring-2 peer-focus:ring-violet-500 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-violet-600" />
                 </label>
               </div>
             </div>
@@ -584,13 +567,13 @@ const Playlists: React.FC = () => {
               <button
                 onClick={handleCreatePlaylist}
                 disabled={isCreating || !createForm.name.trim()}
-                className="flex-1 py-2.5 bg-violet-600 hover:bg-violet-500 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-xl text-sm font-semibold transition-colors"
+                className="flex-1 py-2.5 bg-white-600 hover:bg-green-500 disabled:opacity-40 disabled:cursor-not-allowed text-black rounded-xl text-sm font-semibold transition-colors"
               >
                 {isCreating ? 'Creating…' : 'Create'}
               </button>
               <button
                 onClick={() => setShowCreateModal(false)}
-                className="flex-1 py-2.5 bg-dark-700 hover:bg-dark-600 text-white rounded-xl text-sm transition-colors"
+                className="flex-1 py-2.5 bg-white-700 hover:bg-white-600 text-black rounded-xl text-sm transition-colors"
               >
                 Cancel
               </button>
@@ -602,10 +585,10 @@ const Playlists: React.FC = () => {
       {/* ── Add Track Modal ── */}
       {showAddTrackModal && selectedPlaylist && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-end sm:items-center justify-center z-50 p-0 sm:p-4">
-          <div className="bg-dark-800 border border-dark-700/60 rounded-t-2xl sm:rounded-2xl w-full sm:max-w-xl max-h-[85vh] flex flex-col shadow-2xl">
+          <div className="bg-white-800 border border-dark-700/60 rounded-t-2xl sm:rounded-2xl w-full sm:max-w-xl max-h-[85vh] flex flex-col shadow-2xl">
             <div className="flex items-center justify-between px-5 py-4 border-b border-dark-700/60 flex-shrink-0">
               <p className="text-base font-semibold text-black">Add to "{selectedPlaylist.name}"</p>
-              <button onClick={() => setShowAddTrackModal(false)} className="p-1.5 text-gray-500 hover:text-white transition-colors rounded-lg hover:bg-dark-700">
+              <button onClick={() => setShowAddTrackModal(false)} className="p-1.5 text-gray-500 hover:text-black transition-colors rounded-lg hover:bg-white-700">
                 <X size={18} />
               </button>
             </div>
@@ -617,16 +600,16 @@ const Playlists: React.FC = () => {
                   {availableTracks
                     .filter(t => !selectedPlaylist.tracks.find(pt => pt.id === t.id))
                     .map((track) => (
-                      <div key={track.id} className="flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-dark-700/60 transition-colors">
-                        <img src={track.cover} alt={track.title} className="w-10 h-10 rounded-md object-cover flex-shrink-0 bg-dark-700" />
+                      <div key={track.id} className="flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-white-700/60 transition-colors">
+                        <img src={track.cover} alt={track.title} className="w-10 h-10 rounded-md object-cover flex-shrink-0 bg-white-700" />
                         <div className="flex-1 min-w-0">
-                          <p className="text-white text-sm font-medium truncate">{track.title}</p>
+                          <p className="text-black text-sm font-medium truncate">{track.title}</p>
                           <p className="text-gray-500 text-xs truncate">{track.artist}</p>
                         </div>
                         <span className="text-gray-600 text-xs tabular-nums mr-1">{formatDuration(track.duration)}</span>
                         <button
                           onClick={() => handleAddTrackToPlaylist(selectedPlaylist.id, track)}
-                          className="p-1.5 bg-violet-600 hover:bg-violet-500 text-white rounded-full transition-colors flex-shrink-0"
+                          className="p-1.5 bg-violet-600 hover:bg-violet-500 text-black rounded-full transition-colors flex-shrink-0"
                         >
                           <Plus size={14} />
                         </button>
@@ -636,7 +619,7 @@ const Playlists: React.FC = () => {
               )}
             </div>
             <div className="px-5 py-4 border-t border-dark-700/60 flex-shrink-0">
-              <button onClick={() => setShowAddTrackModal(false)} className="w-full py-2.5 bg-dark-700 hover:bg-dark-600 text-white rounded-xl text-sm transition-colors">
+              <button onClick={() => setShowAddTrackModal(false)} className="w-full py-2.5 bg-white-700 hover:bg-white-600 text-black rounded-xl text-sm transition-colors">
                 Done
               </button>
             </div>
@@ -647,19 +630,19 @@ const Playlists: React.FC = () => {
       {/* ── Invitation Modal ── */}
       {showInvitationModal && selectedInvitation && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-end sm:items-center justify-center z-50 p-0 sm:p-4">
-          <div className="bg-dark-800 border border-dark-700/60 rounded-t-2xl sm:rounded-2xl w-full sm:max-w-md shadow-2xl">
+          <div className="bg-white-800 border border-dark-700/60 rounded-t-2xl sm:rounded-2xl w-full sm:max-w-md shadow-2xl">
             <div className="flex items-center justify-between px-5 py-4 border-b border-dark-700/60">
               <p className="text-base font-semibold text-black">Playlist Invitation</p>
               <button
                 onClick={() => { setShowInvitationModal(false); setSelectedInvitation(null); }}
-                className="p-1.5 text-gray-500 hover:text-white transition-colors rounded-lg hover:bg-dark-700"
+                className="p-1.5 text-gray-500 hover:text-black transition-colors rounded-lg hover:bg-white-700"
               >
                 <X size={18} />
               </button>
             </div>
             <div className="p-5">
               <p className="text-gray-400 text-sm mb-4">You've been invited to collaborate on a playlist.</p>
-              <div className="flex items-center gap-4 p-4 bg-dark-700/60 rounded-xl mb-5">
+              <div className="flex items-center gap-4 p-4 bg-white-700/60 rounded-xl mb-5">
                 {selectedInvitation.playlists?.cover && (
                   <img
                     src={selectedInvitation.playlists.cover}
@@ -668,7 +651,7 @@ const Playlists: React.FC = () => {
                   />
                 )}
                 <div className="min-w-0">
-                  <p className="text-white font-semibold truncate">{selectedInvitation.playlists?.name || 'Playlist'}</p>
+                  <p className="text-black font-semibold truncate">{selectedInvitation.playlists?.name || 'Playlist'}</p>
                   <p className="text-gray-400 text-sm truncate">
                     Invited by {selectedInvitation.inviter?.username || 'Unknown'}
                   </p>
@@ -677,13 +660,13 @@ const Playlists: React.FC = () => {
               <div className="flex gap-2 mb-3">
                 <button
                   onClick={() => handleAcceptInvitation(selectedInvitation)}
-                  className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-green-500 hover:bg-green-400 text-white rounded-xl text-sm font-semibold transition-colors"
+                  className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-green-500 hover:bg-green-400 text-black rounded-xl text-sm font-semibold transition-colors"
                 >
                   <Check size={16} /> Accept
                 </button>
                 <button
                   onClick={() => handleDeclineInvitation(selectedInvitation.id)}
-                  className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-dark-700 hover:bg-dark-600 text-gray-300 rounded-xl text-sm transition-colors"
+                  className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-white-700 hover:bg-white-600 text-gray-300 rounded-xl text-sm transition-colors"
                 >
                   <XCircle size={16} /> Decline
                 </button>

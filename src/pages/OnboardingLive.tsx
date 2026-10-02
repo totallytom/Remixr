@@ -55,7 +55,7 @@ const ProfilePreview: React.FC<{
             {avatar && avatar !== '/default-avatar.jpg'
               ? <img src={getAvatarUrl(avatar)} alt={name} className="w-full h-full object-cover" />
               : <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-violet-600/40 to-primary-600/40">
-                  <Mic2 size={22} className="text-white/60" />
+                  <Mic2 size={22} className="text-black/60" />
                 </div>
             }
           </div>
@@ -66,10 +66,10 @@ const ProfilePreview: React.FC<{
           </div>
         </div>
 
-        <h2 className="font-bold text-white leading-tight" style={{ fontSize: '1.05rem' }}>{name}</h2>
-        <p className="text-sm text-white/40 mt-0.5 mb-3">@{handle}</p>
+        <h2 className="font-bold text-black leading-tight" style={{ fontSize: '1.05rem' }}>{name}</h2>
+        <p className="text-sm text-black/40 mt-0.5 mb-3">@{handle}</p>
 
-        {bio && <p className="text-sm text-white/60 mb-3 line-clamp-2">{bio}</p>}
+        {bio && <p className="text-sm text-black/60 mb-3 line-clamp-2">{bio}</p>}
 
         {genres.length > 0 && (
           <div className="flex flex-wrap gap-1.5 mb-4">
@@ -85,8 +85,8 @@ const ProfilePreview: React.FC<{
         <div className="flex gap-5 py-3 border-t border-white/6 mb-4">
           {[['1', 'Track'], ['0', 'Followers'], ['0', 'Following']].map(([n, l]) => (
             <div key={l}>
-              <span className="text-sm font-bold text-white">{n}</span>
-              <span className="text-xs text-white/30 ml-1">{l}</span>
+              <span className="text-sm font-bold text-black">{n}</span>
+              <span className="text-xs text-black/30 ml-1">{l}</span>
             </div>
           ))}
         </div>
@@ -94,14 +94,14 @@ const ProfilePreview: React.FC<{
         {/* Track card */}
         {track && (
           <div className="mb-5">
-            <p className="text-[10px] uppercase tracking-widest text-white/25 mb-2.5 font-medium">Music</p>
+            <p className="text-[10px] uppercase tracking-widest text-black/25 mb-2.5 font-medium">Music</p>
             <div className="flex items-center gap-3 p-3 rounded-xl bg-dark-700/50 border border-white/6">
               <div className="w-11 h-11 rounded-lg overflow-hidden flex-shrink-0 bg-dark-600">
                 <img src={coverSrc} alt={track.title} className="w-full h-full object-cover" />
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-semibold text-white truncate">{track.title}</p>
-                <p className="text-xs text-white/35 mt-0.5">
+                <p className="text-sm font-semibold text-black truncate">{track.title}</p>
+                <p className="text-xs text-black/35 mt-0.5">
                   {track.releaseType === 'album' ? 'Album' : 'Single'}
                   {track.genre ? ` · ${track.genre}` : ''}
                 </p>
@@ -133,8 +133,8 @@ const CopyButton: React.FC<{ url: string }> = ({ url }) => {
       whileTap={{ scale: 0.97 }}
       className={`w-full relative flex items-center justify-center gap-2.5 py-4 rounded-2xl font-semibold text-base transition-all duration-300 overflow-hidden ${
         state === 'copied'
-          ? 'bg-emerald-500 text-white'
-          : 'bg-gradient-to-r from-primary-600 to-secondary-600 text-white hover:from-primary-500 hover:to-secondary-500'
+          ? 'bg-emerald-500 text-black'
+          : 'bg-gradient-to-r from-primary-600 to-secondary-600 text-black hover:from-primary-500 hover:to-secondary-500'
       }`}
     >
       {/* Ripple on copy */}
@@ -221,7 +221,7 @@ const OnboardingLive: React.FC = () => {
   if (!user) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-dark-900 via-dark-800 to-primary-900 flex items-center justify-center">
-        <Loader2 size={28} className="animate-spin text-white/30" />
+        <Loader2 size={28} className="animate-spin text-black/30" />
       </div>
     );
   }
@@ -230,7 +230,7 @@ const OnboardingLive: React.FC = () => {
     ? encodeURIComponent(user.username.trim())
     : user.id;
   const profileUrl = `${window.location.origin}/profile/${profileSlug}`;
-  const tweetUrl = `https://twitter.com/intent/tweet?text=${encodeURIComponent(`Just dropped my first track on Remixr 🎵`)}&url=${encodeURIComponent(profileUrl)}`;
+  const tweetUrl = `https://twitter.com/intent/tweet?text=${encodeURIComponent(`Just dropped my first track on Re-Mixed 🎵`)}&url=${encodeURIComponent(profileUrl)}`;
 
   const displayName = user.artistName || user.username;
   const handle = user.username;
@@ -248,13 +248,13 @@ const OnboardingLive: React.FC = () => {
         >
           <div className="inline-flex items-center gap-2.5 px-4 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/25 mb-5">
             <LiveDot />
-            <span className="text-xs text-emerald-300 font-semibold tracking-wide">Live on Remixr</span>
+            <span className="text-xs text-emerald-300 font-semibold tracking-wide">Live on Re-Mixed</span>
           </div>
 
-          <h1 className="text-4xl sm:text-5xl font-extrabold text-white tracking-tight mb-3">
+          <h1 className="text-4xl sm:text-5xl font-extrabold text-black tracking-tight mb-3">
             You're live.
           </h1>
-          <p className="text-white/40 text-base max-w-sm mx-auto">
+          <p className="text-black/40 text-base max-w-sm mx-auto">
             Your music is out there. Here's what people will see when you share the link.
           </p>
         </motion.div>
@@ -271,7 +271,7 @@ const OnboardingLive: React.FC = () => {
             {/* "What listeners see" label */}
             <div className="flex items-center gap-3 mb-3">
               <div className="h-px flex-1 bg-white/6" />
-              <p className="text-[10px] uppercase tracking-widest text-white/25 font-medium px-1">
+              <p className="text-[10px] uppercase tracking-widest text-black/25 font-medium px-1">
                 Listener view
               </p>
               <div className="h-px flex-1 bg-white/6" />
@@ -279,7 +279,7 @@ const OnboardingLive: React.FC = () => {
 
             {isLoadingTrack ? (
               <div className="rounded-2xl bg-dark-800 border border-white/8 h-64 flex items-center justify-center">
-                <Loader2 size={22} className="animate-spin text-white/20" />
+                <Loader2 size={22} className="animate-spin text-black/20" />
               </div>
             ) : (
               <ProfilePreview
@@ -303,12 +303,12 @@ const OnboardingLive: React.FC = () => {
             {/* URL block */}
             <div className="glass-effect rounded-2xl p-6 space-y-4">
               <div>
-                <p className="text-xs text-white/30 font-medium uppercase tracking-widest mb-2">
+                <p className="text-xs text-black/30 font-medium uppercase tracking-widest mb-2">
                   Your shareable link
                 </p>
                 <div className="flex items-center gap-2.5 px-4 py-3 rounded-xl bg-dark-700/80 border border-white/8">
                   <div className="w-2 h-2 rounded-full bg-emerald-500 flex-shrink-0" />
-                  <p className="text-sm text-white/55 font-mono truncate flex-1 select-all">
+                  <p className="text-sm text-black/55 font-mono truncate flex-1 select-all">
                     {profileUrl}
                   </p>
                 </div>
@@ -324,7 +324,7 @@ const OnboardingLive: React.FC = () => {
                   navigate(
                     `/profile/${user.username?.trim() ? encodeURIComponent(user.username.trim()) : user.id}`,
                   )}
-                  className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl border border-white/10 text-sm text-white/50 hover:text-white hover:border-white/25 transition-all"
+                  className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl border border-white/10 text-sm text-black/50 hover:text-black hover:border-white/25 transition-all"
                 >
                   <ExternalLink size={14} />
                   View profile
@@ -333,7 +333,7 @@ const OnboardingLive: React.FC = () => {
                   href={tweetUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="flex items-center justify-center w-10 h-10 rounded-xl border border-white/10 text-white/40 hover:text-white hover:border-white/25 transition-all flex-shrink-0"
+                  className="flex items-center justify-center w-10 h-10 rounded-xl border border-white/10 text-black/40 hover:text-black hover:border-white/25 transition-all flex-shrink-0"
                   title="Share on X"
                 >
                   <Twitter size={15} />
@@ -341,10 +341,10 @@ const OnboardingLive: React.FC = () => {
                 <button
                   onClick={async () => {
                     if (navigator.share) {
-                      try { await navigator.share({ url: profileUrl, title: `${displayName} on Remixr` }); } catch {}
+                      try { await navigator.share({ url: profileUrl, title: `${displayName} on Re-Mixed` }); } catch {}
                     }
                   }}
-                  className="flex items-center justify-center w-10 h-10 rounded-xl border border-white/10 text-white/40 hover:text-white hover:border-white/25 transition-all flex-shrink-0"
+                  className="flex items-center justify-center w-10 h-10 rounded-xl border border-white/10 text-black/40 hover:text-black hover:border-white/25 transition-all flex-shrink-0"
                   title="Share"
                 >
                   <Share2 size={15} />
@@ -353,10 +353,10 @@ const OnboardingLive: React.FC = () => {
             </div>
 
             {/* Upload another */}
-            <p className="text-center text-xs text-white/20">
+            <p className="text-center text-xs text-black/20">
               <button
                 onClick={() => navigate('/onboarding/upload')}
-                className="hover:text-white/45 transition-colors underline underline-offset-2"
+                className="hover:text-black/45 transition-colors underline underline-offset-2"
               >
                 Upload another track
               </button>

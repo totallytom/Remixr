@@ -184,15 +184,15 @@ const MusicPlayerModal: React.FC<MusicPlayerModalProps> = ({
             initial={{ scale: 0.9, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
             exit={{ scale: 0.9, opacity: 0 }}
-            className="bg-dark-800 rounded-2xl p-8 max-w-md w-full max-h-[90vh] overflow-y-auto"
+            className="bg-white rounded-2xl p-8 max-w-md w-full max-h-[90vh] overflow-y-auto shadow-2xl border border-gray-200"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Header */}
             <div className="flex items-center justify-between mb-6">
-              <h2 className="text-xl font-bold text-white font-kyobo">Now Playing</h2>
+              <h2 className="text-xl font-bold text-black font-kyobo">Now Playing</h2>
               <button
                 onClick={onClose}
-                className="p-2 rounded-full bg-dark-700 text-white hover:bg-dark-600 transition-colors"
+                className="p-2 rounded-full bg-gray-100 text-black hover:bg-gray-200 transition-all duration-200 hover:scale-105 active:scale-95"
               >
                 <X size={20} />
               </button>
@@ -224,20 +224,20 @@ const MusicPlayerModal: React.FC<MusicPlayerModalProps> = ({
 
             {/* Track Info */}
             <div className="text-center mb-6">
-              <h3 className="text-xl font-bold text-white font-kotra mb-2">
+              <h3 className="text-xl font-bold text-black font-kotra mb-2">
                 {track.title}
               </h3>
-              <p className="text-dark-300 font-kyobo mb-1">
+              <p className="text-black font-kyobo mb-1">
                 {track.artist}
               </p>
               {track.album && (
-                <p className="text-dark-400 text-sm font-kyobo">
+                <p className="text-gray-500 text-sm font-kyobo">
                   {track.album}
                 </p>
               )}
               {track.genre && (
                 <div className="mt-2">
-                  <span className="px-3 py-1 bg-primary-600 text-white text-xs rounded-full">
+                  <span className="px-3 py-1 bg-primary-600 text-black text-xs rounded-full">
                     {track.genre}
                   </span>
                 </div>
@@ -246,7 +246,7 @@ const MusicPlayerModal: React.FC<MusicPlayerModalProps> = ({
 
             {/* Progress Bar */}
             <div className="mb-4">
-              <div className="flex justify-between text-xs text-dark-400 mb-2">
+              <div className="flex justify-between text-xs text-gray-500 mb-2">
                 <span>{formatTime(currentTime)}</span>
                 <span>{formatTime(duration)}</span>
               </div>
@@ -268,7 +268,7 @@ const MusicPlayerModal: React.FC<MusicPlayerModalProps> = ({
               <button
                 onClick={handlePlayPause}
                 disabled={isBuffering}
-                className="w-12 h-12 bg-primary-600 text-white rounded-full flex items-center justify-center hover:bg-primary-700 transition-colors disabled:opacity-50"
+                className="w-14 h-14 bg-primary-600 text-black rounded-full flex items-center justify-center shadow-md hover:bg-primary-700 hover:shadow-lg transition-all duration-200 hover:scale-105 active:scale-95 disabled:opacity-50 disabled:hover:scale-100"
               >
                 {isBuffering ? (
                   <Loader2 size={20} className="animate-spin" />
@@ -284,7 +284,7 @@ const MusicPlayerModal: React.FC<MusicPlayerModalProps> = ({
             <div className="flex items-center space-x-3 mb-6">
               <button
                 onClick={handleMuteToggle}
-                className="p-2 text-dark-400 hover:text-white transition-colors"
+                className="p-2 rounded-full bg-gray-100 text-gray-500 hover:text-black hover:bg-gray-200 transition-all duration-200 hover:scale-105 active:scale-95"
               >
                 {isMuted ? <VolumeX size={20} /> : <Volume2 size={20} />}
               </button>
@@ -295,7 +295,7 @@ const MusicPlayerModal: React.FC<MusicPlayerModalProps> = ({
                 step="0.01"
                 value={isMuted ? 0 : volume}
                 onChange={handleVolumeChange}
-                className="flex-1 h-2 bg-dark-600 rounded-lg appearance-none cursor-pointer slider"
+                className="flex-1 h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer slider"
               />
             </div>
 
@@ -303,18 +303,18 @@ const MusicPlayerModal: React.FC<MusicPlayerModalProps> = ({
             <div className="flex items-center justify-center space-x-4">
               <button
                 onClick={handleLike}
-                className={`p-3 rounded-full transition-colors ${
-                  isLiked 
-                    ? 'bg-red-600 text-white' 
-                    : 'bg-dark-700 text-dark-400 hover:text-white'
+                className={`p-3 rounded-full shadow-sm transition-all duration-200 hover:scale-105 active:scale-95 ${
+                  isLiked
+                    ? 'bg-red-600 text-black hover:bg-red-700'
+                    : 'bg-gray-100 text-gray-500 hover:text-black hover:bg-gray-200'
                 }`}
               >
                 <Heart size={20} fill={isLiked ? 'currentColor' : 'none'} />
               </button>
-              
+
               <button
                 onClick={handleShare}
-                className="p-3 rounded-full bg-dark-700 text-dark-400 hover:text-white transition-colors"
+                className="p-3 rounded-full bg-gray-100 text-gray-500 shadow-sm hover:text-black hover:bg-gray-200 transition-all duration-200 hover:scale-105 active:scale-95"
               >
                 <Share2 size={20} />
               </button>

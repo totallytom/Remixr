@@ -86,10 +86,10 @@ const ChatMusicShare: React.FC<ChatMusicShareProps> = ({ track, onPlay }) => {
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center space-x-2">
             <div className="w-7 h-7 bg-gradient-to-br from-pink-500 to-orange-500 rounded-lg flex items-center justify-center shadow-md">
-              <Music size={14} className="text-white" />
+              <Music size={14} className="text-black" />
             </div>
                       <div>
-            <div className="text-xs font-semibold text-white">Shared Track</div>
+            <div className="text-xs font-semibold text-black">Shared Track</div>
             <div className="text-xs text-gray-400">via Music</div>
           </div>
           </div>
@@ -114,7 +114,7 @@ const ChatMusicShare: React.FC<ChatMusicShareProps> = ({ track, onPlay }) => {
           
           {/* Track Details */}
           <div className="flex-1 min-w-0">
-            <h4 className="text-base font-bold text-white mb-1 truncate">{track.title}</h4>
+            <h4 className="text-base font-bold text-black mb-1 truncate">{track.title}</h4>
             <p className="text-sm text-gray-300 mb-1 truncate">{track.artist || 'Unknown Artist'}</p>
             {track.album && (
               <p className="text-xs text-gray-500 truncate">{track.album}</p>
@@ -164,7 +164,7 @@ const ChatMusicShare: React.FC<ChatMusicShareProps> = ({ track, onPlay }) => {
                             className={`w-full flex items-center justify-between gap-2 px-3 py-2 text-sm transition-colors text-left ${
                               alreadyIn
                                 ? 'text-gray-500 cursor-default'
-                                : 'text-white hover:bg-dark-700 cursor-pointer'
+                                : 'text-black hover:bg-dark-700 cursor-pointer'
                             }`}
                           >
                             <span className="truncate">{pl.name}</span>

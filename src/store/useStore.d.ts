@@ -8,7 +8,7 @@ export interface User {
   followers: number;
   following: number;
   role: 'musician' | 'consumer';
-  subscriptionTier?: 'free' | 'pro';
+  subscriptionTier?: 'free' | 'fan' | 'artist';
   stripeCustomerId?: string;
   isVerified: boolean;
   isPrivate: boolean;

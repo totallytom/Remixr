@@ -48,7 +48,9 @@ const Login: React.FC = () => {
   useEffect(() => {
     const tab = searchParams.get('tab');
     if (tab === 'register') {
-      setActiveTab('register');
+      // All signups go through /signup, which has the date-of-birth check.
+      navigate('/signup', { replace: true });
+      return;
     }
     
     // If user is already authenticated, redirect based on role.
@@ -195,7 +197,7 @@ const Login: React.FC = () => {
             >
               <img src="/logo/logo.png" alt="Remix Logo" className="w-16 h-16 rounded-full object-cover" />
             </motion.div>
-            <h1 className="h2 text-center mb-2 text-gradient-neon">Remixr</h1>
+            <h1 className="h2 text-center mb-2 text-gradient-neon">Re-Mixed</h1>
             <p className="body text-center text-black">Connect with musicians and enthusiasts worldwide</p>
           </div>
 
@@ -218,7 +220,7 @@ const Login: React.FC = () => {
                 <div className="w-12 h-12 bg-primary-500/10 rounded-full flex items-center justify-center mx-auto mb-3">
                   <Lock size={22} className="text-primary-400" />
                 </div>
-                <h3 className="text-lg font-semibold text-white">Two-Factor Authentication</h3>
+                <h3 className="text-lg font-semibold text-black">Two-Factor Authentication</h3>
                 <p className="text-dark-300 text-sm mt-1">Enter the 6-digit code from your authenticator app.</p>
               </div>
               <div>
@@ -229,7 +231,7 @@ const Login: React.FC = () => {
                   value={mfaCode}
                   onChange={(e) => setMfaCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
                   placeholder="000000"
-                  className="w-full px-4 py-3 bg-dark-700 border border-dark-600 rounded-lg text-white text-center font-mono text-2xl tracking-widest placeholder-dark-400 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all"
+                  className="w-full px-4 py-3 bg-dark-700 border border-dark-600 rounded-lg text-black text-center font-mono text-2xl tracking-widest placeholder-dark-400 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all"
                   autoFocus
                 />
                 {mfaError && <p className="mt-2 text-sm text-red-400 text-center">{mfaError}</p>}
@@ -240,7 +242,7 @@ const Login: React.FC = () => {
                 whileTap={{ scale: 0.98 }}
                 onClick={handleMFAVerify}
                 disabled={mfaLoading || mfaCode.length !== 6}
-                className="w-full bg-gradient-to-r from-primary-600 to-secondary-600 text-white py-3 px-6 rounded-lg font-medium hover:from-primary-700 hover:to-secondary-700 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 focus:ring-offset-dark-800 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                className="w-full bg-gradient-to-r from-primary-600 to-secondary-600 text-black py-3 px-6 rounded-lg font-medium hover:from-primary-700 hover:to-secondary-700 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 focus:ring-offset-dark-800 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {mfaLoading ? (
                   <div className="flex items-center justify-center">
@@ -254,7 +256,7 @@ const Login: React.FC = () => {
               <button
                 type="button"
                 onClick={() => { setMfaRequired(false); setMfaCode(''); setMfaError(null); }}
-                className="w-full text-sm text-dark-400 hover:text-white transition-colors"
+                className="w-full text-sm text-dark-400 hover:text-black transition-colors"
               >
                 ← Back to sign in
               </button>
@@ -265,7 +267,7 @@ const Login: React.FC = () => {
           {!mfaRequired && activeTab === 'login' && !showForgotPassword && (
             <form onSubmit={loginForm.handleSubmit(onLoginSubmit)} className="space-y-6">
               <div>
-                <label className="block text-sm font-medium text-white mb-2">
+                <label className="block text-sm font-medium text-black mb-2">
                   Email Address
                 </label>
                 <div className="relative">
@@ -280,7 +282,7 @@ const Login: React.FC = () => {
                     })}
                     type="email"
                     placeholder="Enter your email"
-                    className="w-full pl-10 pr-4 py-3 bg-dark-700 border border-dark-600 rounded-lg text-white placeholder-dark-400 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all"
+                    className="w-full pl-10 pr-4 py-3 bg-dark-700 border border-dark-600 rounded-lg text-black placeholder-dark-400 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all"
                   />
                 </div>
                 {loginForm.formState.errors.email && (
@@ -289,7 +291,7 @@ const Login: React.FC = () => {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-white mb-2">
+                <label className="block text-sm font-medium text-black mb-2">
                   Password
                 </label>
                 <div className="relative">
@@ -304,12 +306,12 @@ const Login: React.FC = () => {
                     })}
                     type={showPassword ? 'text' : 'password'}
                     placeholder="Enter your password"
-                    className="w-full pl-10 pr-12 py-3 bg-dark-700 border border-dark-600 rounded-lg text-white placeholder-dark-400 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all"
+                    className="w-full pl-10 pr-12 py-3 bg-dark-700 border border-dark-600 rounded-lg text-black placeholder-dark-400 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all"
                   />
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-1/2 transform -translate-y-1/2 text-dark-400 hover:text-white transition-colors"
+                    className="absolute right-3 top-1/2 transform -translate-y-1/2 text-dark-400 hover:text-black transition-colors"
                   >
                     {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
                   </button>
@@ -333,7 +335,7 @@ const Login: React.FC = () => {
                 whileHover={{ scale: 1.02 }}
                 whileTap={{ scale: 0.98 }}
                 disabled={isLoading}
-                className="w-full bg-gradient-to-r from-primary-600 to-secondary-600 text-white py-3 px-6 rounded-lg font-medium hover:from-primary-700 hover:to-secondary-700 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 focus:ring-offset-dark-800 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                className="w-full bg-gradient-to-r from-primary-600 to-secondary-600 text-black py-3 px-6 rounded-lg font-medium hover:from-primary-700 hover:to-secondary-700 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 focus:ring-offset-dark-800 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {isLoading ? (
                   <div className="flex items-center justify-center">
@@ -352,7 +354,7 @@ const Login: React.FC = () => {
             <div className="space-y-6">
               {resetEmailSent ? (
                 <div className="text-center">
-                  <h3 className="text-xl font-medium text-white mb-2">Check Your Email</h3>
+                  <h3 className="text-xl font-medium text-black mb-2">Check Your Email</h3>
                   <p className="text-dark-300 mb-4">
                     We've sent password reset instructions to your email address.
                   </p>
@@ -368,14 +370,14 @@ const Login: React.FC = () => {
                 </div>
               ) : (
                 <form onSubmit={forgotPasswordForm.handleSubmit(onForgotPasswordSubmit)}>
-                  <h3 className="text-xl font-medium text-white mb-4">Reset Your Password</h3>
+                  <h3 className="text-xl font-medium text-black mb-4">Reset Your Password</h3>
                   <p className="text-dark-300 mb-4">
                     Enter your email address and you will receive a Supabase Auth email instructions to reset your password.
                   </p>
                   
                   <div className="space-y-4">
                     <div>
-                      <label className="block text-sm font-medium text-white mb-2">
+                      <label className="block text-sm font-medium text-black mb-2">
                         Email Address
                       </label>
                       <div className="relative">
@@ -390,7 +392,7 @@ const Login: React.FC = () => {
                           })}
                           type="email"
                           placeholder="Enter your email"
-                          className="w-full pl-10 pr-4 py-3 bg-dark-700 border border-dark-600 rounded-lg text-white placeholder-dark-400 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all"
+                          className="w-full pl-10 pr-4 py-3 bg-dark-700 border border-dark-600 rounded-lg text-black placeholder-dark-400 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all"
                         />
                       </div>
                       {forgotPasswordForm.formState.errors.email && (
@@ -406,7 +408,7 @@ const Login: React.FC = () => {
                         whileHover={{ scale: 1.02 }}
                         whileTap={{ scale: 0.98 }}
                         disabled={isLoading}
-                        className="flex-1 bg-gradient-to-r from-primary-600 to-secondary-600 text-white py-3 px-6 rounded-lg font-medium hover:from-primary-700 hover:to-secondary-700 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 focus:ring-offset-dark-800 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                        className="flex-1 bg-gradient-to-r from-primary-600 to-secondary-600 text-black py-3 px-6 rounded-lg font-medium hover:from-primary-700 hover:to-secondary-700 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 focus:ring-offset-dark-800 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                       >
                         {isLoading ? (
                           <div className="flex items-center justify-center">
@@ -420,7 +422,7 @@ const Login: React.FC = () => {
                       <button
                         type="button"
                         onClick={() => setShowForgotPassword(false)}
-                        className="px-6 py-3 border border-dark-600 rounded-lg text-dark-300 hover:text-white hover:border-dark-500 transition-colors"
+                        className="px-6 py-3 border border-dark-600 rounded-lg text-dark-300 hover:text-black hover:border-dark-500 transition-colors"
                       >
                         Cancel
                       </button>
@@ -435,7 +437,7 @@ const Login: React.FC = () => {
           {!mfaRequired && activeTab === 'register' && (
             <form onSubmit={registerForm.handleSubmit(onRegisterSubmit)} className="space-y-6">
               <div>
-                <label className="block text-sm font-medium text-white mb-2">
+                <label className="block text-sm font-medium text-black mb-2">
                   Username
                 </label>
                 <div className="relative">
@@ -450,7 +452,7 @@ const Login: React.FC = () => {
                     })}
                     type="text"
                     placeholder="Choose a username"
-                    className="w-full pl-10 pr-4 py-3 bg-dark-700 border border-dark-600 rounded-lg text-white placeholder-dark-400 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all"
+                    className="w-full pl-10 pr-4 py-3 bg-dark-700 border border-dark-600 rounded-lg text-black placeholder-dark-400 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all"
                   />
                 </div>
                 {registerForm.formState.errors.username && (
@@ -459,7 +461,7 @@ const Login: React.FC = () => {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-white mb-2">
+                <label className="block text-sm font-medium text-black mb-2">
                   Email Address
                 </label>
                 <div className="relative">
@@ -474,7 +476,7 @@ const Login: React.FC = () => {
                     })}
                     type="email"
                     placeholder="Enter your email"
-                    className="w-full pl-10 pr-4 py-3 bg-dark-700 border border-dark-600 rounded-lg text-white placeholder-dark-400 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all"
+                    className="w-full pl-10 pr-4 py-3 bg-dark-700 border border-dark-600 rounded-lg text-black placeholder-dark-400 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all"
                   />
                 </div>
                 {registerForm.formState.errors.email && (
@@ -483,7 +485,7 @@ const Login: React.FC = () => {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-white mb-2">
+                <label className="block text-sm font-medium text-black mb-2">
                   Password
                 </label>
                 <div className="relative">
@@ -498,12 +500,12 @@ const Login: React.FC = () => {
                     })}
                     type={showPassword ? 'text' : 'password'}
                     placeholder="Create a password"
-                    className="w-full pl-10 pr-12 py-3 bg-dark-700 border border-dark-600 rounded-lg text-white placeholder-dark-400 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all"
+                    className="w-full pl-10 pr-12 py-3 bg-dark-700 border border-dark-600 rounded-lg text-black placeholder-dark-400 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all"
                   />
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-1/2 transform -translate-y-1/2 text-dark-400 hover:text-white transition-colors"
+                    className="absolute right-3 top-1/2 transform -translate-y-1/2 text-dark-400 hover:text-black transition-colors"
                   >
                     {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
                   </button>
@@ -514,7 +516,7 @@ const Login: React.FC = () => {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-white mb-2">
+                <label className="block text-sm font-medium text-black mb-2">
                   Confirm Password
                 </label>
                 <div className="relative">
@@ -526,12 +528,12 @@ const Login: React.FC = () => {
                     })}
                     type={showConfirmPassword ? 'text' : 'password'}
                     placeholder="Confirm your password"
-                    className="w-full pl-10 pr-12 py-3 bg-dark-700 border border-dark-600 rounded-lg text-white placeholder-dark-400 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all"
+                    className="w-full pl-10 pr-12 py-3 bg-dark-700 border border-dark-600 rounded-lg text-black placeholder-dark-400 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all"
                   />
                   <button
                     type="button"
                     onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                    className="absolute right-3 top-1/2 transform -translate-y-1/2 text-dark-400 hover:text-white transition-colors"
+                    className="absolute right-3 top-1/2 transform -translate-y-1/2 text-dark-400 hover:text-black transition-colors"
                   >
                     {showConfirmPassword ? <EyeOff size={20} /> : <Eye size={20} />}
                   </button>
@@ -542,7 +544,7 @@ const Login: React.FC = () => {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-white mb-2">
+                <label className="block text-sm font-medium text-black mb-2">
                   I am a...
                 </label>
                 <div className="grid grid-cols-2 gap-3">
@@ -552,7 +554,7 @@ const Login: React.FC = () => {
                     className={`p-3 rounded-lg border-2 transition-all ${
                       registerForm.watch('role') === 'consumer'
                         ? 'border-primary-500 bg-primary-500/10 text-primary-400'
-                        : 'border-dark-600 text-dark-300 hover:border-dark-500 hover:text-white'
+                        : 'border-dark-600 text-dark-300 hover:border-dark-500 hover:text-black'
                     }`}
                   >
                     <Headphones size={20} className="mx-auto mb-2" />
@@ -564,7 +566,7 @@ const Login: React.FC = () => {
                     className={`p-3 rounded-lg border-2 transition-all ${
                       registerForm.watch('role') === 'musician'
                         ? 'border-primary-500 bg-primary-500/10 text-primary-400'
-                        : 'border-dark-600 text-dark-300 hover:border-dark-500 hover:text-white'
+                        : 'border-dark-600 text-dark-300 hover:border-dark-500 hover:text-black'
                     }`}
                   >
                     <Mic size={20} className="mx-auto mb-2" />
@@ -587,7 +589,7 @@ const Login: React.FC = () => {
               {registerForm.watch('role') === 'musician' && (
                 <>
                   <div>
-                    <label className="block text-sm font-medium text-white mb-2">
+                    <label className="block text-sm font-medium text-black mb-2">
                       Artist Name
                     </label>
                     <div className="relative">
@@ -602,7 +604,7 @@ const Login: React.FC = () => {
                         })}
                         type="text"
                         placeholder="Your artist/stage name"
-                        className="w-full pl-10 pr-4 py-3 bg-dark-700 border border-dark-600 rounded-lg text-white placeholder-dark-400 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all"
+                        className="w-full pl-10 pr-4 py-3 bg-dark-700 border border-dark-600 rounded-lg text-black placeholder-dark-400 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all"
                       />
                     </div>
                     {registerForm.formState.errors.artistName && (
@@ -611,14 +613,14 @@ const Login: React.FC = () => {
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-white mb-2">
+                    <label className="block text-sm font-medium text-black mb-2">
                       Bio
                     </label>
                     <textarea
                       {...registerForm.register('bio')}
                       placeholder="Tell us about your music..."
                       rows={3}
-                      className="w-full px-4 py-3 bg-dark-700 border border-dark-600 rounded-lg text-white placeholder-dark-400 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all resize-none"
+                      className="w-full px-4 py-3 bg-dark-700 border border-dark-600 rounded-lg text-black placeholder-dark-400 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all resize-none"
                     />
                   </div>
                 </>
@@ -629,7 +631,7 @@ const Login: React.FC = () => {
                 whileHover={{ scale: 1.02 }}
                 whileTap={{ scale: 0.98 }}
                 disabled={isLoading}
-                className="w-full bg-gradient-to-r from-primary-600 to-secondary-600 text-white py-3 px-6 rounded-lg font-medium hover:from-primary-700 hover:to-secondary-700 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 focus:ring-offset-dark-800 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                className="w-full bg-gradient-to-r from-primary-600 to-secondary-600 text-black py-3 px-6 rounded-lg font-medium hover:from-primary-700 hover:to-secondary-700 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 focus:ring-offset-dark-800 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {isLoading ? (
                   <div className="flex items-center justify-center">

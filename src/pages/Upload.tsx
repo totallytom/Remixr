@@ -17,6 +17,9 @@ import {
 import { useStore } from '../store/useStore';
 import { useAlerts } from '../contexts/AlertContext';
 import { supabase } from '../services/supabase';
+import { requestUploadToken, confirmUpload } from '../services/api';
+import { DOWNLOAD_POLICY_OPTIONS, type DownloadPolicy } from '../services/downloadService';
+import { LICENSES, licenseInfo, DEFAULT_LICENSE, type LicenseType } from '../config/licenses';
 import dinoImg from '../../public/logo/DINO.png';
 import littlePrinceImg from '../../public/logo/LITTLE PRINCE.png';
 import { SnippetEditor } from '../components/music/SnippetEditor';
@@ -91,72 +94,6 @@ async function extractSample(file: File): Promise<string> {
   });
 }
 
-// Map server error codes to safe user-facing messages (A09 — no internal details leaked)
-const UPLOAD_ERROR_MESSAGES: Record<string, string> = {
-  copyright_blocked: '', // use server reason directly — it names the matched track, not internals
-  token_invalid:     'Upload session expired. Please try again.',
-  token_expired:     'Upload session expired. Please try again.',
-  file_not_found:    'Upload did not complete. Please try again.',
-  file_invalid:      'The uploaded file appears to be invalid. Please try a different file.',
-  forbidden:         'Access denied.',
-};
-
-function resolveUploadError(data: any): string {
-  const code = data?.code as string | undefined;
-  if (code === 'copyright_blocked') return data?.error || 'This track cannot be uploaded due to copyright restrictions.';
-  if (code && UPLOAD_ERROR_MESSAGES[code]) return UPLOAD_ERROR_MESSAGES[code];
-  return 'Upload failed. Please try again.';
-}
-
-// Request a signed upload URL from the server (runs 3-layer copyright check)
-async function requestUploadToken(
-  file: File,
-  metadata: { title: string; artist: string },
-  sessionToken: string
-): Promise<{ signedUrl: string; token: string; path: string; uploadToken: string }> {
-  const sampleBase64 = await extractSample(file);
-  const res = await fetch('/api/request-upload-token', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${sessionToken}`,
-    },
-    body: JSON.stringify({
-      title:    metadata.title,
-      artist:   metadata.artist,
-      filename: file.name,
-      fileSize: file.size,
-      fileType: file.type || 'audio/mpeg',
-      sampleBase64,
-    }),
-  });
-  const data = await res.json();
-  if (!res.ok) throw new Error(resolveUploadError(data));
-  return data;
-}
-
-// Confirm upload — server verifies HMAC token and inserts track row
-async function confirmUpload(
-  payload: {
-    uploadToken: string;
-    album?: string;
-    genre: string; duration: number; coverUrl: string;
-    albumId?: string; previewStartSec?: number; previewDurationSec?: number;
-  },
-  sessionToken: string
-): Promise<{ id: string }> {
-  const res = await fetch('/api/confirm-upload', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${sessionToken}`,
-    },
-    body: JSON.stringify(payload),
-  });
-  const data = await res.json();
-  if (!res.ok) throw new Error(resolveUploadError(data));
-  return data;
-}
 
 export interface TrackEntry {
   id: string;
@@ -205,12 +142,14 @@ const UnifiedUploadContent: React.FC = () => {
   const [expandedImage, setExpandedImage] = useState<string | null>(null);
   const [previewStartSec, setPreviewStartSec] = useState(0);
   const [previewDurationSec, setPreviewDurationSec] = useState(20);
+  const [downloadPolicy, setDownloadPolicy] = useState<DownloadPolicy>('off');
+  const [licenseType, setLicenseType] = useState<LicenseType>(DEFAULT_LICENSE);
   const [trackObjectUrls, setTrackObjectUrls] = useState<Record<string, string>>({});
   const trackUrlsForCleanupRef = useRef<Record<string, string>>({});
   const [isTranscoding, setIsTranscoding] = useState(false);
   const [uploadCounts, setUploadCounts] = useState<{ trackCount: number; albumCount: number } | null>(null);
 
-  const isPro = user?.subscriptionTier === 'pro';
+  const isPro = user?.subscriptionTier === 'artist';
   const atTrackLimit = !isPro && (uploadCounts?.trackCount ?? 0) >= FREE_TRACK_LIMIT;
   const atAlbumLimit = !isPro && (uploadCounts?.albumCount ?? 0) >= FREE_ALBUM_LIMIT;
 
@@ -417,11 +356,12 @@ const UnifiedUploadContent: React.FC = () => {
       const selectedFile = tracks[0].file;
 
       // Step 1 — server copyright check + signed URL (blocks if copyrighted)
-      const { signedUrl, token: supabaseToken, path, uploadToken } = await requestUploadToken(
-        selectedFile,
-        { title: singleTitle, artist },
-        session.access_token
-      );
+      const sampleBase64 = await extractSample(selectedFile);
+      const { signedUrl, token: supabaseToken, path, uploadToken } = await requestUploadToken({
+        title: singleTitle, artist,
+        filename: selectedFile.name, fileSize: selectedFile.size,
+        fileType: selectedFile.type || 'audio/mpeg', sampleBase64,
+      });
       setUploadProgress(20);
 
       // Step 2 — upload audio via signed URL
@@ -455,7 +395,9 @@ const UnifiedUploadContent: React.FC = () => {
         coverUrl,
         previewStartSec,
         previewDurationSec,
-      }, session.access_token);
+        downloadPolicy,
+        licenseType,
+      });
 
       clearInterval(uploadInterval);
       setUploadProgress(100);
@@ -514,11 +456,12 @@ const UnifiedUploadContent: React.FC = () => {
       const sortedTracks = [...tracks].sort((a, b) => a.order - b.order);
       const signedTokens: { signedUrl: string; token: string; path: string; uploadToken: string }[] = [];
       for (let i = 0; i < sortedTracks.length; i++) {
-        const t = signedTokens[i] = await requestUploadToken(
-          sortedTracks[i].file,
-          { title: sortedTracks[i].title || albumTitle, artist },
-          session.access_token
-        );
+        const sampleBase64 = await extractSample(sortedTracks[i].file);
+        signedTokens[i] = await requestUploadToken({
+          title: sortedTracks[i].title || albumTitle, artist,
+          filename: sortedTracks[i].file.name, fileSize: sortedTracks[i].file.size,
+          fileType: sortedTracks[i].file.type || 'audio/mpeg', sampleBase64,
+        });
         setUploadProgress(10 + ((i + 1) / sortedTracks.length) * 20);
       }
 
@@ -561,7 +504,9 @@ const UnifiedUploadContent: React.FC = () => {
           albumId: albumData.id,
           previewStartSec: sortedTracks[i].previewStartSec ?? 0,
           previewDurationSec: sortedTracks[i].previewDurationSec ?? 20,
-        }, session.access_token);
+          downloadPolicy,
+          licenseType,
+        });
         setUploadProgress(70 + ((i + 1) / sortedTracks.length) * 28);
       }
 
@@ -615,7 +560,7 @@ const UnifiedUploadContent: React.FC = () => {
               <button
                 type="button"
                 onClick={() => navigate('/upgrade')}
-                className="px-5 py-2 rounded-lg bg-violet-500 text-white text-sm font-medium hover:bg-violet-600 transition-colors"
+                className="px-5 py-2 rounded-lg bg-violet-500 text-black text-sm font-medium hover:bg-violet-600 transition-colors"
               >
                 Upgrade to Pro
               </button>
@@ -649,7 +594,7 @@ const UnifiedUploadContent: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => fileInputRef.current?.click()}
-                  className="mt-3 px-4 py-2 rounded-lg bg-violet-500 text-white text-sm font-medium hover:bg-violet-600 transition-colors"
+                  className="mt-3 px-4 py-2 rounded-lg bg-violet-500 text-black text-sm font-medium hover:bg-violet-600 transition-colors"
                 >
                   Select File
                 </button>
@@ -690,7 +635,7 @@ const UnifiedUploadContent: React.FC = () => {
                 </div>
                 {audioPreview && (
                   <>
-                    <button type="button" onClick={handlePlayPause} className="p-2 rounded-lg bg-violet-500 text-white hover:bg-violet-600">
+                    <button type="button" onClick={handlePlayPause} className="p-2 rounded-lg bg-violet-500 text-black hover:bg-violet-600">
                       {isPlaying ? <Pause size={18} /> : <Play size={18} />}
                     </button>
                     <audio ref={audioRef} src={audioPreview} onEnded={() => setIsPlaying(false)} />
@@ -716,6 +661,20 @@ const UnifiedUploadContent: React.FC = () => {
                   <option value="">Select genre</option>
                   {GENRES.map(g => <option key={g} value={g}>{g}</option>)}
                 </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Downloads</label>
+                <select value={downloadPolicy} onChange={(e) => setDownloadPolicy(e.target.value as DownloadPolicy)} className={inputBase}>
+                  {DOWNLOAD_POLICY_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                </select>
+                <p className="text-xs text-gray-500 mt-1">{DOWNLOAD_POLICY_OPTIONS.find(o => o.value === downloadPolicy)?.detail} You can change this later from the track's menu.</p>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Licence</label>
+                <select value={licenseType} onChange={(e) => setLicenseType(e.target.value as LicenseType)} className={inputBase}>
+                  {LICENSES.map(l => <option key={l.value} value={l.value}>{l.short === l.name ? l.name : `${l.short} — ${l.name}`}</option>)}
+                </select>
+                <p className="text-xs text-gray-500 mt-1">{licenseInfo(licenseType).summary}</p>
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Cover</label>
@@ -750,7 +709,7 @@ const UnifiedUploadContent: React.FC = () => {
                   <div className="h-2 bg-gray-200 rounded-full overflow-hidden"><motion.div className="h-full bg-violet-500 rounded-full" animate={{ width: `${uploadProgress}%` }} transition={{ duration: 0.2 }} /></div>
                 </div>
               )}
-              <button type="button" onClick={submitSingle} disabled={isUploading} className="w-full inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-violet-500 text-white font-medium hover:bg-violet-600 disabled:opacity-50">
+              <button type="button" onClick={submitSingle} disabled={isUploading} className="w-full inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-violet-500 text-black font-medium hover:bg-violet-600 disabled:opacity-50">
                 <Save size={18} /> {isUploading ? 'Uploading...' : 'Upload Track'}
               </button>
             </div>
@@ -773,6 +732,20 @@ const UnifiedUploadContent: React.FC = () => {
                   <option value="">Select genre</option>
                   {GENRES.map(g => <option key={g} value={g}>{g}</option>)}
                 </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Downloads</label>
+                <select value={downloadPolicy} onChange={(e) => setDownloadPolicy(e.target.value as DownloadPolicy)} className={inputBase}>
+                  {DOWNLOAD_POLICY_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                </select>
+                <p className="text-xs text-gray-500 mt-1">{DOWNLOAD_POLICY_OPTIONS.find(o => o.value === downloadPolicy)?.detail} You can change this later from the track's menu.</p>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Licence</label>
+                <select value={licenseType} onChange={(e) => setLicenseType(e.target.value as LicenseType)} className={inputBase}>
+                  {LICENSES.map(l => <option key={l.value} value={l.value}>{l.short === l.name ? l.name : `${l.short} — ${l.name}`}</option>)}
+                </select>
+                <p className="text-xs text-gray-500 mt-1">{licenseInfo(licenseType).summary}</p>
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Cover *</label>
@@ -846,7 +819,7 @@ const UnifiedUploadContent: React.FC = () => {
                   <div className="h-2 bg-gray-200 rounded-full overflow-hidden"><motion.div className="h-full bg-violet-500 rounded-full" animate={{ width: `${uploadProgress}%` }} transition={{ duration: 0.2 }} /></div>
                 </div>
               )}
-              <button type="button" onClick={submitAlbum} disabled={isUploading || atAlbumLimit} className="w-full inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-violet-500 text-white font-medium hover:bg-violet-600 disabled:opacity-50">
+              <button type="button" onClick={submitAlbum} disabled={isUploading || atAlbumLimit} className="w-full inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-violet-500 text-black font-medium hover:bg-violet-600 disabled:opacity-50">
                 <Save size={18} /> {isUploading ? 'Uploading...' : 'Upload Album'}
               </button>
             </div>
@@ -893,7 +866,7 @@ const UnifiedUploadContent: React.FC = () => {
           <button
             type="button"
             onClick={() => setExpandedImage(null)}
-            className="absolute top-4 right-4 p-2 rounded-full bg-white/50 text-white hover:bg-white/70 transition-colors focus:outline-none focus:ring-2 focus:ring-white"
+            className="absolute top-4 right-4 p-2 rounded-full bg-white/50 text-black hover:bg-white/70 transition-colors focus:outline-none focus:ring-2 focus:ring-white"
             aria-label="Close"
           >
             <X size={24} />
@@ -921,7 +894,7 @@ const Upload: React.FC = () => {
       <div className="min-h-full px-4 py-8 sm:px-6 lg:px-8">
         <header className="mb-8 text-center">
           <h1 className="text-4xl font-bold tracking-tight gradient-text font-kyobo sm:text-5xl">Upload</h1>
-          <p className="text-white mt-2 text-sm">Share your music with the world</p>
+          <p className="text-black mt-2 text-sm">Share your music with the world</p>
         </header>
         {/* Step preview */}
         <div className="max-w-xl mx-auto mb-8 space-y-3">
@@ -933,7 +906,7 @@ const Upload: React.FC = () => {
             <div key={step.title} className="flex items-center gap-4 p-4 bg-dark-800/60 rounded-xl border border-dark-700/60 opacity-60">
               <span className="text-2xl flex-shrink-0">{step.icon}</span>
               <div>
-                <p className="text-white font-medium text-sm">{step.title}</p>
+                <p className="text-black font-medium text-sm">{step.title}</p>
                 <p className="text-gray-500 text-xs">{step.desc}</p>
               </div>
             </div>
@@ -944,14 +917,14 @@ const Upload: React.FC = () => {
           <button
             type="button"
             onClick={() => navigate('/signup')}
-            className="w-full px-6 py-3 rounded-xl bg-primary-500 hover:bg-primary-400 text-white font-semibold transition-colors shadow-md"
+            className="w-full px-6 py-3 rounded-xl bg-primary-500 hover:bg-primary-400 text-black font-semibold transition-colors shadow-md"
           >
             Sign Up Free
           </button>
           <button
             type="button"
             onClick={() => navigate('/login')}
-            className="w-full px-6 py-3 rounded-xl bg-dark-700 hover:bg-dark-600 text-white font-medium transition-colors"
+            className="w-full px-6 py-3 rounded-xl bg-dark-700 hover:bg-dark-600 text-black font-medium transition-colors"
           >
             Sign In
           </button>
@@ -984,9 +957,9 @@ const Upload: React.FC = () => {
           <div className="rounded-2xl bg-dark-700/80 p-6 ring-1 ring-white/5 mb-6">
             <Lock size={48} className="text-primary-400" />
           </div>
-          <h2 className="text-xl font-semibold text-white mb-2">Confirm your email to upload</h2>
+          <h2 className="text-xl font-semibold text-black mb-2">Confirm your email to upload</h2>
           <p className="text-dark-400 text-center max-w-sm mb-2">
-            We sent a confirmation link to <span className="text-white font-medium">{user.email}</span>.
+            We sent a confirmation link to <span className="text-black font-medium">{user.email}</span>.
             Click the link in that email to unlock uploads.
           </p>
           <p className="text-dark-500 text-sm mb-8">Check your spam folder if you don't see it.</p>
@@ -994,7 +967,7 @@ const Upload: React.FC = () => {
             type="button"
             onClick={handleResend}
             disabled={resendStatus === 'sending' || resendStatus === 'sent'}
-            className="px-6 py-3 rounded-xl bg-primary-500 text-white font-medium hover:bg-primary-600 disabled:opacity-50 transition-colors shadow-md"
+            className="px-6 py-3 rounded-xl bg-primary-500 text-black font-medium hover:bg-primary-600 disabled:opacity-50 transition-colors shadow-md"
           >
             {resendStatus === 'sending' ? 'Sending…' : resendStatus === 'sent' ? 'Email sent!' : resendStatus === 'error' ? 'Failed — try again' : 'Resend confirmation email'}
           </button>

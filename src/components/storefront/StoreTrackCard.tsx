@@ -64,7 +64,7 @@ const StoreTrackCard: React.FC<StoreTrackCardProps> = ({
           />
         ) : (
           <div className="w-full h-full flex items-center justify-center">
-            <Music className="w-12 h-12 text-white/20" />
+            <Music className="w-12 h-12 text-black/20" />
           </div>
         )}
 
@@ -75,9 +75,9 @@ const StoreTrackCard: React.FC<StoreTrackCardProps> = ({
           aria-label={isPlaying ? 'Pause preview' : 'Play preview'}
         >
           {isPlaying ? (
-            <Pause className="w-10 h-10 text-white fill-white" />
+            <Pause className="w-10 h-10 text-black fill-white" />
           ) : (
-            <Play className="w-10 h-10 text-white fill-white" />
+            <Play className="w-10 h-10 text-black fill-white" />
           )}
         </button>
 
@@ -95,17 +95,17 @@ const StoreTrackCard: React.FC<StoreTrackCardProps> = ({
       {/* Info */}
       <div className="p-3 space-y-2">
         <div>
-          <p className="text-sm font-semibold text-white truncate">{listing.title}</p>
-          <p className="text-xs text-white/50 truncate">
+          <p className="text-sm font-semibold text-black truncate">{listing.title}</p>
+          <p className="text-xs text-black/50 truncate">
             {listing.sellerArtistName || listing.artist}
           </p>
         </div>
 
         <div className="flex items-center justify-between gap-2">
           <div>
-            <p className="text-base font-bold text-white">${listing.price.toFixed(2)}</p>
+            <p className="text-base font-bold text-black">${listing.price.toFixed(2)}</p>
             {listing.salesCount > 0 && (
-              <p className="text-[10px] text-white/30">{listing.salesCount} sold</p>
+              <p className="text-[10px] text-black/30">{listing.salesCount} sold</p>
             )}
           </div>
 
@@ -126,7 +126,7 @@ const StoreTrackCard: React.FC<StoreTrackCardProps> = ({
           ) : (
             <button
               onClick={() => onBuy(listing)}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-primary-500 hover:bg-primary-400 text-white text-xs font-semibold rounded-lg transition-colors"
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-primary-500 hover:bg-primary-400 text-black text-xs font-semibold rounded-lg transition-colors"
             >
               <ShoppingCart className="w-3 h-3" />
               Buy
@@ -135,7 +135,7 @@ const StoreTrackCard: React.FC<StoreTrackCardProps> = ({
         </div>
 
         {listing.genre && (
-          <p className="text-[10px] text-white/30 uppercase tracking-wide">{listing.genre}</p>
+          <p className="text-[10px] text-black/30 uppercase tracking-wide">{listing.genre}</p>
         )}
       </div>
     </motion.div>

@@ -87,7 +87,7 @@ const PostCard: React.FC<PostCardProps> = ({ post, onLike, onDelete, onComment }
       <div className="flex items-center px-4 py-3">
         <img src={getAvatarUrl(post.user.avatar)} alt={post.user.username} className="w-10 h-10 rounded-full object-cover mr-3" />
         <div className="flex items-center gap-1.5">
-          <div className="font-semibold text-white text-sm font-kyobo flex items-center gap-1.5">
+          <div className="font-semibold text-black text-sm font-kyobo flex items-center gap-1.5">
             {post.user.artistName || post.user.username}
             <VerifiedBadge verified={post.user.isVerified || post.user.isVerifiedArtist} size={14} />
           </div>
@@ -128,7 +128,7 @@ const PostCard: React.FC<PostCardProps> = ({ post, onLike, onDelete, onComment }
             <span className="text-xs font-sans" style={{ fontFamily: 'Inter, Roboto, Arial, sans-serif' }}>Comment</span>
           </button>
         </div>
-        <div className="text-white mb-1 text-sm">
+        <div className="text-black mb-1 text-sm">
           <span className="font-semibold mr-2 text-xs font-kyobo">{post.user.artistName || post.user.username}</span>
           {post.caption}
         </div>

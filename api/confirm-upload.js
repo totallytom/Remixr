@@ -7,7 +7,14 @@
 // race condition identified in the security audit.
 //
 // Body:    { uploadToken, album?, genre, duration, coverUrl,
-//            albumId?, previewStartSec?, previewDurationSec? }
+//            albumId?, previewStartSec?, previewDurationSec?,
+//            downloadPolicy?, licenseType?, remixSources? }
+//
+// Remix Studio: with remixSources (1–4 track ids, in layer order) the track is
+// saved as a remix. remix_terms_for() re-checks every source is still
+// remixable by this user and which licences/downloads the remix may use; the
+// credits are written here, and the remix is published straight away (sources
+// are permission-cleared) unless the uploader has an active strike.
 // Returns: { id }
 
 const { createClient }               = require('@supabase/supabase-js');
@@ -53,6 +60,8 @@ const DEFAULT_COVER      = 'https://images.unsplash.com/photo-1493225457124-a3eb
 const MIN_AUDIO_BYTES    = 10_000;     // 10 KB — any real audio file exceeds this
 const MAX_DURATION_SECS  = 3 * 3600;  // 3 hours
 const MAX_PREVIEW_DUR    = 60;        // 60 seconds max preview
+const MAX_REMIX_SECS     = 6 * 60 + 5; // studio caps remixes at 6 minutes
+const LICENSES           = ['all_rights_reserved', 'cc_by', 'cc_by_sa', 'cc_by_nc', 'cc_by_nc_sa', 'cc_by_nd', 'cc_by_nc_nd', 'cc_zero'];
 
 const supabase = createClient(
   process.env.SUPABASE_URL,
@@ -76,7 +85,7 @@ module.exports = async (req, res) => {
   // The token was issued by request-upload-token and contains the server-chosen
   // path plus the copyright-checked title and artist. Using these server-side
   // values eliminates TOCTOU and prevents the caller from swapping metadata.
-  const { uploadToken, album, genre, duration, coverUrl, albumId, previewStartSec, previewDurationSec } = req.body ?? {};
+  const { uploadToken, album, genre, duration, coverUrl, albumId, previewStartSec, previewDurationSec, downloadPolicy, licenseType, remixSources } = req.body ?? {};
 
   if (!uploadToken) return res.status(400).json({ error: 'Missing uploadToken' });
 
@@ -128,6 +137,43 @@ module.exports = async (req, res) => {
     }
   }
 
+  // ── Remix: re-check sources and licence terms ──
+  let remix = null;
+  if (remixSources !== undefined && remixSources !== null) {
+    if (!Array.isArray(remixSources) || remixSources.length < 1 || remixSources.length > 4 || !remixSources.every(isUUID)) {
+      return res.status(400).json({ error: 'Invalid remix sources' });
+    }
+    if (duration > MAX_REMIX_SECS) return res.status(400).json({ error: 'Remixes can be up to 6 minutes long' });
+
+    const { data: me } = await supabase.from('users').select('suspended_at').eq('id', user.id).maybeSingle();
+    if (me?.suspended_at) return res.status(403).json({ error: 'Your account is suspended', code: 'suspended' });
+
+    const { data: terms, error: termsError } = await supabase.rpc('remix_terms_for', { p_sources: remixSources, p_user: user.id });
+    if (termsError) {
+      console.error('confirm-upload: remix_terms_for failed');
+      return res.status(500).json({ error: 'Could not check remix permissions. Please try again.' });
+    }
+    if (!terms?.ok) return res.status(403).json({ error: terms?.error || 'This remix is not allowed', code: 'remix_not_allowed' });
+
+    const allowed = terms.allowed_licenses || [];
+    const chosen  = licenseType ?? allowed[0];
+    if (!allowed.includes(chosen)) {
+      return res.status(400).json({ error: 'That licence is not allowed by the licences of the tracks you used', code: 'remix_license' });
+    }
+    if (downloadPolicy === 'paid' && !terms.allow_paid) {
+      return res.status(400).json({ error: 'Paid downloads are not allowed: a NonCommercial track is in this remix', code: 'remix_license' });
+    }
+
+    // Uploaders with an active strike still go through review.
+    const { count: strikes } = await supabase
+      .from('strikes')
+      .select('id', { count: 'exact', head: true })
+      .eq('user_id', user.id)
+      .is('voided_at', null);
+
+    remix = { sources: terms.sources, license: chosen, publish: !strikes };
+  }
+
   // ── Verify file exists in storage with plausible size ──
   // Confirms the upload actually completed and wasn't a 1-byte fake.
   const parts            = path.split('/');
@@ -166,6 +212,16 @@ module.exports = async (req, res) => {
   };
 
   if (albumId) trackRow.album_id = albumId;
+  // Artist's download setting (tracks.download_policy); defaults to 'off' in the database.
+  if (['off', 'free', 'followers', 'paid'].includes(downloadPolicy)) trackRow.download_policy = downloadPolicy;
+  // Artist's licence (tracks.license_type); defaults to 'all_rights_reserved'.
+  if (LICENSES.includes(licenseType)) trackRow.license_type = licenseType;
+
+  if (remix) {
+    trackRow.license_type    = remix.license;
+    trackRow.remix_parent_id = remix.sources[0].id;
+    if (remix.publish) trackRow.status = 'published';
+  }
 
   const { data: track, error: insertError } = await supabase
     .from('tracks')
@@ -176,6 +232,42 @@ module.exports = async (req, res) => {
   if (insertError) {
     console.error('confirm-upload: insert failed');
     return res.status(500).json({ error: 'Failed to save track. Please try again.' });
+  }
+
+  if (remix) {
+    const credits = remix.sources.map((s, i) => ({
+      remix_id:       track.id,
+      position:       i + 1,
+      source_id:      s.id,
+      source_title:   truncate(s.title, 200),
+      source_artist:  truncate(s.artist, 200),
+      source_user_id: s.user_id,
+      license_type:   s.license_type,
+      basis:          s.basis,
+    }));
+    const { error: creditError } = await supabase.from('track_remix_sources').insert(credits);
+    if (creditError) {
+      // A remix without credits must not stay up.
+      await supabase.from('tracks').delete().eq('id', track.id);
+      console.error('confirm-upload: remix credits failed');
+      return res.status(500).json({ error: 'Failed to save remix credits. Please try again.' });
+    }
+
+    // Let the other artists know (best effort).
+    const notify = [...new Set(remix.sources.map((s) => s.user_id).filter((id) => id && id !== user.id))];
+    if (notify.length && remix.publish) {
+      const name = truncate(artist, 100);
+      await supabase.from('notifications').insert(notify.map((uid) => ({
+        user_id:  uid,
+        type:     'track_remixed',
+        track_id: track.id,
+        title:    'Your track was remixed',
+        body:     `${name} used your track in "${truncate(title, 120)}".`,
+        link_url: `/profile/${user.id}`,
+      }))).then(() => {}, () => {});
+    }
+
+    return res.json({ id: track.id, status: remix.publish ? 'published' : 'pending_review' });
   }
 
   return res.json({ id: track.id });

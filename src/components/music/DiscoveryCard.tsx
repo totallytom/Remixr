@@ -1,7 +1,18 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { motion, useMotionValue, useTransform, animate } from 'framer-motion';
-import { Play, Pause, Star } from 'lucide-react';
+import { Play, Pause, Heart, X } from 'lucide-react';
 import type { Track } from '../../store/useStore';
+import AudioBars from '../discover/AudioBars';
+import LicenseBadge from './LicenseBadge';
+
+export interface CardPlayback {
+  /** This card's track is the one loaded in the shared preview player. */
+  isCurrent: boolean;
+  isPlaying: boolean;
+  progress: number;
+  onToggle: () => void;
+  getAnalyser: () => AnalyserNode | null;
+}
 
 interface DiscoveryCardProps {
   track: Track;
@@ -10,177 +21,187 @@ interface DiscoveryCardProps {
   isTop?: boolean;
   /** Stack order (0 = top). Used for scale/offset when !isTop */
   stackIndex?: number;
-  /** Optional explicit z-index (e.g. from SwipeStack: MAX_VISIBLE - index) */
   zIndex?: number;
+  /** Set by the deck when a button/keyboard swipe is requested for the top card. */
+  exitRequest?: 'left' | 'right' | null;
+  /** Blind mode: hide cover, title and artist so the track is judged by sound. */
+  blind?: boolean;
+  playback?: CardPlayback;
 }
 
 const SWIPE_THRESHOLD = 100;
-const EXIT_OFFSET = 400;
-const DEFAULT_PREVIEW_DURATION = 20;
+const EXIT_OFFSET = 520;
 const DEFAULT_TRACK_COVER = 'https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?w=400&h=400&fit=crop';
 
-const DiscoveryCardComponent: React.FC<DiscoveryCardProps> = ({ track, onSwipe, isTop = true, stackIndex = 0, zIndex: zIndexProp }) => {
+/** Stable two-colour gradient per track for Blind mode. */
+function mysteryGradient(id: string) {
+  let h = 0;
+  for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0;
+  const a = h % 360;
+  const b = (a + 70 + (h >> 8) % 90) % 360;
+  return `linear-gradient(135deg, hsl(${a} 85% 70%), hsl(${b} 85% 60%))`;
+}
+
+const DiscoveryCardComponent: React.FC<DiscoveryCardProps> = ({
+  track,
+  onSwipe,
+  isTop = true,
+  stackIndex = 0,
+  zIndex: zIndexProp,
+  exitRequest = null,
+  blind = false,
+  playback,
+}) => {
   const x = useMotionValue(0);
   const [isExiting, setIsExiting] = useState(false);
-  const [isPreviewPlaying, setIsPreviewPlaying] = useState(false);
-  const previewAudioRef = useRef<HTMLAudioElement | null>(null);
+  const exitingRef = useRef(false);
 
-  const previewStart = Math.max(0, (track as { previewStartSec?: number }).previewStartSec ?? 0);
-  const previewDuration = Math.min(
-    DEFAULT_PREVIEW_DURATION,
-    Math.max(1, (track as { previewDurationSec?: number }).previewDurationSec ?? DEFAULT_PREVIEW_DURATION)
-  );
-  const previewEnd = previewStart + previewDuration;
+  const rotate = useTransform(x, [-240, 240], [-18, 18]);
+  const likeOpacity = useTransform(x, [40, 140], [0, 1]);
+  const nopeOpacity = useTransform(x, [-40, -140], [0, 1]);
 
-  useEffect(() => {
-    const audio = document.createElement('audio');
-    previewAudioRef.current = audio;
-    return () => {
-      audio.pause();
-      previewAudioRef.current = null;
-    };
-  }, []);
-
-  useEffect(() => {
-    const el = previewAudioRef.current;
-    if (!el) return;
-    const onTimeUpdate = () => {
-      if (el.currentTime >= previewEnd - 0.1) {
-        el.pause();
-        el.currentTime = previewStart;
-        setIsPreviewPlaying(false);
-      }
-    };
-    const interval = setInterval(() => {
-      if (el.paused) return;
-      if (el.currentTime >= previewEnd - 0.1) {
-        el.pause();
-        el.currentTime = previewStart;
-        setIsPreviewPlaying(false);
-      }
-    }, 100);
-    el.addEventListener('timeupdate', onTimeUpdate);
-    return () => {
-      el.removeEventListener('timeupdate', onTimeUpdate);
-      clearInterval(interval);
-    };
-  }, [previewStart, previewEnd]);
-
-  const togglePreview = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    e.preventDefault();
-    if (!track.audioUrl) return;
-    const el = previewAudioRef.current;
-    if (!el) return;
-    if (isPreviewPlaying) {
-      el.pause();
-      setIsPreviewPlaying(false);
-    } else {
-      el.src = track.audioUrl;
-      el.currentTime = previewStart;
-      el.play().then(() => setIsPreviewPlaying(true)).catch(() => {});
-    }
+  const exit = (direction: 'left' | 'right') => {
+    if (exitingRef.current) return;
+    exitingRef.current = true;
+    setIsExiting(true);
+    animate(x, direction === 'right' ? EXIT_OFFSET : -EXIT_OFFSET, {
+      duration: 0.3,
+      ease: 'easeIn',
+      onComplete: () => onSwipe(direction, track),
+    });
   };
 
-  const rotate = useTransform(x, [-200, 200], [-25, 25]);
-  const opacity = useTransform(x, [-200, -150, 0, 150, 200], [0, 1, 1, 1, 0]);
-
-  const likeOpacity = useTransform(x, [50, 150], [0, 1]);
-  const nopeOpacity = useTransform(x, [-50, -150], [0, 1]);
+  // Button / keyboard swipes.
+  useEffect(() => {
+    if (isTop && exitRequest) exit(exitRequest);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [exitRequest, isTop]);
 
   const handleDragEnd = (_: unknown, info: { offset: { x: number }; velocity: { x: number } }) => {
-    if (isExiting) return;
+    if (exitingRef.current) return;
     const { offset, velocity } = info;
-    const targetX = offset.x > SWIPE_THRESHOLD
-      ? EXIT_OFFSET
-      : offset.x < -SWIPE_THRESHOLD
-        ? -EXIT_OFFSET
-        : 0;
-
-    if (targetX !== 0) {
-      setIsExiting(true);
-      const direction = targetX > 0 ? 'right' : 'left';
-      animate(x, targetX, {
-        type: 'spring',
-        stiffness: 300,
-        damping: 30,
-        onComplete: () => {
-          onSwipe(direction, track);
-        },
-      });
-    } else {
-      animate(x, 0, { type: 'spring', stiffness: 300, damping: 30 });
-    }
+    if (offset.x > SWIPE_THRESHOLD || velocity.x > 800) exit('right');
+    else if (offset.x < -SWIPE_THRESHOLD || velocity.x < -800) exit('left');
+    else animate(x, 0, { type: 'spring', stiffness: 300, damping: 30 });
   };
 
   const artwork = track.cover || DEFAULT_TRACK_COVER;
+  const gradient = useMemo(() => mysteryGradient(track.id), [track.id]);
+  const playing = Boolean(playback?.isCurrent && playback.isPlaying);
+  const progress = playback?.isCurrent ? playback.progress : 0;
 
   return (
     <motion.div
       style={{
         x: isTop ? x : 0,
         rotate: isTop ? rotate : 0,
-        opacity: isTop ? opacity : 1,
-        scale: isTop ? 1 : Math.max(0.85, 1 - stackIndex * 0.05),
-        y: isTop ? 0 : stackIndex * 6,
+        scale: isTop ? 1 : Math.max(0.88, 1 - stackIndex * 0.05),
+        y: isTop ? 0 : stackIndex * 14,
         zIndex: zIndexProp !== undefined ? zIndexProp : (isTop ? 10 : 10 - stackIndex),
       }}
+      initial={{ scale: 0.9, opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0, transition: { duration: 0.15 } }}
       drag={isTop && !isExiting ? 'x' : false}
       dragConstraints={{ left: -400, right: 400 }}
-      dragElastic={0.2}
+      dragElastic={0.25}
       onDragEnd={handleDragEnd}
-      whileTap={isTop ? { scale: 1.02 } : undefined}
-      className="absolute inset-0 flex items-center justify-center lg:px-6 touch-none"
+      whileTap={isTop ? { scale: 1.015 } : undefined}
+      className="absolute inset-0 flex items-center justify-center touch-none"
     >
-      <div className={`w-full h-full lg:max-w-sm lg:aspect-[3/4] lg:h-auto rounded-2xl lg:rounded-3xl overflow-hidden shadow-2xl border border-white/10 bg-neutral-900 relative ${isTop ? 'cursor-grab active:cursor-grabbing' : 'cursor-default'}`}>
-        {/* Like stamp - only on top card */}
+      <div
+        className={`relative w-full h-full flex flex-col rounded-3xl overflow-hidden border-2 border-black bg-white ${isTop ? 'cursor-grab active:cursor-grabbing' : 'cursor-default'}`}
+        style={{ boxShadow: isTop ? '8px 8px 0 0 #000' : '4px 4px 0 0 #000' }}
+      >
+        {/* Like / Skip stamps */}
         {isTop && (
           <>
             <motion.div
               style={{ opacity: likeOpacity }}
-              className="absolute top-6 left-6 sm:top-8 sm:left-8 z-10 border-4 border-green-500 rounded-xl px-3 py-1.5 sm:px-4 sm:py-2 rotate-[-20deg] bg-black/30"
+              className="absolute top-5 left-5 z-20 flex items-center gap-1.5 px-3 py-1.5 border-2 border-black rounded-xl bg-green-300 -rotate-12 shadow-[3px_3px_0_0_#000]"
             >
-              <span className="text-green-500 font-black text-2xl sm:text-4xl uppercase tracking-wide">Like</span>
+              <Heart size={20} className="fill-black" />
+              <span className="font-kotra text-2xl text-black">LIKE</span>
             </motion.div>
             <motion.div
               style={{ opacity: nopeOpacity }}
-              className="absolute top-6 right-6 sm:top-8 sm:right-8 z-10 border-4 border-red-500 rounded-xl px-3 py-1.5 sm:px-4 sm:py-2 rotate-[20deg] bg-black/30"
+              className="absolute top-5 right-5 z-20 flex items-center gap-1.5 px-3 py-1.5 border-2 border-black rounded-xl bg-red-300 rotate-12 shadow-[3px_3px_0_0_#000]"
             >
-              <span className="text-red-500 font-black text-2xl sm:text-4xl uppercase tracking-wide">Nope</span>
+              <X size={20} strokeWidth={3} />
+              <span className="font-kotra text-2xl text-black">SKIP</span>
             </motion.div>
           </>
         )}
 
-        {/* Artwork & info */}
-        {artwork ? (
-          <img
-            src={artwork}
-            alt={track.title}
-            className="w-full h-full aspect-square object-cover pointer-events-none"
-            draggable={false}
-          />
-        ) : (
-          <div className="w-full h-full bg-gradient-to-br from-primary-600/30 to-dark-800 flex items-center justify-center pointer-events-none">
-            <span className="text-6xl text-white/50">♪</span>
-          </div>
-        )}
-        <div className="absolute bottom-0 left-0 right-0 p-4 sm:p-6 bg-gradient-to-t from-black via-black/70 to-transparent">
-          <h2 className="text-xl sm:text-2xl font-bold text-white leading-tight truncate font-kyobo">{track.title}</h2>
-          <p className="text-base sm:text-lg text-white/80 truncate">{track.artist}</p>
-          {track.genre && (
-            <p className="text-xs sm:text-sm text-primary-400 mt-0.5 truncate">{track.genre}</p>
+        {/* Artwork (or mystery art in Blind mode) */}
+        <div className="relative flex-1 min-h-0 border-b-2 border-black overflow-hidden">
+          {blind ? (
+            <div className="absolute inset-0 flex items-center justify-center" style={{ background: gradient }}>
+              <span className="font-kotra text-[8rem] leading-none text-black/80 select-none">?</span>
+            </div>
+          ) : (
+            <img
+              src={artwork}
+              alt={track.title}
+              className="absolute inset-0 w-full h-full object-cover pointer-events-none"
+              draggable={false}
+            />
+          )}
+
+          {/* Visualiser over the bottom of the art */}
+          {isTop && playback && (
+            <div className="absolute inset-x-0 bottom-0 h-24 pointer-events-none bg-gradient-to-t from-black/50 to-transparent">
+              <AudioBars
+                getAnalyser={playback.getAnalyser}
+                active={playing}
+                color="#ffffff"
+                className="absolute inset-x-4 bottom-3 h-16 w-[calc(100%-2rem)]"
+              />
+            </div>
+          )}
+
+          {isTop && track.audioUrl && playback && (
+            <button
+              type="button"
+              onPointerDown={(e) => e.stopPropagation()}
+              onClick={(e) => { e.stopPropagation(); playback.onToggle(); }}
+              className="absolute top-4 left-1/2 -translate-x-1/2 z-10 flex items-center gap-2 px-4 py-2 rounded-full border-2 border-black bg-white text-black text-sm font-bold shadow-[3px_3px_0_0_#000] active:translate-x-[3px] active:translate-y-[3px] active:shadow-none transition-all"
+              aria-label={playing ? 'Pause preview' : 'Play preview'}
+            >
+              {playing ? <Pause size={16} /> : <Play size={16} className="fill-black" />}
+              {playing ? 'Pause' : 'Preview'}
+            </button>
           )}
         </div>
-        {isTop && track.audioUrl && (
-          <button
-            type="button"
-            onClick={togglePreview}
-            className="absolute bottom-4 right-4 sm:bottom-6 sm:right-6 z-10 flex items-center justify-center w-12 h-12 rounded-full bg-white/20 hover:bg-white/30 text-white border border-white/30 transition-colors"
-            aria-label={isPreviewPlaying ? 'Pause preview' : 'Play preview'}
-          >
-            {isPreviewPlaying ? <Pause size={22} /> : <Play size={22} />}
-          </button>
-        )}
+
+        {/* Info */}
+        <div className="flex-shrink-0 px-5 pt-3 pb-4 bg-white">
+          {blind ? (
+            <>
+              <p className="font-kotra text-2xl text-black leading-tight">Mystery track</p>
+              <p className="text-sm text-black/60">Like it to reveal who made it.</p>
+            </>
+          ) : (
+            <>
+              <p className="font-kotra text-2xl text-black leading-tight truncate">{track.title}</p>
+              <div className="flex items-center gap-2 min-w-0">
+                <p className="text-sm text-black/70 truncate">{track.artist}</p>
+                <LicenseBadge license={(track as { licenseType?: string }).licenseType} className="flex-shrink-0" />
+              </div>
+            </>
+          )}
+          <div className="mt-2 flex items-center gap-2">
+            {track.genre && (
+              <span className="text-[11px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-md border-2 border-black bg-teal-300 text-black">
+                {track.genre}
+              </span>
+            )}
+            {/* Preview progress */}
+            <div className="flex-1 h-2.5 rounded-full border-2 border-black bg-white overflow-hidden" aria-hidden="true">
+              <div className="h-full bg-black transition-[width] duration-150" style={{ width: `${Math.round(progress * 100)}%` }} />
+            </div>
+          </div>
+        </div>
       </div>
     </motion.div>
   );

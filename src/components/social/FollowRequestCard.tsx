@@ -53,7 +53,7 @@ const FollowRequestCard: React.FC<FollowRequestCardProps> = ({
         {/* User Info */}
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-1.5 mb-1">
-            <h3 className="text-white font-semibold truncate">
+            <h3 className="text-black font-semibold truncate">
               {request.user.artistName || request.user.username}
             </h3>
             <VerifiedBadge verified={request.user.isVerified || request.user.isVerifiedArtist} size={14} />
@@ -72,7 +72,7 @@ const FollowRequestCard: React.FC<FollowRequestCardProps> = ({
           <button
             onClick={() => onAccept(request.id)}
             disabled={isLoading}
-            className="p-2 bg-green-600 text-white rounded-full hover:bg-green-700 transition-colors disabled:opacity-50"
+            className="p-2 bg-green-600 text-black rounded-full hover:bg-green-700 transition-colors disabled:opacity-50"
             title="Accept request"
           >
             <Check size={16} />
@@ -80,7 +80,7 @@ const FollowRequestCard: React.FC<FollowRequestCardProps> = ({
           <button
             onClick={() => onDecline(request.id)}
             disabled={isLoading}
-            className="p-2 bg-red-600 text-white rounded-full hover:bg-red-700 transition-colors disabled:opacity-50"
+            className="p-2 bg-red-600 text-black rounded-full hover:bg-red-700 transition-colors disabled:opacity-50"
             title="Decline request"
           >
             <X size={16} />

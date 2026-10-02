@@ -148,17 +148,20 @@ export function usePurchaseHistory() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const load = useCallback(async () => {
-    if (!user?.id) return;
-    setIsLoading(true);
+  // silent: refresh without the loading spinner (used while polling after checkout).
+  const load = useCallback(async (silent = false): Promise<StorePurchaseWithDetails[]> => {
+    if (!user?.id) return [];
+    if (!silent) setIsLoading(true);
     setError(null);
     try {
       const data = await StorefrontService.getPurchaseHistory(user.id);
       setPurchases(data);
+      return data;
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load purchase history');
+      return [];
     } finally {
-      setIsLoading(false);
+      if (!silent) setIsLoading(false);
     }
   }, [user?.id]);
 

@@ -1,7 +1,25 @@
 import { supabase } from './supabase';
+import { deleteAccount as apiDeleteAccount } from './api';
 import { User } from '../store/useStore';
 import { DEFAULT_AVATAR_URL } from '../utils/avatar';
 import { storage, STORAGE_KEYS } from '../platform/storage';
+
+/**
+ * The signed-in auth user's id + email, kept in sync with the Supabase
+ * session. Used by transformUser for the user's own email, because
+ * public.users no longer stores emails.
+ */
+let signedInAuthUser: { id: string; email: string } | null = null;
+const rememberAuthUser = (u?: { id: string; email?: string | null } | null) => {
+  signedInAuthUser = u?.id ? { id: u.id, email: u.email ?? '' } : null;
+};
+supabase.auth.getSession().then(({ data }) => rememberAuthUser(data.session?.user));
+supabase.auth.onAuthStateChange((_event, session) => rememberAuthUser(session?.user));
+/** The signed-in user's email if `id` is them, otherwise '' (other users' emails are private). */
+const ownEmailFor = (id: string): string => {
+  const me = signedInAuthUser;
+  return me && me.id === id ? me.email : '';
+};
 
 export interface AuthError {
   message: string;
@@ -15,6 +33,8 @@ export interface RegisterData {
   role: 'musician' | 'consumer';
   artistName?: string;
   bio?: string;
+  /** 'YYYY-MM-DD'. Required: the database rejects signups without it (COPPA). */
+  dateOfBirth: string;
 }
 
 export interface LoginData {
@@ -23,10 +43,6 @@ export interface LoginData {
 }
 
 export class AuthService {
-  private static now(): number {
-    return typeof performance !== 'undefined' ? performance.now() : Date.now();
-  }
-
   private static async getCachedProfile(userId: string): Promise<User | null> {
     const cached = await storage.getJSON<User>(STORAGE_KEYS.PROFILE_CACHE);
     return cached?.id === userId ? cached : null;
@@ -38,10 +54,6 @@ export class AuthService {
 
   private static async clearCachedProfile(): Promise<void> {
     await storage.remove(STORAGE_KEYS.PROFILE_CACHE);
-  }
-
-  private static logDuration(label: string, start: number) {
-    const duration = Math.round(this.now() - start);
   }
 
   private static normalizeUserRole(role: unknown): 'musician' | 'consumer' {
@@ -66,6 +78,7 @@ export class AuthService {
         .eq('id', userId)
         .maybeSingle();
       if (!error && profileData) {
+        rememberAuthUser(session.user);
         return this.transformUser(profileData, session.user.email_confirmed_at);
       }
       if (error) {
@@ -91,6 +104,8 @@ export class AuthService {
             role: desiredRole,
             artist_name: data.artistName,
             bio: data.bio,
+            // Checked and stored privately by the enforce_signup_age trigger.
+            date_of_birth: data.dateOfBirth,
           }
         }
       });
@@ -145,12 +160,14 @@ export class AuthService {
           .select()
           .single();
         if (!correctedErr && corrected) {
+          rememberAuthUser(authData.user);
           const correctedUser = this.transformUser(corrected, authData.user.email_confirmed_at);
           await this.setCachedProfile(correctedUser);
           return correctedUser;
         }
       }
 
+      rememberAuthUser(authData.user);
       const newUser = this.transformUser(profileData, authData.user.email_confirmed_at);
       // Pre-cache so the onAuthStateChange background fetch (which races the INSERT)
       // finds the profile immediately rather than getting null and clearing auth state.
@@ -167,12 +184,10 @@ export class AuthService {
 
   static async login(data: LoginData): Promise<User> {
     try {
-      const signInStart = this.now();
       const { data: authData, error } = await supabase.auth.signInWithPassword({
         email: data.email,
         password: data.password,
       });
-      this.logDuration('login signInWithPassword', signInStart);
 
       if (error) {
         throw new Error(error.message);
@@ -183,19 +198,18 @@ export class AuthService {
       }
 
       // Get user profile
-      const profileFetchStart = this.now();
       const { data: profileData, error: profileError } = await supabase
         .from('users')
         .select('*')
         .eq('id', authData.user.id)
         .maybeSingle();
-      this.logDuration('login fetch profile', profileFetchStart);
 
       if (profileError) {
         throw new Error(profileError.message);
       }
 
       if (profileData) {
+        rememberAuthUser(authData.user);
         return this.transformUser(profileData, authData.user.email_confirmed_at);
       }
 
@@ -209,7 +223,6 @@ export class AuthService {
           ? metaRoleRaw
           : 'consumer';
 
-      const profileCreateStart = this.now();
       const { data: newProfileData, error: newProfileError } = await supabase
         .from('users')
         .insert({
@@ -223,7 +236,6 @@ export class AuthService {
         })
         .select()
         .single();
-      this.logDuration('login create profile', profileCreateStart);
 
       if (newProfileError) {
         throw new Error(newProfileError.message);
@@ -233,6 +245,7 @@ export class AuthService {
         throw new Error('User profile not found. Please contact support.');
       }
 
+      rememberAuthUser(authData.user);
       return this.transformUser(newProfileData, authData.user.email_confirmed_at);
     } catch (error) {
       throw new Error(error instanceof Error ? error.message : 'Login failed');
@@ -276,59 +289,29 @@ export class AuthService {
 
   static async getCurrentUser(): Promise<User | null> {
     try {
-      // Use getSession instead of getUser - it's faster and includes the same data
-      const sessionStart = this.now();
       const { data: { session }, error } = await supabase.auth.getSession();
-      this.logDuration('getCurrentUser getSession', sessionStart);
-      
       if (error || !session?.user) {
         return null;
       }
 
-      const profileFetchStart = this.now();
       const { data: profileData, error: profileError } = await supabase
         .from('users')
         .select('*')
         .eq('id', session.user.id)
         .maybeSingle();
-      this.logDuration('getCurrentUser fetch profile', profileFetchStart);
 
       if (profileError || !profileData) {
         console.error('Error getting user profile:', profileError);
         return null;
       }
 
+      rememberAuthUser(session.user);
       const user = this.transformUser(profileData, session.user.email_confirmed_at);
       await this.setCachedProfile(user);
       return user;
     } catch (error) {
       console.error('Error getting current user:', error);
       return null;
-    }
-  }
-
-  static async getSession(): Promise<any> {
-    try {
-      const { data: { session }, error } = await supabase.auth.getSession();
-      if (error) {
-        console.error('Error getting session:', error);
-        return null;
-      }
-      return session;
-    } catch (error) {
-      console.error('Error getting session:', error);
-      return null;
-    }
-  }
-
-  static async refreshSession(): Promise<void> {
-    try {
-      const { data, error } = await supabase.auth.refreshSession();
-      if (error) {
-        console.error('Error refreshing session:', error);
-      }
-    } catch (error) {
-      console.error('Error refreshing session:', error);
     }
   }
 
@@ -362,6 +345,7 @@ export class AuthService {
         throw new Error(error.message);
       }
 
+      rememberAuthUser(session.user);
       return this.transformUser(data);
     } catch (error) {
       throw new Error(error instanceof Error ? error.message : 'Profile update failed');
@@ -386,48 +370,25 @@ export class AuthService {
     }
   }
 
-  static async changeEmail(newEmail: string): Promise<void> {
-    try {
-      const { error } = await supabase.auth.updateUser({
-        email: newEmail
-      });
+  /**
+   * Change the login email (auth.users). Supabase emails a confirmation link;
+   * the change only takes effect once it's clicked.
+   */
+  static async changeEmail(newEmail: string, currentPassword: string): Promise<void> {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user?.email) throw new Error('No authenticated user');
 
-      if (error) {
-        throw new Error(error.message);
-      }
-    } catch (error) {
-      throw new Error(error instanceof Error ? error.message : 'Email change failed');
-    }
-  }
+    const { error: verifyError } = await supabase.auth.signInWithPassword({
+      email: user.email,
+      password: currentPassword,
+    });
+    if (verifyError) throw new Error('Current password is incorrect');
 
-  static async changeUsername(newUsername: string): Promise<User> {
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session?.user?.id) throw new Error('Not authenticated');
-
-      const { data: existingUser, error: checkError } = await supabase
-        .from('users')
-        .select('id')
-        .eq('username', newUsername)
-        .neq('id', session.user.id)
-        .maybeSingle();
-
-      if (checkError) throw new Error(checkError.message);
-      if (existingUser) throw new Error('Username is already taken');
-
-      const { data, error } = await supabase
-        .from('users')
-        .update({ username: newUsername })
-        .eq('id', session.user.id)
-        .select()
-        .single();
-
-      if (error) throw new Error(error.message);
-
-      return this.transformUser(data);
-    } catch (error) {
-      throw new Error(error instanceof Error ? error.message : 'Username change failed');
-    }
+    const { error } = await supabase.auth.updateUser(
+      { email: newEmail.trim() },
+      { emailRedirectTo: `${window.location.origin}/` },
+    );
+    if (error) throw new Error(error.message);
   }
 
   static async togglePrivateAccount(isPrivate: boolean): Promise<User> {
@@ -444,6 +405,7 @@ export class AuthService {
 
       if (error) throw new Error(error.message);
 
+      rememberAuthUser(session.user);
       return this.transformUser(data);
     } catch (error) {
       throw new Error(error instanceof Error ? error.message : 'Failed to update privacy settings');
@@ -496,42 +458,7 @@ export class AuthService {
 
   static async deleteAccount(userId: string): Promise<void> {
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session?.access_token) throw new Error('Not authenticated');
-
-      const response = await fetch('/api/delete-account', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session.access_token}`,
-        },
-        body: JSON.stringify({ userId }),
-      });
-
-      if (!response.ok) {
-        // Check if response is actually JSON before trying to parse
-        const contentType = response.headers.get('content-type');
-        if (contentType && contentType.includes('application/json')) {
-          const errorData = await response.json();
-          throw new Error(errorData.error || `HTTP ${response.status}: Failed to delete account`);
-        } else {
-          // Response is not JSON (probably HTML error page)
-          const textResponse = await response.text();
-          console.error('Non-JSON response:', textResponse);
-          throw new Error(`API endpoint not found (HTTP ${response.status}). Please ensure the API is deployed.`);
-        }
-      }
-
-      // Check if successful response is JSON
-      const contentType = response.headers.get('content-type');
-      if (contentType && contentType.includes('application/json')) {
-        const result = await response.json();
-        if (!result.success) {
-          throw new Error('Account deletion failed');
-        }
-      } else {
-        throw new Error('API returned non-JSON response');
-      }
+      await apiDeleteAccount(userId);
     } catch (error) {
       console.error('Delete account error:', error);
       throw new Error(error instanceof Error ? error.message : 'Failed to delete account');
@@ -552,10 +479,8 @@ export class AuthService {
         // 2. Use setTimeout(0) to break the "Supabase Deadlock"
         // This lets the Auth listener finish its execution before starting the DB fetch
         setTimeout(async () => {
-          const profileFetchStart = this.now();
           try {
             const freshUser = await this.fetchProfileForSessionUser(session.user.id);
-            this.logDuration(`auth ${event} background fetch`, profileFetchStart);
 
             if (!freshUser) {
               console.warn('[AUTH] No profile after retries for:', session.user.id);
@@ -608,7 +533,9 @@ export class AuthService {
     return {
       id: dbUser.id,
       username: dbUser.username,
-      email: dbUser.email,
+      // public.users no longer stores emails (privacy); the signed-in user's own
+      // email comes from their auth session. Other users' emails stay private.
+      email: dbUser.email ?? ownEmailFor(dbUser.id),
       avatar: dbUser.avatar,
       followers: dbUser.followers,
       following: dbUser.following,

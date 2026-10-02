@@ -160,7 +160,7 @@ const PostCommentSection: React.FC<PostCommentSectionProps> = ({ postId, postOwn
       >
         <div className="flex items-center space-x-2">
           <MessageCircle size={20} className="text-primary-400" />
-          <span className="text-white font-medium text-sm font-sans" style={{ fontFamily: 'Inter, Roboto, Arial, sans-serif' }}>
+          <span className="text-black font-medium text-sm font-sans" style={{ fontFamily: 'Inter, Roboto, Arial, sans-serif' }}>
             Comments ({comments.length})
           </span>
         </div>
@@ -196,14 +196,14 @@ const PostCommentSection: React.FC<PostCommentSectionProps> = ({ postId, postOwn
                     onChange={(e) => setNewComment(e.target.value)}
                     placeholder="Add a comment..."
                     maxLength={500}
-                    className="w-full bg-dark-700 border border-dark-600 rounded-lg px-3 py-2 text-white placeholder-dark-400 focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm font-sans"
+                    className="w-full bg-dark-700 border border-dark-600 rounded-lg px-3 py-2 text-black placeholder-dark-400 focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm font-sans"
                     style={{ fontFamily: 'Inter, Roboto, Arial, sans-serif' }}
                   />
                 </div>
                 <button
                   type="submit"
                   disabled={!newComment.trim() || loading}
-                  className="p-2 rounded-full bg-primary-600 text-white hover:bg-primary-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="p-2 rounded-full bg-primary-600 text-black hover:bg-primary-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <Send size={16} />
                 </button>
@@ -237,7 +237,7 @@ const PostCommentSection: React.FC<PostCommentSectionProps> = ({ postId, postOwn
                     />
                     <div className="bg-dark-700 rounded-lg p-3">
                       <div className="flex items-center justify-between mb-1">
-                        <span className="text-xs font-medium text-white font-sans" style={{ fontFamily: 'Inter, Roboto, Arial, sans-serif' }}>
+                        <span className="text-xs font-medium text-black font-sans" style={{ fontFamily: 'Inter, Roboto, Arial, sans-serif' }}>
                           {comment.username}
                         </span>
                         <div className="flex items-center space-x-2">
@@ -249,7 +249,7 @@ const PostCommentSection: React.FC<PostCommentSectionProps> = ({ postId, postOwn
                               <div className="relative">
                                 <button
                                   onClick={() => setShowDeleteMenu(showDeleteMenu === comment.id ? null : comment.id)}
-                                  className="p-1 rounded text-dark-400 hover:text-white transition-colors"
+                                  className="p-1 rounded text-dark-400 hover:text-black transition-colors"
                                 >
                                   <MoreVertical size={12} />
                                 </button>
@@ -268,7 +268,7 @@ const PostCommentSection: React.FC<PostCommentSectionProps> = ({ postId, postOwn
                             )}
                           </div>
                         </div>
-                        <p className="text-xs text-white mb-2 font-sans" style={{ fontFamily: 'Inter, Roboto, Arial, sans-serif' }}>
+                        <p className="text-xs text-black mb-2 font-sans" style={{ fontFamily: 'Inter, Roboto, Arial, sans-serif' }}>
                           {comment.content}
                         </p>
                         <div className="flex items-center space-x-4">
@@ -277,7 +277,7 @@ const PostCommentSection: React.FC<PostCommentSectionProps> = ({ postId, postOwn
                             className={`flex items-center space-x-1 text-xs transition-colors ${
                               comment.likedBy.includes(user?.id || '')
                                 ? 'text-red-500'
-                                : 'text-dark-400 hover:text-white'
+                                : 'text-dark-400 hover:text-black'
                             } font-sans`}
                             style={{ fontFamily: 'Inter, Roboto, Arial, sans-serif' }}
                           >

@@ -19,7 +19,7 @@ const UserCard: React.FC<UserCardProps> = ({ user }) => {
           {user.followers} followers
         </div>
       </div>
-      <button className="p-2 rounded-full bg-primary-600 text-white hover:bg-primary-700 transition-colors">
+      <button className="p-2 rounded-full bg-primary-600 text-black hover:bg-primary-700 transition-colors">
         <UserPlus size={16} />
       </button>
     </div>

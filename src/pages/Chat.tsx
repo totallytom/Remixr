@@ -1,6 +1,8 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { useStore } from '../store/useStore';
-import { Send, MessageCircle, Users, Music, X, Play, Plus, Trash2, Edit2, Check, X as XIcon, Menu, Moon, EyeOff } from 'lucide-react';
+import { Send, MessageCircle, Users, Music, X, Plus, Trash2, Edit2, Check, X as XIcon, Menu, Moon, EyeOff, Flag } from 'lucide-react';
+import ReportDialog from '../components/moderation/ReportDialog';
+import type { ReportTarget } from '../services/reportService';
 import { format } from 'date-fns';
 import { ChatService } from '../services/chatService';
 import { getAvatarUrl } from '../utils/avatar';
@@ -23,10 +25,10 @@ const ChatPage: React.FC = () => {
   const [showMusicShare, setShowMusicShare] = useState(false);
   const [allUsers, setAllUsers] = useState<User[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const activeChatIdRef = useRef<string | null>(null);
   const deletedChatIdsRef = useRef<Set<string>>(new Set());
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
+  const [reportTarget, setReportTarget] = useState<ReportTarget | null>(null);
   const [editingContent, setEditingContent] = useState('');
   const [userTracks, setUserTracks] = useState<Track[]>([]);
   const [loadingTracks, setLoadingTracks] = useState(false);
@@ -40,9 +42,6 @@ const ChatPage: React.FC = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const openUserId = (location.state as { openUserId?: string } | null)?.openUserId;
-
-  // Keep activeChatIdRef in sync
-  activeChatIdRef.current = activeChat?.id ?? null;
 
   // Auto-select chat when navigating from a profile's message button
   useEffect(() => {
@@ -318,19 +317,19 @@ const ChatPage: React.FC = () => {
       { name: 'Lo-Fi Beats', msg: 'Collab on this one?', time: '1d', color: 'bg-amber-600' },
     ];
     return (
-      <div className="flex overflow-hidden bg-dark-900" style={{ height: '100%' }}>
+      <div className="flex overflow-hidden bg-white" style={{ height: '100%' }}>
         {/* Blurred chat list preview — desktop only */}
-        <div className="hidden lg:flex w-72 flex-col bg-dark-800 border-r border-dark-700/60 select-none pointer-events-none">
+        <div className="hidden lg:flex w-72 flex-col bg-white-800 border-r border-dark-700/60 select-none pointer-events-none">
           <div className="flex-shrink-0 flex items-center gap-2 px-4 py-4 border-b border-dark-700/60">
             <MessageCircle className="text-primary-400" size={18} />
-            <p className="text-base font-bold text-white font-kyobo">Messages</p>
+            <p className="text-base font-bold text-black font-kyobo">Messages</p>
           </div>
           <div className="flex-1 px-2 py-2 space-y-1">
             {previewChats.map((c) => (
               <div key={c.name} className="flex items-center gap-3 px-3 py-2.5 rounded-xl blur-sm opacity-60">
                 <div className={`w-9 h-9 rounded-full flex-shrink-0 ${c.color}`} />
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-white truncate">{c.name}</p>
+                  <p className="text-sm font-medium text-black truncate">{c.name}</p>
                   <p className="text-xs text-gray-500 truncate">{c.msg}</p>
                 </div>
                 <span className="text-xs text-gray-600">{c.time}</span>
@@ -345,7 +344,7 @@ const ChatPage: React.FC = () => {
             <MessageCircle size={36} className="text-primary-400" />
           </div>
           <div>
-            <h2 className="text-2xl font-bold text-white mb-2">Chat with artists & fans</h2>
+            <h2 className="text-2xl font-bold text-black mb-2">Chat with artists & fans</h2>
             <p className="text-gray-400 max-w-sm text-sm">
               Message other music lovers, share tracks in real time, and connect with your favorite artists.
             </p>
@@ -353,13 +352,13 @@ const ChatPage: React.FC = () => {
           <div className="flex flex-col sm:flex-row gap-3 w-full max-w-xs">
             <button
               onClick={() => navigate('/signup')}
-              className="flex-1 px-5 py-3 bg-primary-600 hover:bg-primary-500 text-white rounded-xl font-semibold transition-colors"
+              className="flex-1 px-5 py-3 bg-primary-600 hover:bg-primary-500 text-black rounded-xl font-semibold transition-colors"
             >
               Sign Up Free
             </button>
             <button
               onClick={() => navigate('/login')}
-              className="flex-1 px-5 py-3 bg-dark-700 hover:bg-dark-600 text-white rounded-xl font-semibold transition-colors"
+              className="flex-1 px-5 py-3 bg-white-700 hover:bg-white-600 text-black rounded-xl font-semibold transition-colors"
             >
               Sign In
             </button>
@@ -370,13 +369,13 @@ const ChatPage: React.FC = () => {
   }
 
   return (
-    <div className="flex overflow-hidden bg-dark-900" style={{ height: '100%' }}>
+    <div className="flex overflow-hidden bg-white" style={{ height: '100%' }}>
 
       {/* ── Chat List Sidebar ── */}
       <div className={`
         ${showSidebar ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
         fixed lg:relative inset-y-0 left-0 z-40
-        w-72 flex flex-col bg-dark-800 border-r border-dark-700/60
+        w-72 flex flex-col bg-slate-400 border-r border-dark-700/60
         transition-transform duration-300 ease-in-out lg:transition-none
       `}>
         {/* Sidebar Header */}
@@ -388,14 +387,14 @@ const ChatPage: React.FC = () => {
           <div className="flex items-center gap-2">
             <button
               onClick={() => setShowUserList(!showUserList)}
-              className="p-1.5 rounded-lg bg-primary-600 hover:bg-primary-500 text-white transition-colors"
+              className="p-1.5 rounded-lg bg-primary-600 hover:bg-primary-500 text-black transition-colors"
               title="New chat"
             >
               <Plus size={15} />
             </button>
             <button
               onClick={() => setShowSidebar(false)}
-              className="lg:hidden p-1.5 rounded-lg bg-dark-700 text-black hover:bg-dark-600 transition-colors"
+              className="lg:hidden p-1.5 rounded-lg bg-white-700 text-black hover:bg-white-600 transition-colors"
             >
               <X size={15} />
             </button>
@@ -403,22 +402,22 @@ const ChatPage: React.FC = () => {
         </div>
 
         {/* Your status pill */}
-        <div className="flex-shrink-0 mx-3 mt-3 mb-2 px-3 py-2 rounded-xl bg-dark-700/60 border border-dark-600/60 flex items-center gap-2">
-          {userStatus === 'online' && <><span className="w-2 h-2 rounded-full bg-green-500 flex-shrink-0" /><span className="text-xs text-gray-400">Online</span></>}
-          {userStatus === 'idle' && <><Moon className="w-3.5 h-3.5 text-amber-500 flex-shrink-0" /><span className="text-xs text-gray-400">Idle</span></>}
-          {userStatus === 'invisible' && <><EyeOff className="w-3.5 h-3.5 text-gray-600 flex-shrink-0" /><span className="text-xs text-gray-500">Invisible</span></>}
+        <div className="flex-shrink-0 mx-3 mt-3 mb-2 px-3 py-2 rounded-xl bg-white-700/60 border border-dark-600/60 flex items-center gap-2">
+          {userStatus === 'online' && <><span className="w-2 h-2 rounded-full bg-green-500 flex-shrink-0" /><span className="text-xs text-white">Online</span></>}
+          {userStatus === 'idle' && <><Moon className="w-3.5 h-3.5 text-amber-500 flex-shrink-0" /><span className="text-xs text-white">Idle</span></>}
+          {userStatus === 'invisible' && <><EyeOff className="w-3.5 h-3.5 text-gray-600 flex-shrink-0" /><span className="text-xs text-white">Invisible</span></>}
         </div>
 
         {/* New chat user list */}
         {showUserList && (
-          <div className="flex-shrink-0 mx-3 mb-2 p-3 bg-dark-700/60 rounded-xl border border-dark-600/60">
+          <div className="flex-shrink-0 mx-3 mb-2 p-3 bg-white-700/60 rounded-xl border border-dark-600/60">
             <p className="text-xs font-medium text-gray-400 mb-2">Start new chat</p>
             <div className="space-y-1 max-h-36 overflow-y-auto scrollbar-hide">
               {allUsers.filter((u) => u.id !== user?.id).map((otherUser) => (
                 <button
                   key={otherUser.id}
                   onClick={() => { handleStartNewChat(otherUser); setShowSidebar(false); }}
-                  className="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-dark-600 transition-colors text-left"
+                  className="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-white-600 transition-colors text-left"
                 >
                   <img src={getAvatarUrl(otherUser.avatar)} alt={otherUser.username} className="w-6 h-6 rounded-full object-cover flex-shrink-0" />
                   <span className="text-sm text-black truncate flex items-center gap-1">
@@ -448,7 +447,7 @@ const ChatPage: React.FC = () => {
                     <button
                       onClick={() => { setActiveChat(chat); setShowSidebar(false); }}
                       className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-colors ${
-                        isActive ? 'bg-primary-600/20 border border-primary-500/30' : 'hover:bg-dark-700/60'
+                        isActive ? 'bg-primary-600/20 border border-primary-500/30' : 'hover:bg-white-700/60'
                       }`}
                     >
                       <div className="relative flex-shrink-0">
@@ -471,7 +470,7 @@ const ChatPage: React.FC = () => {
                     </button>
                     <button
                       onClick={(e) => { e.stopPropagation(); handleDeleteChat(chat.id); }}
-                      className="absolute right-2 top-1/2 -translate-y-1/2 p-1 bg-red-600/80 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-600"
+                      className="absolute right-2 top-1/2 -translate-y-1/2 p-1 bg-red-600/80 text-black rounded-full opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-600"
                       title="Delete chat"
                     >
                       <Trash2 size={11} />
@@ -500,16 +499,16 @@ const ChatPage: React.FC = () => {
           return (
             <>
               {/* Chat Header — static */}
-              <div className="flex-shrink-0 flex items-center gap-3 px-3 py-3 border-b border-dark-700/60 bg-dark-900">
+              <div className="flex-shrink-0 flex items-center gap-3 px-3 py-3 border-b border-dark-700/60 bg-white">
                 <button
                   onClick={() => setShowSidebar(true)}
-                  className="lg:hidden p-1.5 rounded-lg bg-dark-700 text-white hover:bg-dark-600 transition-colors flex-shrink-0"
+                  className="lg:hidden p-1.5 rounded-lg bg-white-700 text-black hover:bg-white-600 transition-colors flex-shrink-0"
                 >
                   <Menu size={17} />
                 </button>
                 <img src={getAvatarUrl(other?.avatar)} alt="avatar" className="w-9 h-9 rounded-full object-cover flex-shrink-0" />
                 <div className="min-w-0 flex-1">
-                  <p className="text-sm font-semibold text-white truncate flex items-center gap-1.5">
+                  <p className="text-sm font-semibold text-black truncate flex items-center gap-1.5">
                     {other?.username}
                     <VerifiedBadge verified={other?.isVerified || other?.isVerifiedArtist} size={15} />
                   </p>
@@ -518,6 +517,17 @@ const ChatPage: React.FC = () => {
                     {statusLabel}
                   </p>
                 </div>
+                {other?.id && (
+                  <button
+                    type="button"
+                    onClick={() => setReportTarget({ userId: other.id, username: other.username })}
+                    className="p-1.5 rounded-lg text-gray-500 hover:text-red-500 hover:bg-gray-100 transition-colors flex-shrink-0"
+                    title={`Report @${other.username}`}
+                    aria-label={`Report ${other.username}`}
+                  >
+                    <Flag size={16} />
+                  </button>
+                )}
               </div>
 
               {/* Messages — fills remaining space, scrolls */}
@@ -532,15 +542,15 @@ const ChatPage: React.FC = () => {
                             <textarea
                               value={editingContent}
                               onChange={(e) => setEditingContent(e.target.value)}
-                              className="w-full bg-dark-700 border border-dark-600 rounded-xl px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 resize-none"
+                              className="w-full bg-white-700 border border-dark-600 rounded-xl px-3 py-2 text-black text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 resize-none"
                               rows={2}
                               autoFocus
                             />
                             <div className="flex items-center gap-2">
-                              <button onClick={handleSaveEdit} className="p-1.5 rounded-lg bg-green-600 text-white hover:bg-green-500 transition-colors">
+                              <button onClick={handleSaveEdit} className="p-1.5 rounded-lg bg-green-600 text-black hover:bg-green-500 transition-colors">
                                 <Check size={12} />
                               </button>
-                              <button onClick={handleCancelEdit} className="p-1.5 rounded-lg bg-dark-600 text-white hover:bg-dark-500 transition-colors">
+                              <button onClick={handleCancelEdit} className="p-1.5 rounded-lg bg-white-600 text-black hover:bg-white-500 transition-colors">
                                 <XIcon size={12} />
                               </button>
                             </div>
@@ -551,8 +561,8 @@ const ChatPage: React.FC = () => {
                               msg.type === 'track'
                                 ? 'bg-transparent p-0'
                                 : isMine
-                                  ? 'bg-primary-600 text-white rounded-br-sm'
-                                  : 'bg-dark-700 text-white rounded-bl-sm'
+                                  ? 'bg-primary-600 text-black rounded-br-sm'
+                                  : 'bg-white-700 text-black rounded-bl-sm'
                             }`}>
                               {msg.type === 'track' ? (() => {
                                 const track: Track | null = (msg as any).track ?? (() => {
@@ -585,6 +595,22 @@ const ChatPage: React.FC = () => {
                                   </button>
                                 </div>
                               )}
+                              {!isMine && other?.id && (
+                                <button
+                                  type="button"
+                                  onClick={() => setReportTarget({
+                                    userId: other.id,
+                                    username: other.username,
+                                    messageId: msg.id,
+                                    messageKind: 'direct',
+                                  })}
+                                  className="p-1 text-gray-500 hover:text-red-400 transition-colors opacity-0 group-hover:opacity-100 focus:opacity-100"
+                                  title="Report message"
+                                  aria-label="Report message"
+                                >
+                                  <Flag size={11} />
+                                </button>
+                              )}
                             </div>
                           </>
                         )}
@@ -596,7 +622,7 @@ const ChatPage: React.FC = () => {
               </div>
 
               {/* Message Input — static at bottom */}
-              <div className={`flex-shrink-0 px-3 pt-2 border-t border-dark-700/60 bg-dark-900 relative lg:pb-2 ${keyboardOpen ? 'pb-2' : player.visible ? 'pb-[132px]' : 'pb-[72px]'}`}>
+              <div className={`flex-shrink-0 px-3 pt-2 border-t border-dark-700/60 bg-white relative lg:pb-2 ${keyboardOpen ? 'pb-2' : player.visible ? 'pb-[132px]' : 'pb-[72px]'}`}>
                 <div className="flex items-center gap-2">
                   <input
                     type="text"
@@ -604,26 +630,26 @@ const ChatPage: React.FC = () => {
                     onChange={(e) => setMessage(e.target.value)}
                     onKeyDown={(e) => e.key === 'Enter' && handleSend()}
                     placeholder="Type a message…"
-                    className="flex-1 min-w-0 bg-dark-700 border border-dark-600 rounded-xl px-3 py-2 text-white placeholder-gray-600 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+                    className="flex-1 min-w-0 bg-white-700 border border-dark-600 rounded-xl px-3 py-2 text-black placeholder-gray-600 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
                   />
                   <button
                     type="button"
                     onClick={() => setShowEmojiPicker((v) => !v)}
-                    className="p-2 rounded-xl bg-dark-700 hover:bg-dark-600 transition-colors flex-shrink-0"
+                    className="p-2 rounded-xl bg-white-700 hover:bg-white-600 transition-colors flex-shrink-0"
                     tabIndex={-1}
                   >
                     <span role="img" aria-label="emoji" className="text-base leading-none">😊</span>
                   </button>
                   <button
                     onClick={() => setShowMusicShare(true)}
-                    className="p-2 rounded-xl bg-dark-700 hover:bg-dark-600 text-primary-400 transition-colors flex-shrink-0"
+                    className="p-2 rounded-xl bg-white-700 hover:bg-white-600 text-primary-400 transition-colors flex-shrink-0"
                   >
                     <Music size={16} />
                   </button>
                   <button
                     onClick={handleSend}
                     disabled={!message.trim()}
-                    className="p-2 rounded-xl bg-primary-600 hover:bg-primary-500 disabled:opacity-40 text-white transition-colors flex-shrink-0"
+                    className="p-2 rounded-xl bg-primary-600 hover:bg-primary-500 disabled:opacity-40 text-black transition-colors flex-shrink-0"
                   >
                     <Send size={16} />
                   </button>
@@ -643,20 +669,20 @@ const ChatPage: React.FC = () => {
           <div className="flex-1 flex flex-col items-center justify-center gap-3 text-center p-6">
             <button
               onClick={() => setShowSidebar(true)}
-              className="lg:hidden absolute top-3 left-3 p-1.5 rounded-lg bg-dark-700 text-white hover:bg-dark-600 transition-colors"
+              className="lg:hidden absolute top-3 left-3 p-1.5 rounded-lg bg-white-700 text-black hover:bg-white-600 transition-colors"
             >
               <Menu size={17} />
             </button>
-            <div className="w-14 h-14 bg-dark-800 rounded-full flex items-center justify-center">
+            <div className="w-14 h-14 bg-white-800 rounded-full flex items-center justify-center">
               <MessageCircle size={26} className="text-gray-600" />
             </div>
             <div>
-              <p className="text-white font-medium">No chat selected</p>
+              <p className="text-black font-medium">No chat selected</p>
               <p className="text-gray-500 text-sm mt-0.5">Choose a conversation or start a new one</p>
             </div>
             <button
               onClick={() => setShowSidebar(true)}
-              className="lg:hidden flex items-center gap-2 px-4 py-2 bg-primary-600 hover:bg-primary-500 text-white rounded-full text-sm transition-colors"
+              className="lg:hidden flex items-center gap-2 px-4 py-2 bg-primary-600 hover:bg-primary-500 text-black rounded-full text-sm transition-colors"
             >
               <Users size={15} /> View chats
             </button>
@@ -667,10 +693,10 @@ const ChatPage: React.FC = () => {
       {/* ── Share Music Modal ── */}
       {showMusicShare && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-end sm:items-center justify-center z-50 p-0 sm:p-4">
-          <div className="bg-dark-800 border border-dark-700/60 rounded-t-2xl sm:rounded-2xl w-full sm:max-w-md max-h-[70vh] flex flex-col shadow-2xl mb-[136px] sm:mb-0">
+          <div className="bg-white-800 border border-dark-700/60 rounded-t-2xl sm:rounded-2xl w-full sm:max-w-md max-h-[70vh] flex flex-col shadow-2xl mb-[136px] sm:mb-0">
             <div className="flex-shrink-0 flex items-center justify-between px-5 py-4 border-b border-dark-700/60">
               <p className="text-base font-semibold text-black">Share a track</p>
-              <button onClick={() => setShowMusicShare(false)} className="p-1.5 text-gray-500 hover:text-white rounded-lg hover:bg-dark-700 transition-colors">
+              <button onClick={() => setShowMusicShare(false)} className="p-1.5 text-gray-500 hover:text-black rounded-lg hover:bg-white-700 transition-colors">
                 <X size={18} />
               </button>
             </div>
@@ -685,15 +711,15 @@ const ChatPage: React.FC = () => {
               ) : (
                 <div className="space-y-2">
                   {userTracks.map((track) => (
-                    <div key={track.id} className="flex items-center gap-3 p-3 bg-dark-700/60 rounded-xl hover:bg-dark-700 transition-colors">
-                      <img src={track.cover} alt={track.title} className="w-10 h-10 rounded-lg object-cover flex-shrink-0 bg-dark-600" />
+                    <div key={track.id} className="flex items-center gap-3 p-3 bg-white-700/60 rounded-xl hover:bg-white-700 transition-colors">
+                      <img src={track.cover} alt={track.title} className="w-10 h-10 rounded-lg object-cover flex-shrink-0 bg-white-600" />
                       <div className="flex-1 min-w-0">
-                        <p className="text-white text-sm font-medium truncate">{track.title}</p>
+                        <p className="text-black text-sm font-medium truncate">{track.title}</p>
                         <p className="text-gray-500 text-xs truncate">{track.artist}</p>
                       </div>
                       <button
                         onClick={() => handleShareMusic(track)}
-                        className="flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 bg-primary-600 hover:bg-primary-500 text-white rounded-full text-xs font-medium transition-colors"
+                        className="flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 bg-primary-600 hover:bg-primary-500 text-black rounded-full text-xs font-medium transition-colors"
                       >
                         <Send size={12} /> Share
                       </button>
@@ -705,6 +731,10 @@ const ChatPage: React.FC = () => {
             </div>
           </div>
         </div>
+      )}
+
+      {reportTarget && (
+        <ReportDialog target={reportTarget} onClose={() => setReportTarget(null)} />
       )}
     </div>
   );

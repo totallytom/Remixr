@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { Users, Music, Loader, User as UserIcon, MessageCircle, Calendar, MapPin } from 'lucide-react';
+import { Users, Loader, User as UserIcon, MessageCircle, Calendar, MapPin, ArrowLeft } from 'lucide-react';
 import TrackCard from '../components/music/TrackCard';
 import SearchBar, { SearchCategory } from '../components/search/SearchBar';
 import { useStore } from '../store/useStore';
@@ -12,27 +12,13 @@ import { supabase } from '../services/supabase';
 import { getAvatarUrl } from '../utils/avatar';
 import VerifiedBadge from '../components/VerifiedBadge';
 
-export type FilterChip = 'top' | 'tracks' | 'albums' | 'artists' | 'profiles' | 'venues';
-
-const FILTER_CHIPS: { id: FilterChip; label: string }[] = [
-  { id: 'top', label: 'Top Results' },
-  { id: 'tracks', label: 'Tracks' },
-  { id: 'albums', label: 'Albums' },
-  { id: 'artists', label: 'Artists' },
-  { id: 'profiles', label: 'Profiles' },
-  { id: 'venues', label: 'Venues' },
-];
-
 const Search: React.FC = () => {
   const { playTrack, addToQueue, player, user: currentUser } = useStore();
   const [search, setSearch] = useState('');
-  const [selectedGenre, setSelectedGenre] = useState<string | null>(null);
   const [category, setCategory] = useState<SearchCategory>('music');
-  const [filterChip, setFilterChip] = useState<FilterChip>('top');
   const [filteredUsers, setFilteredUsers] = useState<User[]>([]);
   const [allTracks, setAllTracks] = useState<Track[]>([]);
   const [filteredTracks, setFilteredTracks] = useState<Track[]>([]);
-  const [availableGenres, setAvailableGenres] = useState<string[]>([]);
   const [isLoadingTracks, setIsLoadingTracks] = useState(false);
   const [isSearching, setIsSearching] = useState(false);
   const [featuredArtists, setFeaturedArtists] = useState<User[]>([]);
@@ -43,19 +29,8 @@ const Search: React.FC = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
 
-  // Effective view: when category is 'all', filter chip decides section; otherwise category
   const effectiveView: 'music' | 'users' | 'concerts' =
-    category === 'all'
-      ? filterChip === 'profiles'
-        ? 'users'
-        : filterChip === 'venues'
-        ? 'concerts'
-        : 'music'
-      : category === 'users'
-      ? 'users'
-      : category === 'concerts'
-      ? 'concerts'
-      : 'music';
+    category === 'users' ? 'users' : category === 'concerts' ? 'concerts' : 'music';
 
   // Handle tab parameter from URL
   useEffect(() => {
@@ -64,29 +39,6 @@ const Search: React.FC = () => {
       setCategory(tabParam);
     }
   }, [searchParams]);
-
-  // Keep filter chip in sync with category (e.g. when switching to Users, select Profiles)
-  useEffect(() => {
-    if (category === 'users' && filterChip !== 'profiles') setFilterChip('profiles');
-    if (category === 'concerts' && filterChip !== 'venues') setFilterChip('venues');
-    if (category === 'music' && !['top', 'tracks', 'albums', 'artists'].includes(filterChip)) setFilterChip('top');
-  }, [category]);
-
-  // Load available genres
-  useEffect(() => {
-    const loadGenres = async () => {
-      try {
-        const genres = await MusicService.getAvailableGenres();
-        setAvailableGenres(genres);
-      } catch (error) {
-        console.error('Failed to load genres:', error);
-        // Fallback to mock genres
-        setAvailableGenres(['Electronic', 'Pop', 'Rock', 'Hip Hop', 'R&B', 'Jazz', 'Classical']);
-      }
-    };
-
-    loadGenres();
-  }, []);
 
   // Load all tracks when music view is relevant
   useEffect(() => {
@@ -201,8 +153,6 @@ const Search: React.FC = () => {
         } finally {
           setIsSearching(false);
         }
-      } else {
-        setFilteredUsers(allUsers);
       }
     } else if (effectiveView === 'concerts') {
       const q = query.trim().toLowerCase();
@@ -242,13 +192,10 @@ const Search: React.FC = () => {
     return () => clearTimeout(timeoutId);
   }, [search, handleSearch, effectiveView, allTracks]);
 
-  // Filter by genre (music view); default sort: Newest First
+  // Default sort: Newest First
   useEffect(() => {
     if (effectiveView === 'music') {
       let filtered = allTracks;
-      if (selectedGenre) {
-        filtered = filtered.filter(track => track.genre === selectedGenre);
-      }
       if (search.trim()) {
         filtered = filtered.filter(track =>
           track.title.toLowerCase().includes(search.toLowerCase()) ||
@@ -264,7 +211,7 @@ const Search: React.FC = () => {
       });
       setFilteredTracks(sorted);
     }
-  }, [selectedGenre, search, allTracks, effectiveView]);
+  }, [search, allTracks, effectiveView]);
 
   const handleArtistClick = (artistId: string) => {
     navigate(`/artist/${artistId}`);
@@ -316,25 +263,21 @@ const Search: React.FC = () => {
 
   const clearSearch = () => {
     setSearch('');
-    setSelectedGenre(null);
   };
-
-  // Which filter chips to show based on category
-  const visibleChips =
-    category === 'all'
-      ? FILTER_CHIPS
-      : category === 'music'
-      ? FILTER_CHIPS.filter((c) => ['top', 'tracks', 'albums', 'artists'].includes(c.id))
-      : category === 'users'
-      ? FILTER_CHIPS.filter((c) => c.id === 'profiles')
-      : FILTER_CHIPS.filter((c) => c.id === 'venues');
 
   return (
     <div className="px-3 py-4 sm:px-5 sm:py-5 md:p-6 space-y-6 sm:space-y-8 max-w-[100vw] overflow-x-hidden">
       {/* Sticky search header — search bar + filter chips stay visible while scrolling results */}
-      <div className="sticky top-0 z-10 bg-dark-900/95 backdrop-blur-sm -mx-3 sm:-mx-5 md:-mx-6 px-3 sm:px-5 md:px-6 py-3 space-y-3 border-b border-dark-700/50">
-        <div className="flex items-center justify-between">
-          <h1 className="text-2xl sm:text-3xl font-bold gradient-text font-kyobo text-white truncate">Search</h1>
+      <div className="sticky top-0 z-10 bg-white/95 backdrop-blur-sm -mx-3 sm:-mx-5 md:-mx-6 px-3 sm:px-5 md:px-6 py-3 space-y-3 border-b border-gray-200">
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => navigate('/')}
+            className="flex items-center justify-center w-9 h-9 rounded-xl text-black/60 hover:text-black hover:bg-gray-100 active:scale-95 transition-all duration-200 flex-shrink-0"
+            aria-label="Back to Home"
+          >
+            <ArrowLeft size={20} strokeWidth={2} />
+          </button>
+          <h1 className="text-2xl sm:text-3xl font-bold gradient-text font-kyobo text-black truncate">Search</h1>
         </div>
 
         {/* Omni-search bar */}
@@ -348,34 +291,13 @@ const Search: React.FC = () => {
           isSearching={isSearching}
           disabled={effectiveView === 'users' && !currentUser}
         />
-
-        {/* Filter chips with right-edge fade gradient as scroll indicator */}
-        <div className="relative">
-          <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
-            {visibleChips.map((chip) => (
-              <button
-                key={chip.id}
-                onClick={() => setFilterChip(chip.id)}
-                className={`flex-shrink-0 px-4 h-11 rounded-full text-sm font-medium transition-colors border ${
-                  filterChip === chip.id
-                    ? 'bg-lime-400/20 text-lime-400 border-lime-400/40'
-                    : 'bg-dark-800 text-black border-dark-600 hover:text-white hover:border-dark-500'
-                }`}
-              >
-                {chip.label}
-              </button>
-            ))}
-          </div>
-          {/* Fade gradient — scroll affordance indicator */}
-          <div className="absolute right-0 top-0 bottom-0 w-8 bg-gradient-to-l from-dark-900 to-transparent pointer-events-none" />
-        </div>
       </div>
 
       {/* Content */}
       {effectiveView === 'music' && (
         <section>
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-xl font-bold text-white font-kyobo">Search Results</h2>
+            <h2 className="text-xl font-bold text-black font-kyobo">Search Results</h2>
             {isLoadingTracks && <Loader className="animate-spin text-lime-400" size={20} />}
           </div>
 
@@ -416,13 +338,10 @@ const Search: React.FC = () => {
         </section>
       )}
 
-      {/* Feed section commented out for later use */}
-      {/* {activeTab === 'feed' && <Feed />} */}
-
       {effectiveView === 'concerts' && (
         <section>
           <div className="flex items-center justify-between mb-4 sm:mb-6 gap-2">
-            <h2 className="text-xl sm:text-2xl font-bold text-white font-kyobo truncate">Concerts</h2>
+            <h2 className="text-xl sm:text-2xl font-bold text-black font-kyobo truncate">Concerts</h2>
             {isLoadingConcerts && <Loader className="animate-spin text-primary-400 flex-shrink-0" size={20} />}
           </div>
           <p className="text-dark-400 text-sm mb-6">Concerts uploaded by artists on their profiles.</p>
@@ -448,7 +367,7 @@ const Search: React.FC = () => {
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex-1 min-w-0">
-                      <h3 className="text-lg font-semibold text-white truncate font-kyobo">{concert.title}</h3>
+                      <h3 className="text-lg font-semibold text-black truncate font-kyobo">{concert.title}</h3>
                       {concert.user && (
                         <div className="flex items-center gap-2 mt-2">
                           <img
@@ -486,7 +405,7 @@ const Search: React.FC = () => {
                         target="_blank"
                         rel="noopener noreferrer"
                         onClick={e => e.stopPropagation()}
-                        className="px-3 py-1.5 bg-primary-600 text-white rounded text-sm hover:bg-primary-700 transition-colors"
+                        className="px-3 py-1.5 bg-primary-600 text-black rounded text-sm hover:bg-primary-700 transition-colors"
                       >
                         Get tickets
                       </a>
@@ -494,7 +413,7 @@ const Search: React.FC = () => {
                     {concert.user && (
                       <button
                         onClick={e => { e.stopPropagation(); handleUserClick(concert.user!); }}
-                        className="px-3 py-1.5 bg-dark-700 text-white rounded text-sm hover:bg-dark-600 transition-colors"
+                        className="px-3 py-1.5 bg-dark-700 text-black rounded text-sm hover:bg-dark-600 transition-colors"
                       >
                         View profile
                       </button>
@@ -512,35 +431,33 @@ const Search: React.FC = () => {
           {/* Featured Artists — always visible */}
           {!search.trim() && (
             <section className="mb-8">
-              <h2 className="text-2xl font-bold text-white mb-4 font-kyobo">Featured Artists</h2>
+              <h2 className="text-2xl font-bold text-black mb-4 font-kyobo">Featured Artists</h2>
               {isLoadingArtists ? (
                 <div className="text-center py-8">
                   <Loader className="animate-spin text-primary-400 mx-auto" size={32} />
                 </div>
               ) : (
-                <div className="grid grid-cols-[repeat(auto-fill,minmax(180px,1fr))] gap-6">
+                <div className="grid grid-cols-[repeat(auto-fill,minmax(220px,1fr))] gap-4">
                   {featuredArtists.length === 0 ? (
-                    <div className="text-dark-400 col-span-full text-center">No featured artists found.</div>
+                    <div className="text-gray-500 col-span-full text-center">No featured artists found.</div>
                   ) : (
                     featuredArtists.map(artist => (
                       <div
                         key={artist.id}
                         onClick={() => handleUserClick(artist)}
-                        className="bg-dark-800 rounded-lg px-2 cursor-pointer card-hover py-2"
+                        className="group flex items-center gap-4 p-4 rounded-2xl bg-white border border-gray-200 hover:border-primary-400 hover:shadow-lg hover:-translate-y-1 transition-all duration-200 cursor-pointer"
                       >
-                        <div className="flex items-center space-x-2">
-                          <img
-                            src={getAvatarUrl(artist.avatar)}
-                            alt={artist.username}
-                            className="w-16 h-16 rounded-full object-cover"
-                          />
-                          <div className="flex-1 min-w-0">
-                            <p className="text-lg font-semibold text-black truncate flex items-center gap-1.5">
-                              {artist.username}
-                              <VerifiedBadge verified={artist.isVerified || artist.isVerifiedArtist} size={16} />
-                            </p>
-                            <p className="text-xs text-primary-400">Click to view profile</p>
-                          </div>
+                        <img
+                          src={getAvatarUrl(artist.avatar)}
+                          alt={artist.username}
+                          className="w-16 h-16 rounded-full object-cover flex-shrink-0 ring-2 ring-offset-2 ring-transparent group-hover:ring-primary-400 transition-all duration-200"
+                        />
+                        <div className="min-w-0 flex-1">
+                          <p className="text-base font-semibold text-black truncate flex items-center gap-1.5">
+                            {artist.username}
+                            <VerifiedBadge verified={artist.isVerified || artist.isVerifiedArtist} size={16} />
+                          </p>
+                          <p className="text-xs text-primary-500 mt-0.5">View profile</p>
                         </div>
                       </div>
                     ))
@@ -554,18 +471,18 @@ const Search: React.FC = () => {
           {search.trim() && (
             <section>
               <div className="flex items-center justify-between mb-4 sm:mb-6 gap-2">
-                <h2 className="text-xl sm:text-2xl font-bold text-white font-kyobo truncate">Users</h2>
+                <h2 className="text-xl sm:text-2xl font-bold text-black font-kyobo truncate">Users</h2>
                 {isSearching && <Loader className="animate-spin text-primary-400 flex-shrink-0" size={20} />}
               </div>
 
               {!currentUser ? (
                 <div className="text-center py-8 sm:py-12 px-4">
                   <Users className="mx-auto text-dark-400 mb-3 sm:mb-4" size={40} />
-                  <h3 className="text-lg sm:text-xl font-bold text-white mb-2">Sign in to search users</h3>
+                  <h3 className="text-lg sm:text-xl font-bold text-black mb-2">Sign in to search users</h3>
                   <p className="text-dark-400 text-sm sm:text-base mb-4 sm:mb-6">Connect with other artists and music lovers by signing in to your account.</p>
                   <button
                     onClick={() => window.location.href = '/login'}
-                    className="px-5 py-2.5 sm:px-6 sm:py-3 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors text-sm sm:text-base"
+                    className="px-5 py-2.5 sm:px-6 sm:py-3 bg-primary-600 text-black rounded-lg hover:bg-primary-700 transition-colors text-sm sm:text-base"
                   >
                     Sign In
                   </button>
@@ -606,14 +523,14 @@ const Search: React.FC = () => {
                         <div className="flex items-center gap-2 sm:hidden">
                           <button
                             onClick={(e) => { e.stopPropagation(); handleUserClick(user); }}
-                            className="p-2 bg-dark-700 text-white rounded-full hover:bg-dark-600 transition-colors"
+                            className="p-2 bg-dark-700 text-black rounded-full hover:bg-dark-600 transition-colors"
                             title="View Profile"
                           >
                             <UserIcon size={18} />
                           </button>
                           <button
                             onClick={(e) => { e.stopPropagation(); handleStartChat(user); }}
-                            className="p-2 bg-primary-600 text-white rounded-full hover:bg-primary-700 transition-colors"
+                            className="p-2 bg-primary-600 text-black rounded-full hover:bg-primary-700 transition-colors"
                             title="Message"
                           >
                             <MessageCircle size={18} />
@@ -628,7 +545,7 @@ const Search: React.FC = () => {
                           </button>
                           <button
                             onClick={(e) => { e.stopPropagation(); handleStartChat(user); }}
-                            className="px-3 py-2 bg-primary-600 text-white rounded text-sm hover:bg-primary-700 transition-colors"
+                            className="px-3 py-2 bg-primary-600 text-black rounded text-sm hover:bg-primary-700 transition-colors"
                           >
                             Message
                           </button>

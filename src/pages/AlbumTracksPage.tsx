@@ -65,7 +65,7 @@ const AlbumTracksPage: React.FC = () => {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-dark-900 text-white flex items-center justify-center">
+      <div className="min-h-screen bg-dark-900 text-black flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-white mx-auto mb-4" />
           <p>Loading album...</p>
@@ -76,10 +76,10 @@ const AlbumTracksPage: React.FC = () => {
 
   if (!album) {
     return (
-      <div className="p-8 text-center text-white">
+      <div className="p-8 text-center text-black">
         <h2 className="text-2xl font-bold mb-4">Album not found</h2>
         <button
-          className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700"
+          className="px-4 py-2 bg-primary-600 text-black rounded-lg hover:bg-primary-700"
           onClick={() => navigate(-1)}
         >
           Go back
@@ -94,14 +94,14 @@ const AlbumTracksPage: React.FC = () => {
     'https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?w=400&h=400&fit=crop';
 
   return (
-    <div className="min-h-screen bg-dark-900 text-white">
+    <div className="min-h-screen bg-dark-900 text-black">
       {/* Header - same layout as PlaylistTracksPage */}
       <div className="p-4 sm:p-6 md:p-8 bg-gradient-to-br from-violet-900/50 to-indigo-900/40 md:bg-dark-800 border-b border-violet-700/50 md:border-dark-700">
         <div className="flex flex-col sm:flex-row sm:items-end gap-4 sm:space-x-6">
           <button
             type="button"
             onClick={() => navigate(-1)}
-            className="absolute top-4 left-4 sm:static p-2 rounded-full bg-black/30 hover:bg-black/50 text-white transition-colors self-start"
+            className="absolute top-4 left-4 sm:static p-2 rounded-full bg-black/30 hover:bg-black/50 text-black transition-colors self-start"
             aria-label="Go back"
           >
             <ArrowLeft size={24} />
@@ -125,8 +125,8 @@ const AlbumTracksPage: React.FC = () => {
             />
           </div>
           <div className="flex-1">
-            <p className="text-sm font-medium text-white/80 uppercase tracking-wider mb-1">Album</p>
-            <h1 className="text-4xl md:text-5xl font-bold text-white mb-2">{album.title}</h1>
+            <p className="text-sm font-medium text-black/80 uppercase tracking-wider mb-1">Album</p>
+            <h1 className="text-4xl md:text-5xl font-bold text-black mb-2">{album.title}</h1>
             <p className="text-dark-300 mb-4">{album.artist}</p>
             <div className="flex items-center gap-4 text-sm text-dark-400">
               <span>{album.genre}</span>
@@ -141,15 +141,15 @@ const AlbumTracksPage: React.FC = () => {
         <div className="flex items-center space-x-4">
           <button
             onClick={handlePlayAlbum}
-            className="w-14 h-14 bg-primary-600 hover:bg-primary-500 rounded-full flex items-center justify-center transition-colors text-white"
+            className="w-14 h-14 bg-primary-600 hover:bg-primary-500 rounded-full flex items-center justify-center transition-colors text-black"
             disabled={tracks.length === 0}
           >
-            <Play size={24} className="text-white ml-1" fill="currentColor" />
+            <Play size={24} className="text-black ml-1" fill="currentColor" />
           </button>
           {tracks.length > 1 && (
             <button
               onClick={() => playQueue(tracks)}
-              className="px-4 py-2 text-dark-300 hover:text-white transition-colors text-sm"
+              className="px-4 py-2 text-dark-300 hover:text-black transition-colors text-sm"
             >
               Play all ({tracks.length} tracks)
             </button>
@@ -183,7 +183,7 @@ const AlbumTracksPage: React.FC = () => {
               >
                 <div className="flex items-center justify-center">
                   <span className="text-gray-400 group-hover:hidden">{index + 1}</span>
-                  <button type="button" className="hidden group-hover:block text-white" aria-label={`Play ${track.title}`}>
+                  <button type="button" className="hidden group-hover:block text-black" aria-label={`Play ${track.title}`}>
                     <Play size={16} fill="currentColor" />
                   </button>
                 </div>
@@ -197,7 +197,7 @@ const AlbumTracksPage: React.FC = () => {
                     />
                   </div>
                   <div>
-                    <div className="text-white font-medium">{track.title}</div>
+                    <div className="text-black font-medium">{track.title}</div>
                     <div className="text-gray-400 text-sm">{track.artist}</div>
                   </div>
                 </div>

@@ -1,4 +1,10 @@
 import { supabase } from './supabase';
+import {
+  createSubscriptionSession,
+  createPortalSession,
+  activateSubscription,
+  cancelProSubscription,
+} from './api';
 
 export interface ProSubscription {
   id: string;
@@ -44,32 +50,18 @@ export const proSubscriptionService = {
   },
 
   isProUser(subscriptionTier?: string): boolean {
-    return subscriptionTier === 'pro';
+    return subscriptionTier === 'artist';
   },
 
   async startProCheckout(stripeCustomerId: string | null | undefined, plan: 'monthly' | 'yearly', userId?: string, email?: string): Promise<void> {
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session?.access_token) throw new Error('Not authenticated');
-
-    const response = await fetch('/api/create-subscription-session', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${session.access_token}`,
-      },
-      body: JSON.stringify({
-        ...(stripeCustomerId ? { customerId: stripeCustomerId } : {}),
-        plan,
-        userId,
-        email,
-        successUrl: `${window.location.origin}/upgrade?success=true&session_id={CHECKOUT_SESSION_ID}`,
-        cancelUrl: `${window.location.origin}/upgrade?cancelled=true`,
-      }),
+    const data = await createSubscriptionSession({
+      ...(stripeCustomerId ? { customerId: stripeCustomerId } : {}),
+      plan,
+      userId,
+      email,
+      successUrl: `${window.location.origin}/upgrade?success=true&session_id={CHECKOUT_SESSION_ID}`,
+      cancelUrl: `${window.location.origin}/upgrade?cancelled=true`,
     });
-
-    const text = await response.text();
-    let data: Record<string, string> = {};
-    try { data = JSON.parse(text); } catch { throw new Error('Checkout failed. Please try again.'); }
     if (data.url) {
       window.location.href = data.url;
     } else if (data.error === 'already_subscribed') {
@@ -80,59 +72,15 @@ export const proSubscriptionService = {
   },
 
   async openPortal(): Promise<void> {
-    const { data: { session } } = await supabase.auth.getSession();
-    const token = session?.access_token;
-    if (!token) throw new Error('Not authenticated');
-
-    const response = await fetch('/api/create-portal-session', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`,
-      },
-      body: JSON.stringify({ returnUrl: window.location.origin + '/upgrade' }),
-    });
-
-    const data = await response.json();
-    if (!response.ok) throw new Error(data.error || 'Failed to open billing portal');
-    window.location.href = data.url;
+    const { url } = await createPortalSession(window.location.origin + '/upgrade');
+    window.location.href = url;
   },
 
   async activateFromSession(sessionId: string): Promise<void> {
-    const { data: { session } } = await supabase.auth.getSession();
-    const token = session?.access_token;
-    if (!token) throw new Error('Not authenticated');
-
-    const response = await fetch('/api/activate-subscription', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`,
-      },
-      body: JSON.stringify({ sessionId }),
-    });
-
-    const data = await response.json();
-    if (!response.ok) throw new Error(data.error || 'Failed to activate subscription');
+    await activateSubscription(sessionId);
   },
 
   async cancelAtPeriodEnd(subscriptionId: string): Promise<{ currentPeriodEnd: Date }> {
-    const { data: { session } } = await supabase.auth.getSession();
-    const token = session?.access_token;
-    if (!token) throw new Error('Not authenticated');
-
-    const response = await fetch('/api/cancel-pro-subscription', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`,
-      },
-      body: JSON.stringify({ subscriptionId }),
-    });
-
-    const data = await response.json();
-    if (!response.ok) throw new Error(data.error || 'Failed to cancel subscription');
-
-    return { currentPeriodEnd: new Date(data.current_period_end * 1000) };
+    return cancelProSubscription(subscriptionId);
   },
 };

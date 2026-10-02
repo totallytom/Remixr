@@ -3,23 +3,19 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import {
   Home,
-  Search,
   MessageCircle,
   User,
   Settings,
   Upload,
   ListMusic,
   Music,
-  Package,
   ClipboardList,
   LogIn,
   UserPlus,
-  RefreshCw,
   RadioReceiver,
   Shield,
   Info,
   BarChart2,
-  ShoppingBag,
   Lock,
 } from 'lucide-react';
 import { useStore } from '../../store/useStore';
@@ -77,10 +73,8 @@ const Sidebar: React.FC = () => {
   const navigationItems = [
     { id: 'upload', label: t('nav.upload'), icon: Upload, path: '/upload', requiresAuth: true },
     { id: 'home', label: t('nav.home'), icon: Home, path: '/', requiresAuth: false },
-    { id: 'search', label: t('nav.search'), icon: Search, path: '/search', requiresAuth: false },
     { id: 'discover', label: t('nav.discover'), icon: RadioReceiver, path: '/discover', requiresAuth: true },
     { id: 'playlists', label: t('nav.playlists'), icon: ListMusic, path: '/playlists', requiresAuth: true },
-    { id: 'storefront', label: 'Storefront', icon: ShoppingBag, path: '/storefront', requiresAuth: false },
     { id: 'chat', label: t('nav.chat'), icon: MessageCircle, path: '/chat', requiresAuth: true },
     { id: 'profile', label: t('nav.profile'), icon: User, path: '/profile', requiresAuth: true },
     { id: 'analytics', label: 'Analytics', icon: BarChart2, path: '/analytics', requiresAuth: true, musicianOnly: true },
@@ -114,7 +108,7 @@ const Sidebar: React.FC = () => {
         <div className="p-5 border-b border-[var(--color-border)]">
           <div className="flex items-center gap-3">
             <img src="/logo/logo.png" alt="Logo" className="w-9 h-9 rounded-xl object-cover ring-1 ring-black/10" />
-            <h1 className="text-xl font-bold tracking-tight brand-text">Remixr</h1>
+            <h1 className="text-xl font-bold tracking-tight brand-text">Re-Mixed</h1>
           </div>
         </div>
 
@@ -131,7 +125,7 @@ const Sidebar: React.FC = () => {
                 <p className="text-sm font-semibold truncate sidebar-text flex items-center gap-1.5" style={{ color: 'var(--color-text)' }}>
                   {user.username}
                   <VerifiedBadge verified={user.isVerified || user.isVerifiedArtist} size={14} />
-                  {user.subscriptionTier === 'pro' && (
+                  {user.subscriptionTier === 'artist' && (
                     <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-yellow-500 text-white leading-none shadow-sm flex-shrink-0">
                       ★ PRO
                     </span>
@@ -176,7 +170,6 @@ const Sidebar: React.FC = () => {
             {navItemsWithoutUpload.map((item) => {
               const Icon = item.icon;
               const isActive = location.pathname === item.path;
-              const isSearch = item.id === 'search';
               const isLocked = !isAuthenticated && item.requiresAuth;
               return (
                 <li key={item.id}>
@@ -184,9 +177,7 @@ const Sidebar: React.FC = () => {
                     onClick={() => handleNavigation(item.path)}
                     className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 sidebar-nav-item ${
                       isActive
-                        ? isSearch
-                          ? 'bg-lime-400/20 text-white'
-                          : 'bg-[var(--sidebar-primary)] text-white shadow-lg'
+                        ? 'bg-[var(--sidebar-primary)] text-white shadow-lg'
                         : 'text-[var(--color-text-secondary)] hover:bg-[var(--sidebar-surface-light)] hover:text-[var(--color-text)]'
                     }`}
                   >
@@ -219,63 +210,54 @@ const Sidebar: React.FC = () => {
           </ul>
         </nav>
 
-        {/* Music Player Toggle */}
-        <div className="p-3 border-t border-[var(--color-border)]">
+        {/* Utility row — player toggle, privacy, terms, settings (compact icons so the
+            nav list above keeps its space on shorter screens; each has a tooltip) */}
+        <div className="p-2.5 border-t border-[var(--color-border)] flex items-center justify-center gap-1.5">
           <button
             onClick={togglePlayerVisibility}
-            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 sidebar-nav-item ${
+            title={player.visible ? t('nav.hidePlayer') : t('nav.showPlayer')}
+            className={`relative w-9 h-9 rounded-lg flex items-center justify-center transition-all duration-200 ${
               player.visible
-                ? 'bg-[var(--sidebar-primary)] text-white shadow-lg'
+                ? 'bg-[var(--sidebar-primary)] text-white'
                 : 'text-[var(--color-text-secondary)] hover:bg-[var(--sidebar-surface-light)] hover:text-[var(--color-text)]'
             }`}
           >
-            <Music size={20} strokeWidth={2} />
-            <span>{player.visible ? t('nav.hidePlayer') : t('nav.showPlayer')}</span>
+            <Music size={17} strokeWidth={2} />
             {player.currentTrack && (
-              <span className="ml-auto text-xs opacity-80">{player.isPlaying ? '▶' : '⏸'}</span>
+              <span className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-[var(--sidebar-primary)]" />
             )}
           </button>
-        </div>
 
-        {/* Privacy Policy */}
-        <div className="p-3 border-t border-[var(--color-border)]">
-          <div className="space-y-1">
-            <a
-              href="https://info.re-mixed.net/privacy"
-              target="_blank"
-              rel="noreferrer"
-              className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-[var(--color-text-secondary)] hover:bg-[var(--sidebar-surface-light)] hover:text-[var(--color-text)] transition-all duration-200 sidebar-nav-item"
-            >
-              <Info size={20} strokeWidth={2} />
-              <span>{t('nav.privacyPolicy')}</span>
-            </a>
-          </div>
+          <a
+            href="https://info.re-mixed.net/privacy"
+            target="_blank"
+            rel="noreferrer"
+            title={t('nav.privacyPolicy')}
+            className="w-9 h-9 rounded-lg flex items-center justify-center text-[var(--color-text-secondary)] hover:bg-[var(--sidebar-surface-light)] hover:text-[var(--color-text)] transition-all duration-200"
+          >
+            <Info size={17} strokeWidth={2} />
+          </a>
 
-          <div className="space-y-1">
-            <a
-              href="https://info.re-mixed.net/terms"
-              target="_blank"
-              rel="noreferrer"
-              className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-[var(--color-text-secondary)] hover:bg-[var(--sidebar-surface-light)] hover:text-[var(--color-text)] transition-all duration-200 sidebar-nav-item"
-            >
-              <ClipboardList size={20} strokeWidth={2} />
-              <span>{t('nav.termsAgreement')}</span>
-            </a>
-          </div>
-        </div>
+          <a
+            href="https://info.re-mixed.net/terms"
+            target="_blank"
+            rel="noreferrer"
+            title={t('nav.termsAgreement')}
+            className="w-9 h-9 rounded-lg flex items-center justify-center text-[var(--color-text-secondary)] hover:bg-[var(--sidebar-surface-light)] hover:text-[var(--color-text)] transition-all duration-200"
+          >
+            <ClipboardList size={17} strokeWidth={2} />
+          </a>
 
-        {/* Settings */}
-        {isAuthenticated && (
-          <div className="p-3 border-t border-[var(--color-border)]">
+          {isAuthenticated && (
             <button
               onClick={() => setSettingsOpen(true)}
-              className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-[var(--color-text-secondary)] hover:bg-[var(--sidebar-surface-light)] hover:text-[var(--color-text)] transition-all duration-200 sidebar-nav-item"
+              title={t('nav.settings')}
+              className="w-9 h-9 rounded-lg flex items-center justify-center text-[var(--color-text-secondary)] hover:bg-[var(--sidebar-surface-light)] hover:text-[var(--color-text)] transition-all duration-200"
             >
-              <Settings size={20} strokeWidth={2} />
-              <span>{t('nav.settings')}</span>
+              <Settings size={17} strokeWidth={2} />
             </button>
-          </div>
-        )}
+          )}
+        </div>
 
         {/* Copyright */}
         <div className="px-5 py-3 border-t border-[var(--color-border)]">
@@ -287,14 +269,13 @@ const Sidebar: React.FC = () => {
 
       {/* Mobile bottom tab bar — 6 primary tabs, replaces old top + bottom navs */}
       <nav
-        className="lg:hidden fixed bottom-0 left-0 right-0 z-50 h-14 bg-dark-800/95 border-t border-dark-700 backdrop-blur-md"
+        className="lg:hidden fixed bottom-0 left-0 right-0 z-50 h-14 bg-black/95 border-t border-gray-800 backdrop-blur-md"
         style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
       >
         <div className="flex items-center justify-around h-full px-1">
           {(isAuthenticated ? [
             { id: 'home',       label: t('nav.home'),      icon: Home,          path: '/' },
             { id: 'discover',   label: t('nav.discover'),  icon: RadioReceiver, path: '/discover' },
-            { id: 'storefront', label: 'Store',            icon: ShoppingBag,   path: '/storefront' },
             { id: 'upload',     label: t('nav.upload'),    icon: Upload,        path: '/upload', accent: true },
             { id: 'playlists', label: t('nav.playlists'), icon: ListMusic,     path: '/playlists' },
             { id: 'chat',       label: t('nav.chat'),      icon: MessageCircle, path: '/chat' },
@@ -303,7 +284,6 @@ const Sidebar: React.FC = () => {
             { id: 'home',       label: t('nav.home'),      icon: Home,          path: '/' },
             { id: 'discover',   label: t('nav.discover'),  icon: RadioReceiver, path: '/discover' },
             { id: 'playlists',  label: t('nav.playlists'), icon: ListMusic,     path: '/playlists' },
-            { id: 'storefront', label: 'Store',            icon: ShoppingBag,   path: '/storefront' },
             { id: 'login',      label: t('nav.signIn'),    icon: LogIn,         path: '/login' },
           ]).map((item) => {
             const Icon = item.icon;
@@ -345,7 +325,7 @@ const Sidebar: React.FC = () => {
                     strokeWidth={isActive ? 2.5 : 1.8}
                     className={isActive ? 'text-[var(--sidebar-primary)]' : 'text-white/60'}
                   />
-                  {item.id === 'profile' && user?.subscriptionTier === 'pro' && (
+                  {item.id === 'profile' && user?.subscriptionTier === 'artist' && (
                     <span className="absolute -top-1 -right-2 text-[7px] font-bold bg-yellow-500 text-white px-0.5 rounded leading-tight">PRO</span>
                   )}
                 </div>

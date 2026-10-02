@@ -62,14 +62,16 @@ module.exports = async (req, res) => {
       return res.status(500).json({ error: 'Failed to save subscription. Please try again.' });
     }
 
-    const { error: tierError } = await supabase
+    // The pro_subscriptions upsert above re-derives users.subscription_tier via
+    // its trigger; only the Stripe customer id is stored here.
+    const { error: customerError } = await supabase
       .from('users')
-      .update({ subscription_tier: 'pro', stripe_customer_id: session.customer })
+      .update({ stripe_customer_id: session.customer })
       .eq('id', user.id);
 
-    if (tierError) {
-      console.error('users tier update failed:', tierError);
-      return res.status(500).json({ error: 'Failed to update subscription tier. Please try again.' });
+    if (customerError) {
+      console.error('users stripe_customer_id update failed:', customerError);
+      return res.status(500).json({ error: 'Failed to save subscription. Please try again.' });
     }
 
     res.json({ success: true, plan });

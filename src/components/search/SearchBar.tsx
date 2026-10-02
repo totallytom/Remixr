@@ -48,7 +48,7 @@ const SearchBar: React.FC<SearchBarProps> = ({
   const CurrentIcon = currentOption.icon;
 
   return (
-    <div className="relative flex w-full rounded-full bg-dark-800 border border-dark-600 focus-within:border-lime-400/50 focus-within:ring-1 focus-within:ring-lime-400/30 transition-all">
+    <div className="relative flex w-full rounded-full bg-white border border-dark-600 focus-within:border-lime-400/50 focus-within:ring-1 focus-within:ring-lime-400/30 transition-all">
       {/* Dropdown on the left - no overflow-hidden so menu can show below */}
       <div className="relative flex-shrink-0 rounded-l-full" ref={dropdownRef}>
         <button
@@ -116,7 +116,7 @@ const SearchBar: React.FC<SearchBarProps> = ({
             <button
               type="button"
               onClick={onClear}
-              className="p-1 rounded-full text-dark-400 hover:text-white transition-colors"
+              className="p-1 rounded-full text-dark-400 hover:text-black transition-colors"
               aria-label="Clear search"
             >
               <X size={18} />

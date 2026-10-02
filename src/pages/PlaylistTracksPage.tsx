@@ -1,61 +1,147 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useStore } from '../store/useStore';
-import { 
-  Play, 
-  Pause, 
-  Shuffle, 
-  Download, 
-  UserPlus, 
-  MoreHorizontal,
+import {
+  Play,
+  Pause,
+  Shuffle,
+  UserPlus,
   Clock,
-  List,
-  Heart,
   Plus,
   X,
   Search,
   Check,
-  XCircle,
   Users,
   UserMinus,
-  Mail
+  Mail,
+  ArrowLeft,
+  Lock,
+  Globe,
+  ImagePlus,
+  Music2,
+  Loader2,
+  ListMusic,
 } from 'lucide-react';
-import { createDisplayName, createPlaylistDisplayName, useUUIDMasking } from '../utils/debugUtils';
+import { createDisplayName } from '../utils/debugUtils';
 import { MusicService } from '../services/musicService';
 import { ChatService } from '../services/chatService';
 import { supabase } from '../services/supabase';
 import { getAvatarUrl } from '../utils/avatar';
+import { useAlerts } from '../contexts/AlertContext';
+import { BrutalButton, brutalInput, hardShadow } from '../components/ui/brutal';
+
+const FALLBACK_COVER = 'https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?w=400&h=400&fit=crop';
+
+const formatDuration = (seconds: number) => {
+  const mins = Math.floor(seconds / 60);
+  const secs = Math.floor(seconds % 60);
+  return `${mins}:${secs.toString().padStart(2, '0')}`;
+};
+
+/** "1 hr 12 min" / "23 min" */
+const formatTotal = (seconds: number) => {
+  const h = Math.floor(seconds / 3600);
+  const m = Math.round((seconds % 3600) / 60);
+  return h > 0 ? `${h} hr ${m} min` : `${m} min`;
+};
+
+// ─── Shared shells ───────────────────────────────────────────────────────────
+const PageShell: React.FC<{ children: React.ReactNode }> = ({ children }) => (
+  <div className="min-h-full bg-[#faf6ec] px-4 pt-6 pb-28 sm:px-6 lg:px-8 lg:pb-10">
+    <div className="max-w-5xl mx-auto">{children}</div>
+  </div>
+);
+
+const StateCard: React.FC<{ icon: React.ReactNode; title: string; children?: React.ReactNode }> = ({ icon, title, children }) => (
+  <div className="min-h-full bg-[#faf6ec] px-4 py-16 flex items-center justify-center">
+    <div className="max-w-md w-full bg-white border-2 border-black rounded-2xl p-8 text-center" style={hardShadow(6)}>
+      <span className="w-14 h-14 rounded-2xl border-2 border-black bg-teal-300 flex items-center justify-center mx-auto mb-5">{icon}</span>
+      <h1 className="font-kotra text-3xl text-black mb-2">{title}</h1>
+      {children}
+    </div>
+  </div>
+);
+
+const Sheet: React.FC<{ title: string; onClose: () => void; children: React.ReactNode; footer?: React.ReactNode; wide?: boolean }> = ({
+  title, onClose, children, footer, wide,
+}) => {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+  return (
+    <div className="fixed inset-0 z-50 bg-black/40 flex items-end sm:items-center justify-center sm:p-4" onClick={onClose}>
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label={title}
+        onClick={(e) => e.stopPropagation()}
+        className={`w-full ${wide ? 'sm:max-w-xl' : 'sm:max-w-md'} max-h-[85vh] flex flex-col bg-[#faf6ec] border-2 border-black rounded-t-2xl sm:rounded-2xl`}
+        style={hardShadow(6)}
+      >
+        <div className="flex items-center justify-between gap-3 px-5 pt-5 pb-3 flex-shrink-0">
+          <h2 className="!text-lg !font-bold !m-0 text-black truncate">{title}</h2>
+          <button type="button" onClick={onClose} aria-label="Close" className="w-8 h-8 rounded-lg border-2 border-black bg-white flex items-center justify-center flex-shrink-0">
+            <X size={16} />
+          </button>
+        </div>
+        <div className="flex-1 overflow-y-auto px-5 pb-5">{children}</div>
+        {footer && <div className="px-5 pb-5 flex-shrink-0">{footer}</div>}
+      </div>
+    </div>
+  );
+};
+
+/** Animated "now playing" bars. */
+const NowPlaying: React.FC<{ paused?: boolean }> = ({ paused }) => (
+  <span className="flex items-end gap-[2px] h-3.5" aria-label={paused ? 'Paused' : 'Now playing'}>
+    {[0, 1, 2].map((i) => (
+      <span
+        key={i}
+        className={`w-[3px] bg-teal-600 rounded-sm ${paused ? '' : 'animate-pulse'}`}
+        style={{ height: paused ? 5 : [9, 14, 7][i], animationDelay: `${i * 0.15}s` }}
+      />
+    ))}
+  </span>
+);
 
 const PlaylistTracksPage: React.FC = () => {
   const { playlistId } = useParams<{ playlistId: string }>();
-  const { playlists, player, playTrack, playQueue, addToQueue, user, setPlaylists } = useStore();
+  const { playlists, player, playTrack, playQueue, pauseTrack, resumeTrack, user, setPlaylists } = useStore();
   const navigate = useNavigate();
-  const [isPlaying, setIsPlaying] = useState(false);
+  const { addAlert } = useAlerts();
+
   const [isChangingCover, setIsChangingCover] = useState(false);
   const [showCoverModal, setShowCoverModal] = useState(false);
+  const [coverUrlInput, setCoverUrlInput] = useState('');
   const [isDragOver, setIsDragOver] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [showAddTrackModal, setShowAddTrackModal] = useState(false);
   const [availableTracks, setAvailableTracks] = useState<any[]>([]);
   const [isLoadingTracks, setIsLoadingTracks] = useState(false);
-  
+  const [trackSearch, setTrackSearch] = useState('');
+  const [addingId, setAddingId] = useState<string | null>(null);
+  const [removingId, setRemovingId] = useState<string | null>(null);
+
   // Invitation states
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [inviteSearchQuery, setInviteSearchQuery] = useState('');
   const [inviteSearchResults, setInviteSearchResults] = useState<any[]>([]);
   const [isSearchingUsers, setIsSearchingUsers] = useState(false);
+  const [invitedIds, setInvitedIds] = useState<string[]>([]);
   const [pendingInvitations, setPendingInvitations] = useState<any[]>([]);
   const [hasAccess, setHasAccess] = useState(false);
   const [isCheckingAccess, setIsCheckingAccess] = useState(true);
-  
+
   // Collaborators states
   const [showCollaboratorsSection, setShowCollaboratorsSection] = useState(false);
   const [collaborators, setCollaborators] = useState<any[]>([]);
   const [pendingInvitesSent, setPendingInvitesSent] = useState<any[]>([]);
   const [isLoadingCollaborators, setIsLoadingCollaborators] = useState(false);
 
-  const playlist = playlists.find((p) => p.id === playlistId);
-  const isOwner = user && playlist && user.id === playlist.createdBy;
+  const playlist: any = playlists.find((p: any) => p.id === playlistId);
+  const isOwner = !!(user && playlist && user.id === playlist.createdBy);
 
   // Check playlist access
   useEffect(() => {
@@ -64,7 +150,6 @@ const PlaylistTracksPage: React.FC = () => {
         setIsCheckingAccess(false);
         return;
       }
-      
       setIsCheckingAccess(true);
       try {
         const access = await MusicService.hasPlaylistAccess(playlistId, user.id);
@@ -76,7 +161,6 @@ const PlaylistTracksPage: React.FC = () => {
         setIsCheckingAccess(false);
       }
     };
-
     checkAccess();
   }, [playlistId, user]);
 
@@ -84,55 +168,45 @@ const PlaylistTracksPage: React.FC = () => {
   useEffect(() => {
     const loadInvitations = async () => {
       if (!user || !playlistId) return;
-      
       try {
         const invitations = await MusicService.getPlaylistInvitations(user.id, 'pending');
-        setPendingInvitations(invitations.filter(inv => inv.playlists?.id === playlistId));
+        setPendingInvitations(invitations.filter((inv: any) => inv.playlists?.id === playlistId));
       } catch (error) {
         console.error('Failed to load invitations:', error);
       }
     };
-
     loadInvitations();
   }, [user, playlistId]);
 
+  const refreshCollaborators = async () => {
+    if (!playlistId || !isOwner || !user) return;
+    const [collabs, pending] = await Promise.all([
+      MusicService.getPlaylistCollaborators(playlistId),
+      MusicService.getPlaylistPendingInvitations(playlistId, user.id),
+    ]);
+    setCollaborators(collabs);
+    setPendingInvitesSent(pending);
+  };
+
   // Load collaborators and pending invitations sent (for owner)
   useEffect(() => {
-    const loadCollaborators = async () => {
-      if (!playlistId || !isOwner || !user) return;
-      
-      setIsLoadingCollaborators(true);
-      try {
-        const [collabs, pending] = await Promise.all([
-          MusicService.getPlaylistCollaborators(playlistId),
-          MusicService.getPlaylistPendingInvitations(playlistId, user.id)
-        ]);
-        setCollaborators(collabs);
-        setPendingInvitesSent(pending);
-      } catch (error) {
-        console.error('Failed to load collaborators:', error);
-      } finally {
-        setIsLoadingCollaborators(false);
-      }
-    };
-
-    loadCollaborators();
-  }, [playlistId, isOwner, user]);
+    if (!playlistId || !isOwner || !user) return;
+    setIsLoadingCollaborators(true);
+    refreshCollaborators()
+      .catch((error) => console.error('Failed to load collaborators:', error))
+      .finally(() => setIsLoadingCollaborators(false));
+  }, [playlistId, isOwner, user]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Fetch playlist data if not available in store
   useEffect(() => {
     const fetchPlaylist = async () => {
       if (!playlistId) return;
-      
-      // If playlist is not in store or has no tracks, fetch from database
       if (!playlist || playlist.tracks.length === 0) {
         setIsLoading(true);
         try {
           const fetchedPlaylist = await MusicService.getPlaylistById(playlistId);
-          
-          // Update store with fetched playlist
           if (playlist) {
-            setPlaylists(playlists.map(p => p.id === playlistId ? fetchedPlaylist : p));
+            setPlaylists(playlists.map((p: any) => (p.id === playlistId ? fetchedPlaylist : p)));
           } else {
             setPlaylists([...playlists, fetchedPlaylist]);
           }
@@ -145,7 +219,6 @@ const PlaylistTracksPage: React.FC = () => {
         setIsLoading(false);
       }
     };
-
     fetchPlaylist();
   }, [playlistId, playlist, playlists, setPlaylists]);
 
@@ -156,36 +229,44 @@ const PlaylistTracksPage: React.FC = () => {
       setAvailableTracks(tracks);
     } catch (error) {
       console.error('Failed to load tracks:', error);
+      addAlert('Couldn’t load tracks. Please try again.', 'error');
     } finally {
       setIsLoadingTracks(false);
     }
   };
 
+  const openAddTracks = () => {
+    setTrackSearch('');
+    setShowAddTrackModal(true);
+    loadAvailableTracks();
+  };
+
+  const refreshPlaylist = async (id: string) => {
+    const updatedPlaylist = await MusicService.getPlaylistById(id);
+    setPlaylists(playlists.map((p: any) => (p.id === id ? updatedPlaylist : p)));
+  };
+
   const handleAddTrackToPlaylist = async (track: any) => {
     if (!playlist || !hasAccess) return;
-    
-    // Check for duplicates
-    if (playlist.tracks.find(t => t.id === track.id)) {
-      alert('This track is already in the playlist');
+    if (playlist.tracks.find((t: any) => t.id === track.id)) {
+      addAlert('That track is already in this playlist.', 'info');
       return;
     }
-    
+    setAddingId(track.id);
     try {
       await MusicService.addTrackToPlaylist(playlist.id, track.id);
-      
-      // Refresh playlist
-      const updatedPlaylist = await MusicService.getPlaylistById(playlist.id);
-      setPlaylists(playlists.map(p => p.id === playlist.id ? updatedPlaylist : p));
-      setShowAddTrackModal(false);
+      await refreshPlaylist(playlist.id);
+      addAlert(`Added “${track.title}”`, 'success');
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown error';
       if (message.includes('duplicate key') || message.includes('unique constraint')) {
-        alert('Duplicated tracks!!');
-        setShowAddTrackModal(false);
+        addAlert('That track is already in this playlist.', 'info');
       } else {
         console.error('Failed to add track to playlist:', error);
-        alert(`Failed to add track to playlist: ${message}`);
+        addAlert(`Couldn’t add the track: ${message}`, 'error');
       }
+    } finally {
+      setAddingId(null);
     }
   };
 
@@ -194,7 +275,6 @@ const PlaylistTracksPage: React.FC = () => {
       setInviteSearchResults([]);
       return;
     }
-    
     setIsSearchingUsers(true);
     try {
       const results = await ChatService.searchUsers(query, user.id, 10);
@@ -209,205 +289,92 @@ const PlaylistTracksPage: React.FC = () => {
 
   const handleInviteUser = async (inviteeId: string) => {
     if (!playlist || !user || !playlistId) return;
-    
     try {
       await MusicService.inviteUserToPlaylist(playlistId, user.id, inviteeId);
-      alert('Invitation sent successfully!');
-      setInviteSearchQuery('');
-      setInviteSearchResults([]);
-      
-      // Refresh collaborators list
-      if (isOwner) {
-        const [collabs, pending] = await Promise.all([
-          MusicService.getPlaylistCollaborators(playlistId),
-          MusicService.getPlaylistPendingInvitations(playlistId, user.id)
-        ]);
-        setCollaborators(collabs);
-        setPendingInvitesSent(pending);
-      }
+      setInvitedIds((ids) => [...ids, inviteeId]);
+      addAlert('Invitation sent', 'success');
+      if (isOwner) await refreshCollaborators();
     } catch (error) {
       console.error('Failed to send invitation:', error);
-      alert(`Failed to send invitation: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      addAlert(`Couldn’t send the invitation: ${error instanceof Error ? error.message : 'Unknown error'}`, 'error');
     }
   };
 
   const handleAcceptInvitation = async (invitationId: string) => {
     if (!user) return;
-    
     try {
       await MusicService.acceptPlaylistInvitation(invitationId, user.id);
       setHasAccess(true);
-      setPendingInvitations(prev => prev.filter(inv => inv.id !== invitationId));
-      alert('Invitation accepted! You can now collaborate on this playlist.');
+      setPendingInvitations((prev) => prev.filter((inv) => inv.id !== invitationId));
+      addAlert('Invitation accepted — you can now add tracks to this playlist.', 'success');
     } catch (error) {
       console.error('Failed to accept invitation:', error);
-      alert(`Failed to accept invitation: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      addAlert(`Couldn’t accept the invitation: ${error instanceof Error ? error.message : 'Unknown error'}`, 'error');
     }
   };
 
   const handleDeclineInvitation = async (invitationId: string) => {
     if (!user) return;
-    
     try {
       await MusicService.declinePlaylistInvitation(invitationId, user.id);
-      setPendingInvitations(prev => prev.filter(inv => inv.id !== invitationId));
+      setPendingInvitations((prev) => prev.filter((inv) => inv.id !== invitationId));
     } catch (error) {
       console.error('Failed to decline invitation:', error);
-      alert(`Failed to decline invitation: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      addAlert(`Couldn’t decline the invitation: ${error instanceof Error ? error.message : 'Unknown error'}`, 'error');
     }
   };
 
-  const handleRemoveCollaborator = async (invitationId: string) => {
+  const handleRemoveCollaborator = async (invitationId: string, username: string) => {
     if (!user || !isOwner || !playlistId) return;
-    
-    if (!confirm('Are you sure you want to remove this collaborator? They will lose access to this playlist.')) return;
-    
+    if (!confirm(`Remove ${username}? They will lose access to this playlist.`)) return;
     try {
       await MusicService.removeCollaborator(invitationId, user.id);
-      
-      // Refresh collaborators list
-      const [collabs, pending] = await Promise.all([
-        MusicService.getPlaylistCollaborators(playlistId),
-        MusicService.getPlaylistPendingInvitations(playlistId, user.id)
-      ]);
-      setCollaborators(collabs);
-      setPendingInvitesSent(pending);
-      
-      alert('Collaborator removed successfully');
+      await refreshCollaborators();
+      addAlert(`${username} removed`, 'success');
     } catch (error) {
       console.error('Failed to remove collaborator:', error);
-      alert(`Failed to remove collaborator: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      addAlert(`Couldn’t remove the collaborator: ${error instanceof Error ? error.message : 'Unknown error'}`, 'error');
     }
   };
 
   const handleRemoveTrack = async (trackId: string) => {
     if (!playlist || !hasAccess) return;
-
+    setRemovingId(trackId);
     try {
       await MusicService.removeTrackFromPlaylist(playlist.id, trackId);
-      const updatedPlaylist = await MusicService.getPlaylistById(playlist.id);
-      setPlaylists(playlists.map(p => p.id === playlist.id ? updatedPlaylist : p));
+      await refreshPlaylist(playlist.id);
     } catch (error) {
       console.error('Failed to remove track:', error);
-      alert(`Failed to remove track: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      addAlert(`Couldn’t remove the track: ${error instanceof Error ? error.message : 'Unknown error'}`, 'error');
+    } finally {
+      setRemovingId(null);
     }
   };
 
   const handleCancelInvitation = async (invitationId: string) => {
     if (!user || !isOwner || !playlistId) return;
-    
     try {
       await MusicService.cancelInvitation(invitationId, user.id);
-      
-      // Refresh pending invitations list
       const pending = await MusicService.getPlaylistPendingInvitations(playlistId, user.id);
       setPendingInvitesSent(pending);
-      
-      alert('Invitation cancelled successfully');
+      addAlert('Invitation cancelled', 'success');
     } catch (error) {
       console.error('Failed to cancel invitation:', error);
-      alert(`Failed to cancel invitation: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      addAlert(`Couldn’t cancel the invitation: ${error instanceof Error ? error.message : 'Unknown error'}`, 'error');
     }
-  };
-
-  if ((isLoading || isCheckingAccess) && !playlist) {
-    return (
-      <div className="min-h-screen bg-dark-900 text-white flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-white mx-auto mb-4"></div>
-          <p>Loading playlist...</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (!playlist) {
-    return (
-      <div className="p-8 text-center">
-        <h2 className="text-2xl font-bold mb-4">Playlist Not Found</h2>
-        <button
-          className="px-4 py-2 bg-var(--color-warm) text-black rounded"
-          onClick={() => navigate('/playlists')}
-        >
-          Back to Playlists
-        </button>
-      </div>
-    );
-  }
-
-  if (!hasAccess && !isOwner) {
-    return (
-      <div className="p-8 text-center">
-        <h2 className="text-2xl font-bold mb-4">Access Denied</h2>
-        <p className="text-gray-400 mb-4">You don't have access to this playlist.</p>
-        {pendingInvitations.length > 0 && (
-          <div className="space-y-2">
-            <p className="text-gray-300">You have a pending invitation:</p>
-            {pendingInvitations.map(invitation => (
-              <div key={invitation.id} className="flex items-center justify-center space-x-4">
-                <button
-                  onClick={() => handleAcceptInvitation(invitation.id)}
-                  className="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600"
-                >
-                  Accept
-                </button>
-                <button
-                  onClick={() => handleDeclineInvitation(invitation.id)}
-                  className="px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600"
-                >
-                  Decline
-                </button>
-              </div>
-            ))}
-          </div>
-        )}
-        <button
-          className="px-4 py-2 bg-var(--color-warm) text-black rounded mt-4"
-          onClick={() => navigate('/playlists')}
-        >
-          Back to Playlists
-        </button>
-      </div>
-    );
-  }
-
-  const formatDuration = (seconds: number) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = Math.floor(seconds % 60);
-    return `${mins}:${secs.toString().padStart(2, '0')}`;
-  };
-
-  const formatDate = (date: Date) => {
-    return date.toLocaleDateString('en-US', { 
-      month: 'short', 
-      day: 'numeric', 
-      year: 'numeric' 
-    });
-  };
-
-  const handlePlayPlaylist = () => {
-    if (playlist.tracks.length > 0) {
-      playQueue(playlist.tracks);
-      setIsPlaying(true);
-    }
-  };
-
-  const handlePlayTrack = (track: any) => {
-    playTrack(track);
-    setIsPlaying(true);
   };
 
   const handleChangeCover = async (coverUrl: string) => {
     if (!user || !playlist) return;
-    
     setIsChangingCover(true);
     try {
       await MusicService.updatePlaylist(playlist.id, user.id, { cover: coverUrl });
-      setPlaylists(playlists.map(p => p.id === playlist.id ? { ...p, cover: coverUrl } : p));
+      setPlaylists(playlists.map((p: any) => (p.id === playlist.id ? { ...p, cover: coverUrl } : p)));
       setShowCoverModal(false);
+      setCoverUrlInput('');
     } catch (error) {
       console.error('Failed to update playlist cover:', error);
-      alert('Failed to update playlist cover. Please try again.');
+      addAlert('Couldn’t update the cover. Please try again.', 'error');
     } finally {
       setIsChangingCover(false);
     }
@@ -415,526 +382,535 @@ const PlaylistTracksPage: React.FC = () => {
 
   const handleFileUpload = async (file: File) => {
     if (!user || !playlist) return;
-    
+    if (file.size > 5 * 1024 * 1024) {
+      addAlert('That image is over 5 MB.', 'warning');
+      return;
+    }
     setIsChangingCover(true);
     try {
-      // Upload file to Supabase storage
-      const fileName = `playlist-covers/${playlist.id}-${Date.now()}-${file.name}`;
-      const { data: uploadData, error: uploadError } = await supabase.storage
-        .from('music-files')
-        .upload(fileName, file);
-
+      const fileName = `playlist-covers/${playlist.id}-${Date.now()}-${file.name.replace(/[^a-zA-Z0-9.-]/g, '_')}`;
+      const { error: uploadError } = await supabase.storage.from('music-files').upload(fileName, file);
       if (uploadError) throw new Error(uploadError.message);
-
-      // Get the public URL
-      const { data: urlData } = supabase.storage
-        .from('music-files')
-        .getPublicUrl(fileName);
-
-      const coverUrl = urlData.publicUrl;
-
-      // Update playlist with new cover URL
-      await MusicService.updatePlaylist(playlist.id, user.id, { cover: coverUrl });
-      setPlaylists(playlists.map(p => p.id === playlist.id ? { ...p, cover: coverUrl } : p));
-      setShowCoverModal(false);
+      const { data: urlData } = supabase.storage.from('music-files').getPublicUrl(fileName);
+      await handleChangeCover(urlData.publicUrl);
     } catch (error) {
       console.error('Failed to upload playlist cover:', error);
-      alert('Failed to upload playlist cover. Please try again.');
-    } finally {
+      addAlert('Couldn’t upload the cover. Please try again.', 'error');
       setIsChangingCover(false);
     }
   };
 
-  // Get the playlist cover or fallback to first track cover
-  const playlistCover = playlist.cover || 
-    (playlist.tracks.length > 0 ? playlist.tracks[0].cover : null) ||
-    'https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?w=400&h=400&fit=crop';
+  // ── Derived ──
+  const tracks: any[] = playlist?.tracks ?? [];
+  const totalSeconds = useMemo(() => tracks.reduce((s, t) => s + (Number(t.duration) || 0), 0), [tracks]);
+  const currentId = player.currentTrack?.id;
+  const playlistIsCurrent = !!currentId && tracks.some((t) => t.id === currentId);
+  const filteredAvailable = useMemo(() => {
+    const q = trackSearch.trim().toLowerCase();
+    return availableTracks.filter((t) => !q || t.title?.toLowerCase().includes(q) || t.artist?.toLowerCase().includes(q));
+  }, [availableTracks, trackSearch]);
+
+  // ── States ──
+  if ((isLoading || isCheckingAccess) && !playlist) {
+    return (
+      <div className="min-h-full bg-[#faf6ec] flex items-center justify-center py-28">
+        <Loader2 size={28} className="animate-spin text-black/40" aria-label="Loading playlist" />
+      </div>
+    );
+  }
+
+  if (!playlist) {
+    return (
+      <StateCard icon={<ListMusic size={26} />} title="Playlist not found">
+        <p className="text-sm text-black/60 mb-6">It may have been deleted, or the link is wrong.</p>
+        <BrutalButton className="w-full" onClick={() => navigate('/playlists')}>Back to playlists</BrutalButton>
+      </StateCard>
+    );
+  }
+
+  if (!hasAccess && !isOwner) {
+    return (
+      <StateCard icon={<Lock size={24} />} title="Private playlist">
+        <p className="text-sm text-black/60 mb-6">
+          {pendingInvitations.length > 0
+            ? `You’ve been invited to collaborate on “${playlist.name}”.`
+            : 'You don’t have access to this playlist.'}
+        </p>
+        {pendingInvitations.length > 0 && (
+          <div className="flex gap-3 mb-3">
+            <BrutalButton tone="teal" className="flex-1" onClick={() => handleAcceptInvitation(pendingInvitations[0].id)}>
+              <Check size={16} /> Accept
+            </BrutalButton>
+            <BrutalButton tone="white" className="flex-1" onClick={() => handleDeclineInvitation(pendingInvitations[0].id)}>
+              Decline
+            </BrutalButton>
+          </div>
+        )}
+        <BrutalButton tone={pendingInvitations.length ? 'white' : 'black'} className="w-full" onClick={() => navigate('/playlists')}>
+          Back to playlists
+        </BrutalButton>
+      </StateCard>
+    );
+  }
+
+  const handlePlayPlaylist = () => {
+    if (tracks.length === 0) return;
+    if (playlistIsCurrent) {
+      if (player.isPlaying) pauseTrack();
+      else resumeTrack();
+      return;
+    }
+    playQueue(tracks);
+  };
+
+  const handleShuffle = () => {
+    if (tracks.length === 0) return;
+    const shuffled = [...tracks];
+    for (let i = shuffled.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+    }
+    playQueue(shuffled);
+  };
+
+  const handlePlayTrack = (track: any) => {
+    if (track.id === currentId) {
+      if (player.isPlaying) pauseTrack();
+      else resumeTrack();
+      return;
+    }
+    // Queue the rest of the playlist from this track on.
+    const i = tracks.findIndex((t) => t.id === track.id);
+    if (i >= 0) playQueue([...tracks.slice(i), ...tracks.slice(0, i)]);
+    else playTrack(track);
+  };
+
+  const playlistCover = playlist.cover || tracks[0]?.cover || FALLBACK_COVER;
+  const playingAll = playlistIsCurrent && player.isPlaying;
 
   return (
-    <div className="min-h-screen bg-dark-900">
+    <PageShell>
+      <button
+        type="button"
+        onClick={() => navigate('/playlists')}
+        className="inline-flex items-center gap-1.5 text-sm font-semibold text-black/60 hover:text-black mb-5"
+      >
+        <ArrowLeft size={16} /> Playlists
+      </button>
 
-      {/* ── Hero Header ── */}
-      <div className="relative bg-gradient-to-b from-violet-950/80 via-violet-900/30 to-dark-900">
-        <div className="flex flex-col sm:flex-row sm:items-end gap-5 p-5 sm:p-8 pt-6 sm:pt-10">
+      {/* ── Header ── */}
+      <header className="flex flex-col sm:flex-row gap-6 sm:items-end mb-8">
+        <div className="relative w-48 h-48 sm:w-56 sm:h-56 flex-shrink-0 mx-auto sm:mx-0 rounded-2xl border-2 border-black overflow-hidden bg-white group/cover" style={hardShadow(6)}>
+          <img
+            src={playlistCover}
+            alt=""
+            className="w-full h-full object-cover"
+            onError={(e) => { (e.target as HTMLImageElement).src = FALLBACK_COVER; }}
+          />
+          {isOwner && (
+            <button
+              type="button"
+              onClick={() => setShowCoverModal(true)}
+              className="absolute inset-x-2 bottom-2 inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg border-2 border-black bg-white text-xs font-bold text-black shadow-[2px_2px_0_0_#000]
+                sm:opacity-0 sm:group-hover/cover:opacity-100 focus:opacity-100 transition-opacity"
+            >
+              <ImagePlus size={14} /> Change cover
+            </button>
+          )}
+        </div>
 
-          {/* Cover Art */}
-          <div className="relative w-44 h-44 sm:w-52 sm:h-52 rounded-xl overflow-hidden flex-shrink-0 mx-auto sm:mx-0 shadow-2xl bg-dark-700 group/cover">
-            <img
-              src={playlistCover}
-              alt="Playlist Cover"
-              className="w-full h-full object-cover"
-              onError={(e) => {
-                const target = e.target as HTMLImageElement;
-                target.style.display = 'none';
-                const parent = target.parentElement;
-                if (parent && !parent.querySelector('.fallback-cover-playlist-page')) {
-                  const fallback = document.createElement('div');
-                  fallback.className = 'fallback-cover-playlist-page w-full h-full flex items-center justify-center bg-dark-600 text-5xl';
-                  fallback.textContent = '🎵';
-                  parent.appendChild(fallback);
-                }
-              }}
-              onLoad={(e) => {
-                const target = e.target as HTMLImageElement;
-                const fallback = target.parentElement?.querySelector('.fallback-cover-playlist-page');
-                if (fallback) fallback.remove();
-              }}
-            />
-            {user && playlist && user.id === playlist.createdBy && (
-              <button
-                onClick={() => setShowCoverModal(true)}
-                className="absolute inset-0 bg-black/60 opacity-0 group-hover/cover:opacity-100 transition-opacity flex flex-col items-center justify-center gap-1 text-white"
-              >
-                <Plus size={22} />
-                <span className="text-xs font-medium">Change cover</span>
-              </button>
+        <div className="flex-1 min-w-0 text-center sm:text-left">
+          <p className="text-xs font-bold uppercase tracking-widest text-black/60 mb-1">Playlist</p>
+          <h1 className="font-kotra text-4xl sm:text-5xl text-black leading-none break-words">{playlist.name}</h1>
+          {playlist.description && (
+            <p className="text-sm text-black/70 mt-2 line-clamp-2">{playlist.description}</p>
+          )}
+
+          <div className="flex flex-wrap items-center justify-center sm:justify-start gap-x-3 gap-y-2 mt-3 text-sm text-black/70">
+            <span className="font-semibold text-black">{tracks.length} {tracks.length === 1 ? 'track' : 'tracks'}</span>
+            {totalSeconds > 0 && <span>· {formatTotal(totalSeconds)}</span>}
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md border-2 border-black bg-white text-xs font-bold">
+              {playlist.isPublic ? <><Globe size={12} /> Public</> : <><Lock size={12} /> Private</>}
+            </span>
+            {collaborators.length > 0 && (
+              <span className="inline-flex items-center gap-1.5">
+                <span className="flex -space-x-2">
+                  {collaborators.slice(0, 4).map((c) => (
+                    <img key={c.id} src={getAvatarUrl(c.avatar)} alt={c.username} title={c.username} className="w-6 h-6 rounded-full border-2 border-black object-cover bg-white" />
+                  ))}
+                </span>
+                {collaborators.length} collaborator{collaborators.length === 1 ? '' : 's'}
+              </span>
             )}
           </div>
 
-          {/* Playlist Info + Actions */}
-          <div className="flex-1 text-center sm:text-left min-w-0">
-            <p className="text-xs uppercase tracking-widest text-violet-400 font-semibold mb-1">Playlist</p>
-            <h1 className="text-3xl sm:text-5xl font-bold text-white leading-tight break-words mb-2">
-              {playlist.name}
-            </h1>
-            <div className="flex items-center justify-center sm:justify-start gap-2 text-sm text-gray-400 mb-5 flex-wrap">
-              <span>{playlist.tracks.length} {playlist.tracks.length === 1 ? 'track' : 'tracks'}</span>
-              {!playlist.isPublic && (
-                <span className="px-2 py-0.5 bg-violet-600/30 text-violet-300 rounded-full text-xs border border-violet-600/40">
-                  Private
-                </span>
-              )}
-            </div>
-
-            {/* Action Buttons */}
-            <div className="flex items-center justify-center sm:justify-start flex-wrap gap-2">
-              <button
-                onClick={handlePlayPlaylist}
-                disabled={playlist.tracks.length === 0}
-                className="flex items-center gap-2 px-5 py-2.5 bg-violet-600 hover:bg-violet-500 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-full font-semibold text-sm transition-colors"
-              >
-                <Play size={16} fill="currentColor" />
-                Play
-              </button>
-              {hasAccess && (
-                <button
-                  onClick={() => { setShowAddTrackModal(true); loadAvailableTracks(); }}
-                  className="flex items-center gap-2 px-4 py-2.5 bg-dark-700/80 hover:bg-dark-600 text-white rounded-full text-sm transition-colors border border-dark-500/60"
+          {/* Actions */}
+          <div className="flex flex-wrap items-center justify-center sm:justify-start gap-3 mt-5">
+            <button
+              type="button"
+              onClick={handlePlayPlaylist}
+              disabled={tracks.length === 0}
+              aria-label={playingAll ? 'Pause playlist' : 'Play playlist'}
+              className="w-14 h-14 rounded-full border-2 border-black bg-black text-white flex items-center justify-center shadow-[3px_3px_0_0_#0d9488] active:translate-x-[3px] active:translate-y-[3px] active:shadow-none transition-all disabled:opacity-40"
+            >
+              {playingAll ? <Pause size={24} fill="currentColor" /> : <Play size={24} fill="currentColor" className="ml-1" />}
+            </button>
+            <BrutalButton size="sm" tone="white" onClick={handleShuffle} disabled={tracks.length < 2} aria-label="Shuffle play">
+              <Shuffle size={14} /> Shuffle
+            </BrutalButton>
+            {hasAccess && (
+              <BrutalButton size="sm" tone="teal" onClick={openAddTracks}>
+                <Plus size={14} /> Add tracks
+              </BrutalButton>
+            )}
+            {isOwner && (
+              <>
+                <BrutalButton size="sm" tone="white" onClick={() => { setInvitedIds([]); setShowInviteModal(true); }}>
+                  <UserPlus size={14} /> Invite
+                </BrutalButton>
+                <BrutalButton
+                  size="sm"
+                  tone={showCollaboratorsSection ? 'black' : 'white'}
+                  onClick={() => setShowCollaboratorsSection((v) => !v)}
+                  aria-expanded={showCollaboratorsSection}
                 >
-                  <Plus size={15} />
-                  Add tracks
-                </button>
-              )}
-              {isOwner && (
-                <>
-                  <button
-                    onClick={() => setShowInviteModal(true)}
-                    className="flex items-center gap-2 px-4 py-2.5 bg-dark-700/80 hover:bg-dark-600 text-white rounded-full text-sm transition-colors border border-dark-500/60"
-                  >
-                    <UserPlus size={15} />
-                    Invite
-                  </button>
-                  <button
-                    onClick={() => setShowCollaboratorsSection(!showCollaboratorsSection)}
-                    className={`flex items-center gap-2 px-4 py-2.5 rounded-full text-sm transition-colors border ${
-                      showCollaboratorsSection
-                        ? 'bg-violet-600/30 border-violet-500/50 text-violet-300'
-                        : 'bg-dark-700/80 hover:bg-dark-600 text-white border-dark-500/60'
-                    }`}
-                  >
-                    <Users size={15} />
-                    {collaborators.length > 0
-                      ? `${collaborators.length} collaborator${collaborators.length !== 1 ? 's' : ''}`
-                      : 'Collaborators'}
-                  </button>
-                </>
-              )}
-            </div>
+                  <Users size={14} /> Collaborators{pendingInvitesSent.length > 0 ? ` · ${pendingInvitesSent.length} pending` : ''}
+                </BrutalButton>
+              </>
+            )}
           </div>
         </div>
-      </div>
+      </header>
 
-      {/* ── Pending Invitation Banner ── */}
+      {/* ── Pending invitation (has access via another route but invite still open) ── */}
       {pendingInvitations.length > 0 && !hasAccess && (
-        <div className="mx-4 sm:mx-8 mb-2 mt-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 px-4 py-3 bg-blue-900/40 border border-blue-700/50 rounded-xl">
-          <p className="text-sm text-white font-medium">You have a pending invitation to collaborate on this playlist.</p>
-          <div className="flex items-center gap-2 flex-shrink-0">
-            <button
-              onClick={() => handleAcceptInvitation(pendingInvitations[0].id)}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-green-500 hover:bg-green-400 text-white rounded-lg text-sm transition-colors"
-            >
-              <Check size={14} /> Accept
-            </button>
-            <button
-              onClick={() => handleDeclineInvitation(pendingInvitations[0].id)}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-dark-700 hover:bg-dark-600 text-gray-300 rounded-lg text-sm transition-colors"
-            >
-              <XCircle size={14} /> Decline
-            </button>
+        <div className="mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-4 py-3 rounded-xl border-2 border-black bg-yellow-200">
+          <p className="text-sm font-semibold text-black flex items-center gap-2"><Mail size={16} /> You’re invited to collaborate on this playlist.</p>
+          <div className="flex gap-2">
+            <BrutalButton size="sm" tone="black" onClick={() => handleAcceptInvitation(pendingInvitations[0].id)}><Check size={14} /> Accept</BrutalButton>
+            <BrutalButton size="sm" tone="white" onClick={() => handleDeclineInvitation(pendingInvitations[0].id)}>Decline</BrutalButton>
           </div>
         </div>
       )}
 
-      {/* ── Collaborators Panel ── */}
+      {/* ── Collaborators ── */}
       {isOwner && showCollaboratorsSection && (
-        <div className="mx-4 sm:mx-8 mb-4 mt-2 bg-dark-800/60 border border-dark-700/60 rounded-xl overflow-hidden">
-          <div className="px-5 py-4 border-b border-dark-700/60">
-            <p className="text-sm font-semibold text-black flex items-center gap-2">
-              <Users size={16} className="text-violet-400" />
-              Collaborators
-            </p>
-          </div>
-
+        <section className="mb-8 bg-white border-2 border-black rounded-2xl p-5" style={hardShadow(4)}>
+          <h2 className="!text-base !font-bold !m-0 !mb-4 text-black flex items-center gap-2"><Users size={16} /> Collaborators</h2>
           {isLoadingCollaborators ? (
-            <div className="flex items-center justify-center py-8 gap-3 text-gray-400 text-sm">
-              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-violet-400" />
-              Loading…
-            </div>
+            <div className="flex justify-center py-6"><Loader2 className="animate-spin text-black/40" /></div>
           ) : (
-            <div className="p-4 space-y-4">
-              {/* Active */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
-                <p className="text-xs uppercase tracking-widest text-gray-500 font-medium mb-2 flex items-center gap-1.5">
-                  <Check size={12} className="text-green-400" />
-                  Active · {collaborators.length}
-                </p>
+                <p className="text-xs font-bold uppercase tracking-wide text-black/60 mb-2">Active · {collaborators.length}</p>
                 {collaborators.length === 0 ? (
-                  <p className="text-gray-500 text-sm py-2">No active collaborators yet.</p>
+                  <p className="text-sm text-black/60">
+                    No collaborators yet.{' '}
+                    <button type="button" className="underline font-semibold text-black" onClick={() => { setInvitedIds([]); setShowInviteModal(true); }}>Invite someone</button>
+                  </p>
                 ) : (
-                  <div className="space-y-1.5">
+                  <ul className="space-y-2">
                     {collaborators.map((c) => (
-                      <div key={c.id} className="flex items-center justify-between gap-3 px-3 py-2.5 bg-dark-700/50 hover:bg-dark-700 rounded-lg transition-colors">
-                        <div className="flex items-center gap-3 min-w-0">
-                          <img src={getAvatarUrl(c.avatar)} alt={c.username} className="w-8 h-8 rounded-full object-cover flex-shrink-0" />
-                          <span className="text-white text-sm font-medium truncate">{c.username}</span>
-                        </div>
+                      <li key={c.id} className="flex items-center gap-3 p-2 rounded-xl border-2 border-black/15">
+                        <img src={getAvatarUrl(c.avatar)} alt="" className="w-8 h-8 rounded-full border-2 border-black object-cover" />
+                        <span className="flex-1 min-w-0 text-sm font-semibold text-black truncate">{c.username}</span>
                         <button
-                          onClick={() => handleRemoveCollaborator(c.invitationId)}
-                          className="flex items-center gap-1.5 px-3 py-1.5 bg-red-500/20 hover:bg-red-500/30 text-red-400 rounded-lg text-xs transition-colors flex-shrink-0"
+                          type="button"
+                          onClick={() => handleRemoveCollaborator(c.invitationId, c.username)}
+                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border-2 border-black bg-white text-xs font-bold text-red-700 hover:bg-red-50"
                         >
                           <UserMinus size={12} /> Remove
                         </button>
-                      </div>
+                      </li>
                     ))}
-                  </div>
+                  </ul>
                 )}
               </div>
-
-              {/* Pending */}
-              {pendingInvitesSent.length > 0 && (
-                <div>
-                  <p className="text-xs uppercase tracking-widest text-gray-500 font-medium mb-2 flex items-center gap-1.5">
-                    <Mail size={12} className="text-yellow-400" />
-                    Pending · {pendingInvitesSent.length}
-                  </p>
-                  <div className="space-y-1.5">
+              <div>
+                <p className="text-xs font-bold uppercase tracking-wide text-black/60 mb-2">Pending · {pendingInvitesSent.length}</p>
+                {pendingInvitesSent.length === 0 ? (
+                  <p className="text-sm text-black/60">No open invitations.</p>
+                ) : (
+                  <ul className="space-y-2">
                     {pendingInvitesSent.map((inv) => (
-                      <div key={inv.invitationId} className="flex items-center justify-between gap-3 px-3 py-2.5 bg-dark-700/50 hover:bg-dark-700 rounded-lg transition-colors">
-                        <div className="flex items-center gap-3 min-w-0">
-                          <img src={getAvatarUrl(inv.avatar)} alt={inv.username} className="w-8 h-8 rounded-full object-cover flex-shrink-0" />
-                          <div className="min-w-0">
-                            <p className="text-white text-sm font-medium truncate">{inv.username}</p>
-                            <p className="text-gray-500 text-xs">Invited {new Date(inv.createdAt).toLocaleDateString()}</p>
-                          </div>
+                      <li key={inv.invitationId} className="flex items-center gap-3 p-2 rounded-xl border-2 border-dashed border-black/30">
+                        <img src={getAvatarUrl(inv.avatar)} alt="" className="w-8 h-8 rounded-full border-2 border-black object-cover" />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-semibold text-black truncate">{inv.username}</p>
+                          <p className="text-[11px] text-black/50">Invited {new Date(inv.createdAt).toLocaleDateString()}</p>
                         </div>
                         <button
+                          type="button"
                           onClick={() => handleCancelInvitation(inv.invitationId)}
-                          className="flex items-center gap-1.5 px-3 py-1.5 bg-dark-600 hover:bg-dark-500 text-gray-400 rounded-lg text-xs transition-colors flex-shrink-0"
+                          className="px-2.5 py-1 rounded-lg border-2 border-black bg-white text-xs font-bold text-black hover:bg-black/5"
                         >
-                          <X size={12} /> Cancel
+                          Cancel
                         </button>
-                      </div>
+                      </li>
                     ))}
-                  </div>
-                </div>
-              )}
+                  </ul>
+                )}
+              </div>
             </div>
           )}
-        </div>
+        </section>
       )}
 
-      {/* ── Track List ── */}
-      <div className="px-4 sm:px-8 pb-24">
-        {/* Desktop column header */}
-        <div className="hidden md:grid grid-cols-[40px_1fr_180px_120px_56px_40px] gap-4 px-3 py-2 mb-1 border-b border-dark-700/50">
-          <div className="text-xs uppercase tracking-widest text-gray-600 text-center">#</div>
-          <div className="text-xs uppercase tracking-widest text-gray-600">Title</div>
-          <div className="text-xs uppercase tracking-widest text-gray-600">Album</div>
-          <div className="text-xs uppercase tracking-widest text-gray-600">Date added</div>
-          <div className="flex justify-end"><Clock size={13} className="text-gray-600" /></div>
-          <div />
-        </div>
+      {/* ── Tracks ── */}
+      {tracks.length === 0 ? (
+        <section className="bg-white border-2 border-black rounded-2xl px-6 py-14 text-center" style={hardShadow(4)}>
+          <Music2 size={32} className="mx-auto mb-3 text-black/30" />
+          <p className="font-bold text-black">This playlist is empty</p>
+          <p className="text-sm text-black/60 mt-1 mb-5">
+            {hasAccess ? 'Add some tracks to get it going.' : 'The owner hasn’t added any tracks yet.'}
+          </p>
+          {hasAccess && <BrutalButton tone="teal" onClick={openAddTracks}><Plus size={16} /> Add tracks</BrutalButton>}
+        </section>
+      ) : (
+        <section className="bg-white border-2 border-black rounded-2xl overflow-hidden" style={hardShadow(4)} aria-label="Tracks">
+          <div className="hidden md:grid grid-cols-[48px_minmax(0,1fr)_minmax(0,220px)_64px_44px] gap-4 px-4 py-2.5 border-b-2 border-black bg-black/[0.03] text-xs font-bold uppercase tracking-wide text-black/60">
+            <span className="text-center">#</span>
+            <span>Title</span>
+            <span>Album</span>
+            <span className="flex justify-end"><Clock size={14} aria-label="Duration" /></span>
+            <span />
+          </div>
+          <ol>
+            {tracks.map((track: any, index: number) => {
+              const isCurrent = track.id === currentId;
+              const isPlayingNow = isCurrent && player.isPlaying;
+              return (
+                <li
+                  key={createDisplayName(track.id)}
+                  className={`group grid grid-cols-[40px_minmax(0,1fr)_auto_auto] md:grid-cols-[48px_minmax(0,1fr)_minmax(0,220px)_64px_44px] items-center gap-3 md:gap-4 px-3 md:px-4 py-2.5 border-b border-black/10 last:border-b-0 transition-colors
+                    ${isCurrent ? 'bg-teal-50' : 'hover:bg-black/[0.03]'}`}
+                >
+                  <button
+                    type="button"
+                    onClick={() => handlePlayTrack(track)}
+                    aria-label={isPlayingNow ? `Pause ${track.title}` : `Play ${track.title}`}
+                    className="w-8 h-8 mx-auto rounded-full flex items-center justify-center text-sm tabular-nums text-black/50 hover:bg-black hover:text-white focus-visible:bg-black focus-visible:text-white"
+                  >
+                    {isCurrent ? (
+                      <>
+                        <span className="group-hover:hidden"><NowPlaying paused={!player.isPlaying} /></span>
+                        <span className="hidden group-hover:block">{player.isPlaying ? <Pause size={14} fill="currentColor" /> : <Play size={14} fill="currentColor" />}</span>
+                      </>
+                    ) : (
+                      <>
+                        <span className="group-hover:hidden">{index + 1}</span>
+                        <Play size={14} fill="currentColor" className="hidden group-hover:block ml-0.5" />
+                      </>
+                    )}
+                  </button>
 
-        {playlist.tracks.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-20 gap-4">
-            <div className="w-16 h-16 bg-dark-800 rounded-full flex items-center justify-center text-3xl">🎵</div>
-            <p className="text-gray-400 text-sm">No tracks yet</p>
-            {hasAccess && (
-              <button
-                onClick={() => { setShowAddTrackModal(true); loadAvailableTracks(); }}
-                className="flex items-center gap-2 px-4 py-2 bg-violet-600 hover:bg-violet-500 text-white rounded-full text-sm transition-colors"
-              >
-                <Plus size={15} /> Add your first track
-              </button>
+                  <button type="button" onClick={() => handlePlayTrack(track)} className="flex items-center gap-3 min-w-0 text-left">
+                    <img
+                      src={track.cover || FALLBACK_COVER}
+                      alt=""
+                      className="w-11 h-11 rounded-lg border-2 border-black object-cover flex-shrink-0 bg-black/5"
+                      onError={(e) => { (e.target as HTMLImageElement).src = FALLBACK_COVER; }}
+                    />
+                    <span className="min-w-0">
+                      <span className={`block text-sm font-bold truncate ${isCurrent ? 'text-teal-800' : 'text-black'}`}>{track.title}</span>
+                      <span className="block text-xs text-black/60 truncate">{track.artist}</span>
+                    </span>
+                  </button>
+
+                  <span className="hidden md:block text-sm text-black/60 truncate">{track.album || '—'}</span>
+
+                  <span className="text-sm text-black/60 tabular-nums text-right">{formatDuration(track.duration)}</span>
+
+                  {hasAccess ? (
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveTrack(track.id)}
+                      disabled={removingId === track.id}
+                      aria-label={`Remove ${track.title} from playlist`}
+                      title="Remove from playlist"
+                      className="w-8 h-8 rounded-lg flex items-center justify-center text-black/40 hover:text-red-700 hover:bg-red-50 md:opacity-0 md:group-hover:opacity-100 focus:opacity-100 transition-opacity disabled:opacity-100"
+                    >
+                      {removingId === track.id ? <Loader2 size={14} className="animate-spin" /> : <X size={16} />}
+                    </button>
+                  ) : (
+                    <span className="hidden md:block" />
+                  )}
+                </li>
+              );
+            })}
+          </ol>
+        </section>
+      )}
+
+      {/* ── Add tracks ── */}
+      {showAddTrackModal && (
+        <Sheet
+          title={`Add to “${playlist.name}”`}
+          onClose={() => setShowAddTrackModal(false)}
+          wide
+          footer={<BrutalButton className="w-full" onClick={() => setShowAddTrackModal(false)}>Done</BrutalButton>}
+        >
+          <div className="relative mb-3">
+            <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-black/40" />
+            <input
+              autoFocus
+              value={trackSearch}
+              onChange={(e) => setTrackSearch(e.target.value)}
+              placeholder="Search by title or artist"
+              className={`${brutalInput} pl-10`}
+            />
+          </div>
+          {isLoadingTracks ? (
+            <div className="flex justify-center py-12"><Loader2 className="animate-spin text-black/40" /></div>
+          ) : filteredAvailable.length === 0 ? (
+            <p className="text-center text-sm text-black/60 py-12">{trackSearch ? `No tracks match “${trackSearch}”.` : 'No tracks available.'}</p>
+          ) : (
+            <ul className="space-y-2">
+              {filteredAvailable.map((track) => {
+                const added = tracks.some((t) => t.id === track.id);
+                return (
+                  <li key={track.id} className="flex items-center gap-3 p-2 bg-white border-2 border-black rounded-xl">
+                    <img src={track.cover || FALLBACK_COVER} alt="" className="w-10 h-10 rounded-lg border-2 border-black object-cover flex-shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-bold text-black truncate">{track.title}</p>
+                      <p className="text-xs text-black/60 truncate">{track.artist} · {formatDuration(track.duration)}</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleAddTrackToPlaylist(track)}
+                      disabled={added || addingId === track.id}
+                      className="flex-shrink-0 inline-flex items-center gap-1 px-3 py-1.5 rounded-lg border-2 border-black text-xs font-bold bg-teal-300 shadow-[2px_2px_0_0_#000] active:shadow-none active:translate-x-[2px] active:translate-y-[2px] disabled:bg-white disabled:shadow-none disabled:opacity-60"
+                    >
+                      {addingId === track.id ? <Loader2 size={13} className="animate-spin" /> : added ? <><Check size={13} /> Added</> : <><Plus size={13} /> Add</>}
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </Sheet>
+      )}
+
+      {/* ── Cover ── */}
+      {showCoverModal && (
+        <Sheet title="Change cover" onClose={() => setShowCoverModal(false)}>
+          <div className="space-y-5">
+            <label
+              className={`flex flex-col items-center gap-2 p-6 rounded-xl border-2 border-dashed text-center cursor-pointer transition-colors
+                ${isDragOver ? 'border-black bg-teal-100' : 'border-black/40 bg-white hover:border-black'}`}
+              onDragOver={(e) => { e.preventDefault(); setIsDragOver(true); }}
+              onDragLeave={(e) => { e.preventDefault(); setIsDragOver(false); }}
+              onDrop={(e) => {
+                e.preventDefault();
+                setIsDragOver(false);
+                const file = e.dataTransfer.files[0];
+                if (file?.type.startsWith('image/')) handleFileUpload(file);
+              }}
+            >
+              <input
+                type="file"
+                accept="image/*"
+                className="sr-only"
+                disabled={isChangingCover}
+                onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFileUpload(f); }}
+              />
+              <span className="w-10 h-10 rounded-full border-2 border-black bg-teal-300 flex items-center justify-center">
+                {isChangingCover ? <Loader2 size={18} className="animate-spin" /> : <ImagePlus size={18} />}
+              </span>
+              <span className="text-sm font-bold text-black">{isChangingCover ? 'Uploading…' : isDragOver ? 'Drop it here' : 'Upload an image'}</span>
+              <span className="text-xs text-black/60">Click or drag · PNG or JPG, up to 5 MB</span>
+            </label>
+
+            <div>
+              <p className="text-xs font-bold uppercase tracking-wide text-black/60 mb-2">Or paste an image URL</p>
+              <div className="flex gap-2">
+                <input
+                  type="url"
+                  value={coverUrlInput}
+                  onChange={(e) => setCoverUrlInput(e.target.value)}
+                  placeholder="https://example.com/image.jpg"
+                  className="flex-1 min-w-0 px-3 py-2 bg-white border-2 border-black rounded-lg text-sm focus:outline-none focus:shadow-[2px_2px_0_0_#000]"
+                />
+                <BrutalButton size="sm" onClick={() => coverUrlInput.trim() && handleChangeCover(coverUrlInput.trim())} disabled={isChangingCover || !coverUrlInput.trim()}>
+                  Apply
+                </BrutalButton>
+              </div>
+            </div>
+
+            {tracks.length > 0 && (
+              <div>
+                <p className="text-xs font-bold uppercase tracking-wide text-black/60 mb-2">Or use a track cover</p>
+                <div className="grid grid-cols-5 gap-2">
+                  {tracks.slice(0, 10).map((track: any) => (
+                    <button
+                      key={track.id}
+                      type="button"
+                      onClick={() => handleChangeCover(track.cover)}
+                      disabled={isChangingCover}
+                      title={track.title}
+                      className={`aspect-square rounded-lg border-2 overflow-hidden transition-transform hover:-translate-y-0.5 disabled:opacity-50 ${playlist.cover === track.cover ? 'border-black shadow-[2px_2px_0_0_#000]' : 'border-black/30'}`}
+                    >
+                      <img src={track.cover} alt={`Cover of ${track.title}`} className="w-full h-full object-cover" />
+                    </button>
+                  ))}
+                </div>
+              </div>
             )}
           </div>
-        ) : (
-          <div>
-            {playlist.tracks.map((track, index) => (
-              <div
-                key={createDisplayName(track.id)}
-                onClick={() => handlePlayTrack(track)}
-                className="group flex md:grid md:grid-cols-[40px_1fr_180px_120px_56px_40px] items-center gap-3 md:gap-4 px-3 py-2.5 rounded-lg cursor-pointer transition-colors hover:bg-white/5 mb-0.5"
-              >
-                {/* Index / play icon */}
-                <div className="w-8 flex-shrink-0 flex items-center justify-center">
-                  <span className="text-gray-500 text-sm group-hover:hidden select-none">{index + 1}</span>
-                  <Play size={14} className="hidden group-hover:block text-white" fill="currentColor" />
-                </div>
-
-                {/* Cover + title/artist */}
-                <div className="flex items-center gap-3 flex-1 min-w-0">
-                  <img
-                    src={track.cover}
-                    alt={track.title}
-                    className="w-10 h-10 rounded-md object-cover flex-shrink-0 bg-dark-700"
-                  />
-                  <div className="min-w-0">
-                    <p className="text-white text-sm font-medium truncate leading-snug">{track.title}</p>
-                    <p className="text-gray-500 text-xs truncate">{track.artist}</p>
-                  </div>
-                </div>
-
-                {/* Album — desktop */}
-                <div className="hidden md:block text-gray-500 text-sm truncate">{track.album}</div>
-
-                {/* Date — desktop */}
-                <div className="hidden md:block text-gray-500 text-sm">{formatDate(new Date())}</div>
-
-                {/* Duration */}
-                <div className="flex-shrink-0 text-gray-500 text-sm md:text-right tabular-nums">
-                  {formatDuration(track.duration)}
-                </div>
-
-                {/* Remove button */}
-                {hasAccess && (
-                  <div className="flex justify-end flex-shrink-0">
-                    <button
-                      onClick={(e) => { e.stopPropagation(); handleRemoveTrack(track.id); }}
-                      className="opacity-0 group-hover:opacity-100 p-1.5 text-gray-500 hover:text-red-400 hover:bg-red-400/10 rounded-lg transition-all"
-                      title="Remove from playlist"
-                    >
-                      <X size={14} />
-                    </button>
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-
-      {/* ── Add Track Modal ── */}
-      {showAddTrackModal && (
-        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-end sm:items-center justify-center z-50 p-0 sm:p-4">
-          <div className="bg-dark-800 border border-dark-700/60 rounded-t-2xl sm:rounded-2xl w-full sm:max-w-xl max-h-[85vh] flex flex-col shadow-2xl">
-            <div className="flex items-center justify-between px-5 py-4 border-b border-dark-700/60 flex-shrink-0">
-              <p className="text-base font-semibold text-black">Add to "{playlist?.name}"</p>
-              <button onClick={() => setShowAddTrackModal(false)} className="p-1.5 text-gray-500 hover:text-white transition-colors rounded-lg hover:bg-dark-700">
-                <X size={18} />
-              </button>
-            </div>
-            <div className="flex-1 overflow-y-auto px-3 py-3">
-              {isLoadingTracks ? (
-                <div className="flex items-center justify-center py-12 gap-3 text-gray-400 text-sm">
-                  <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-violet-400" />
-                  Loading tracks…
-                </div>
-              ) : (
-                <>
-                  {availableTracks.filter(t => !playlist?.tracks.find(pt => pt.id === t.id)).length === 0 ? (
-                    <p className="text-center text-gray-500 text-sm py-12">No tracks available to add.</p>
-                  ) : (
-                    <div className="space-y-1">
-                      {availableTracks
-                        .filter(t => !playlist?.tracks.find(pt => pt.id === t.id))
-                        .map((track) => (
-                          <div key={track.id} className="flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-dark-700/60 transition-colors group/row">
-                            <img src={track.cover} alt={track.title} className="w-10 h-10 rounded-md object-cover flex-shrink-0 bg-dark-700" />
-                            <div className="flex-1 min-w-0">
-                              <p className="text-white text-sm font-medium truncate">{track.title}</p>
-                              <p className="text-gray-500 text-xs truncate">{track.artist}</p>
-                            </div>
-                            <span className="text-gray-600 text-xs tabular-nums mr-1">{formatDuration(track.duration)}</span>
-                            <button
-                              onClick={() => handleAddTrackToPlaylist(track)}
-                              className="p-1.5 bg-violet-600 hover:bg-violet-500 text-white rounded-full transition-colors flex-shrink-0"
-                            >
-                              <Plus size={14} />
-                            </button>
-                          </div>
-                        ))}
-                    </div>
-                  )}
-                </>
-              )}
-            </div>
-            <div className="px-5 py-4 border-t border-dark-700/60 flex-shrink-0">
-              <button onClick={() => setShowAddTrackModal(false)} className="w-full py-2.5 bg-dark-700 hover:bg-dark-600 text-white rounded-xl text-sm transition-colors">
-                Done
-              </button>
-            </div>
-          </div>
-        </div>
+        </Sheet>
       )}
 
-      {/* ── Cover Change Modal ── */}
-      {showCoverModal && (
-        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-end sm:items-center justify-center z-50 p-0 sm:p-4">
-          <div className="bg-dark-800 border border-dark-700/60 rounded-t-2xl sm:rounded-2xl w-full sm:max-w-md shadow-2xl">
-            <div className="flex items-center justify-between px-5 py-4 border-b border-dark-700/60">
-              <h2 className="text-base font-semibold text-white">Change cover</h2>
-              <button onClick={() => setShowCoverModal(false)} className="p-1.5 text-gray-500 hover:text-white transition-colors rounded-lg hover:bg-dark-700">
-                <X size={18} />
-              </button>
-            </div>
-            <div className="p-5 space-y-5">
-              {/* Upload */}
-              <div>
-                <p className="text-xs font-medium text-gray-400 mb-2">Upload image</p>
-                <div
-                  className={`border-2 border-dashed rounded-xl p-6 text-center transition-colors cursor-pointer ${
-                    isDragOver ? 'border-violet-500 bg-violet-500/10' : 'border-dark-600 hover:border-violet-600/60'
-                  }`}
-                  onDragOver={(e) => { e.preventDefault(); setIsDragOver(true); }}
-                  onDragLeave={(e) => { e.preventDefault(); setIsDragOver(false); }}
-                  onDrop={(e) => {
-                    e.preventDefault(); setIsDragOver(false);
-                    const file = e.dataTransfer.files[0];
-                    if (file?.type.startsWith('image/')) handleFileUpload(file);
-                  }}
-                >
-                  <input type="file" accept="image/*" id="coverFile" className="hidden" disabled={isChangingCover}
-                    onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFileUpload(f); }}
-                  />
-                  <label htmlFor="coverFile" className="cursor-pointer flex flex-col items-center gap-2">
-                    <div className="w-10 h-10 bg-dark-700 rounded-full flex items-center justify-center">
-                      <Plus size={20} className="text-gray-400" />
-                    </div>
-                    <p className="text-sm text-gray-300">
-                      {isChangingCover ? 'Uploading…' : isDragOver ? 'Drop here' : 'Click or drag image'}
-                    </p>
-                    <p className="text-xs text-gray-600">PNG, JPG up to 5MB</p>
-                  </label>
-                </div>
-              </div>
-
-              {/* URL */}
-              <div>
-                <p className="text-xs font-medium text-gray-400 mb-2">Or paste URL</p>
-                <div className="flex gap-2">
-                  <input
-                    type="url"
-                    id="coverUrl"
-                    placeholder="https://example.com/image.jpg"
-                    className="flex-1 px-3 py-2 bg-dark-700 border border-dark-600 rounded-lg text-white placeholder-gray-600 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500"
-                  />
-                  <button
-                    onClick={() => {
-                      const url = (document.getElementById('coverUrl') as HTMLInputElement)?.value;
-                      if (url) handleChangeCover(url);
-                    }}
-                    disabled={isChangingCover}
-                    className="px-4 py-2 bg-violet-600 hover:bg-violet-500 disabled:opacity-40 text-white rounded-lg text-sm transition-colors"
-                  >
-                    {isChangingCover ? '…' : 'Apply'}
-                  </button>
-                </div>
-              </div>
-
-              {/* Track covers */}
-              {playlist.tracks.length > 0 && (
-                <div>
-                  <p className="text-xs font-medium text-gray-400 mb-2">Use a track cover</p>
-                  <div className="grid grid-cols-5 gap-2">
-                    {playlist.tracks.slice(0, 10).map((track, i) => (
-                      <button
-                        key={track.id}
-                        onClick={() => handleChangeCover(track.cover)}
-                        disabled={isChangingCover}
-                        className="aspect-square rounded-lg overflow-hidden hover:opacity-75 transition-opacity disabled:opacity-40"
-                      >
-                        <img src={track.cover} alt={`Track ${i + 1}`} className="w-full h-full object-cover" />
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ── Invite Modal ── */}
+      {/* ── Invite ── */}
       {showInviteModal && (
-        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-end sm:items-center justify-center z-50 p-0 sm:p-4">
-          <div className="bg-dark-800 border border-dark-700/60 rounded-t-2xl sm:rounded-2xl w-full sm:max-w-md shadow-2xl">
-            <div className="flex items-center justify-between px-5 py-4 border-b border-dark-700/60">
-              <p className="text-base font-semibold text-black">Invite collaborators</p>
-              <button
-                onClick={() => { setShowInviteModal(false); setInviteSearchQuery(''); setInviteSearchResults([]); }}
-                className="p-1.5 text-gray-500 hover:text-white transition-colors rounded-lg hover:bg-dark-700"
-              >
-                <X size={18} />
-              </button>
-            </div>
-            <div className="p-4">
-              <div className="relative mb-3">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" size={16} />
-                <input
-                  type="text"
-                  placeholder="Search by username…"
-                  value={inviteSearchQuery}
-                  onChange={(e) => { setInviteSearchQuery(e.target.value); handleSearchUsers(e.target.value); }}
-                  className="w-full pl-9 pr-4 py-2.5 bg-dark-700 border border-dark-600 rounded-xl text-white placeholder-gray-600 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500"
-                />
-              </div>
-              <div className="max-h-72 overflow-y-auto space-y-1">
-                {isSearchingUsers ? (
-                  <div className="flex items-center justify-center py-8 gap-2 text-gray-400 text-sm">
-                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-violet-400" /> Searching…
-                  </div>
-                ) : inviteSearchResults.length === 0 ? (
-                  <p className="text-center text-gray-500 text-sm py-8">
-                    {inviteSearchQuery ? 'No users found' : 'Search for users to invite'}
-                  </p>
-                ) : (
-                  inviteSearchResults.map((u) => (
-                    <div key={u.id} className="flex items-center justify-between gap-3 px-3 py-2.5 rounded-lg hover:bg-dark-700/60 transition-colors">
-                      <div className="flex items-center gap-3 min-w-0">
-                        <img src={getAvatarUrl(u.avatar)} alt={u.username} className="w-9 h-9 rounded-full object-cover flex-shrink-0" />
-                        <div className="min-w-0">
-                          <p className="text-white text-sm font-medium truncate">{u.username}</p>
-                          {u.artistName && <p className="text-gray-500 text-xs truncate">{u.artistName}</p>}
-                        </div>
-                      </div>
-                      <button
-                        onClick={() => handleInviteUser(u.id)}
-                        className="flex-shrink-0 px-3 py-1.5 bg-violet-600 hover:bg-violet-500 text-white rounded-full text-xs font-medium transition-colors"
-                      >
-                        Invite
-                      </button>
-                    </div>
-                  ))
-                )}
-              </div>
-            </div>
+        <Sheet
+          title="Invite collaborators"
+          onClose={() => { setShowInviteModal(false); setInviteSearchQuery(''); setInviteSearchResults([]); }}
+        >
+          <p className="text-xs text-black/60 mb-3">Collaborators can add and remove tracks in this playlist.</p>
+          <div className="relative mb-3">
+            <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-black/40" />
+            <input
+              autoFocus
+              type="text"
+              placeholder="Search by username"
+              value={inviteSearchQuery}
+              onChange={(e) => { setInviteSearchQuery(e.target.value); handleSearchUsers(e.target.value); }}
+              className={`${brutalInput} pl-10`}
+            />
           </div>
-        </div>
+          {isSearchingUsers ? (
+            <div className="flex justify-center py-8"><Loader2 className="animate-spin text-black/40" /></div>
+          ) : inviteSearchResults.length === 0 ? (
+            <p className="text-center text-sm text-black/60 py-8">{inviteSearchQuery ? 'No users found.' : 'Search for someone to invite.'}</p>
+          ) : (
+            <ul className="space-y-2">
+              {inviteSearchResults.map((u) => {
+                const isCollaborator = collaborators.some((c) => c.id === u.id);
+                const isPending = invitedIds.includes(u.id) || pendingInvitesSent.some((p) => p.id === u.id || p.userId === u.id);
+                return (
+                  <li key={u.id} className="flex items-center gap-3 p-2 bg-white border-2 border-black rounded-xl">
+                    <img src={getAvatarUrl(u.avatar)} alt="" className="w-9 h-9 rounded-full border-2 border-black object-cover flex-shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-bold text-black truncate">{u.username}</p>
+                      {u.artistName && <p className="text-xs text-black/60 truncate">{u.artistName}</p>}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleInviteUser(u.id)}
+                      disabled={isCollaborator || isPending}
+                      className="flex-shrink-0 inline-flex items-center gap-1 px-3 py-1.5 rounded-lg border-2 border-black text-xs font-bold bg-teal-300 shadow-[2px_2px_0_0_#000] active:shadow-none active:translate-x-[2px] active:translate-y-[2px] disabled:bg-white disabled:shadow-none disabled:opacity-60"
+                    >
+                      {isCollaborator ? 'Collaborator' : isPending ? <><Check size={13} /> Invited</> : <><UserPlus size={13} /> Invite</>}
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </Sheet>
       )}
-
-    </div>
+    </PageShell>
   );
 };
 
-export default PlaylistTracksPage; 
+export default PlaylistTracksPage;

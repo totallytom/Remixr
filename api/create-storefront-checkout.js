@@ -12,6 +12,7 @@
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 const { createClient } = require('@supabase/supabase-js');
 const { isUUID, resolveAppUrl } = require('./_validate');
+const { isAccountReady, syncAccountReadiness } = require('./_stripeConnect');
 
 const supabase = createClient(
   process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL,
@@ -41,6 +42,15 @@ module.exports = async (req, res) => {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
+  // Kill switch: new purchases only when explicitly enabled for this
+  // environment. Downloads, refunds, disputes and payouts keep working.
+  if (process.env.STOREFRONT_SALES_ENABLED !== 'true') {
+    return res.status(503).json({
+      error: 'Storefront sales are paused right now. Please check back soon.',
+      code: 'sales_paused',
+    });
+  }
+
   // ── 1. Authenticate buyer ──────────────────────────────────────────────────
   const authHeader = req.headers['authorization'] ?? '';
   const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
@@ -62,7 +72,7 @@ module.exports = async (req, res) => {
     .from('store_listings')
     .select(`
       id, track_id, seller_id, price, license_type, is_active,
-      tracks:track_id (title, artist),
+      tracks:track_id (title, artist, status),
       users:seller_id (stripe_account_id, is_admin)
     `)
     .eq('id', listingId)
@@ -82,9 +92,9 @@ module.exports = async (req, res) => {
     .eq('listing_id', listingId)
     .eq('buyer_id', user.id)
     .eq('status', 'completed')
-    .maybeSingle();
+    .limit(1);
 
-  if (existing) return res.status(409).json({ error: 'You already own this track' });
+  if (existing?.length) return res.status(409).json({ error: 'You already own this track' });
 
   // ── 4. Build Checkout Session ──────────────────────────────────────────────
   const track      = Array.isArray(listing.tracks) ? listing.tracks[0] : (listing.tracks ?? {});
@@ -95,9 +105,40 @@ module.exports = async (req, res) => {
 
   const licenseLabel = listing.license_type.charAt(0).toUpperCase() + listing.license_type.slice(1);
 
-  if (!seller.stripe_account_id && !seller.is_admin) {
+  // Tracks hidden by moderation or a takedown can't be sold.
+  if (track.status !== 'published') {
+    return res.status(400).json({ error: 'This track is not available for purchase right now.' });
+  }
+
+  // The seller's Stripe account must be fully onboarded, otherwise Stripe
+  // rejects the destination charge. Checked live (not from the cached flag) so
+  // a seller who just finished onboarding can sell immediately.
+  if (seller.stripe_account_id) {
+    let account;
+    try {
+      account = await stripe.accounts.retrieve(seller.stripe_account_id);
+    } catch (err) {
+      console.error('Seller account lookup failed:', err.message);
+    }
+    if (account) await syncAccountReadiness(supabase, account);
+    if (!isAccountReady(account)) {
+      return res.status(400).json({ error: "This seller hasn't finished setting up payouts yet, so the track can't be bought right now." });
+    }
+  } else if (!seller.is_admin) {
     return res.status(400).json({ error: 'This seller has not connected a payout account yet and cannot accept payments.' });
   }
+
+  // Locked in now and checked by the webhook, so a seller editing the price
+  // while the buyer is on the Stripe page can't strand a paid purchase.
+  const purchaseMetadata = {
+    type:         'track_purchase',
+    listing_id:   listingId,
+    track_id:     listing.track_id,
+    buyer_id:     user.id,
+    seller_id:    listing.seller_id,
+    license_type: listing.license_type,
+    price_cents:  String(amountCents),
+  };
 
   const sessionParams = {
     mode: 'payment',
@@ -114,15 +155,9 @@ module.exports = async (req, res) => {
     }],
     // Metadata on payment_intent_data so the existing payment_intent.succeeded
     // webhook handler picks it up without any changes.
+    metadata: purchaseMetadata,
     payment_intent_data: {
-      metadata: {
-        type:         'track_purchase',
-        listing_id:   listingId,
-        track_id:     listing.track_id,
-        buyer_id:     user.id,
-        seller_id:    listing.seller_id,
-        license_type: listing.license_type,
-      },
+      metadata: purchaseMetadata,
       ...(seller.stripe_account_id ? {
         transfer_data:          { destination: seller.stripe_account_id },
         application_fee_amount: platformFee,

@@ -378,7 +378,7 @@ export class ChatService {
       bio: data.bio as string | undefined,
       genres: data.genres as string[] | undefined,
       externalLinks: (data.external_links as string[]) ?? [],
-      subscriptionTier: (data.subscription_tier as 'free' | 'pro') ?? 'free',
+      subscriptionTier: (data.subscription_tier as 'free' | 'fan' | 'artist') ?? 'free',
       bannerUrl: data.banner_url as string | undefined,
       vanityUrl: data.vanity_url as string | undefined,
     };

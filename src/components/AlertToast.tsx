@@ -11,10 +11,10 @@ const icons: Record<AlertType, React.ReactNode> = {
 };
 
 const styles: Record<AlertType, string> = {
-  success: 'bg-emerald-500/95 text-white border-emerald-400/50',
-  error: 'bg-red-500/95 text-white border-red-400/50',
-  warning: 'bg-amber-500/95 text-white border-amber-400/50',
-  info: 'bg-violet-500/95 text-white border-violet-400/50',
+  success: 'bg-emerald-500/95 text-black border-emerald-400/50',
+  error: 'bg-red-500/95 text-black border-red-400/50',
+  warning: 'bg-amber-500/95 text-black border-amber-400/50',
+  info: 'bg-violet-500/95 text-black border-violet-400/50',
 };
 
 export default function AlertToast() {

@@ -224,13 +224,14 @@ const Artist: React.FC = () => {
         {activeTab === 'music' && (
           <div className="space-y-6">
             <h2 className="text-2xl font-bold text-black font-kyobo">Latest Releases</h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
               {artistTracks.map(track => (
                 <TrackCard
                   key={track.id}
                   track={track}
                   onPlay={handlePlayTrack}
                   onAddToQueue={handleAddToQueue}
+                  compactGrid
                 />
               ))}
             </div>

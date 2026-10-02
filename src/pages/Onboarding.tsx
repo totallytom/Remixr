@@ -46,7 +46,7 @@ const ProfilePreview: React.FC<{
   return (
     <div className="relative">
       {/* Label */}
-      <p className="text-xs font-medium text-white/30 uppercase tracking-widest mb-3 text-center">
+      <p className="text-xs font-medium text-black/30 uppercase tracking-widest mb-3 text-center">
         Public profile preview
       </p>
 
@@ -68,16 +68,16 @@ const ProfilePreview: React.FC<{
               )}
             </div>
             <div className="pb-1 min-w-0">
-              <h3 className="font-bold text-white truncate" style={{ fontSize: '1.1rem' }}>{name}</h3>
-              <p className="text-sm text-white/40">@{slug}</p>
+              <h3 className="font-bold text-black truncate" style={{ fontSize: '1.1rem' }}>{name}</h3>
+              <p className="text-sm text-black/40">@{slug}</p>
             </div>
           </div>
 
           {/* Bio */}
           {bio.trim() ? (
-            <p className="text-sm text-white/60 mb-4 line-clamp-3">{bio}</p>
+            <p className="text-sm text-black/60 mb-4 line-clamp-3">{bio}</p>
           ) : (
-            <p className="text-sm text-white/20 italic mb-4">Your bio will appear here</p>
+            <p className="text-sm text-black/20 italic mb-4">Your bio will appear here</p>
           )}
 
           {/* Genre tags */}
@@ -103,8 +103,8 @@ const ProfilePreview: React.FC<{
           <div className="flex gap-5 mt-5 pt-4 border-t border-white/5">
             {[['0', 'Tracks'], ['0', 'Followers'], ['0', 'Following']].map(([n, l]) => (
               <div key={l} className="text-center">
-                <p className="text-sm font-bold text-white">{n}</p>
-                <p className="text-[10px] text-white/30">{l}</p>
+                <p className="text-sm font-bold text-black">{n}</p>
+                <p className="text-[10px] text-black/30">{l}</p>
               </div>
             ))}
           </div>
@@ -114,7 +114,7 @@ const ProfilePreview: React.FC<{
       {/* Shareable URL hint */}
       <div className="mt-3 flex items-center justify-center gap-1.5">
         <div className="h-px flex-1 bg-white/5" />
-        <p className="text-[10px] text-white/25 px-2">remixr.app/@{slug}</p>
+        <p className="text-[10px] text-black/25 px-2">re-mixed.net/@{slug}</p>
         <div className="h-px flex-1 bg-white/5" />
       </div>
     </div>
@@ -281,7 +281,7 @@ const Onboarding: React.FC = () => {
 
   // ── Handle status icon ────────────────────────────────────────────────────
   const HandleIcon = () => {
-    if (handleStatus === 'checking') return <Loader2 size={14} className="animate-spin text-white/40" />;
+    if (handleStatus === 'checking') return <Loader2 size={14} className="animate-spin text-black/40" />;
     if (handleStatus === 'available') return <Check size={14} className="text-emerald-400" />;
     if (handleStatus === 'taken') return <X size={14} className="text-red-400" />;
     return null;
@@ -300,13 +300,13 @@ const Onboarding: React.FC = () => {
           <div className="flex flex-col sm:flex-row gap-3 justify-center pt-2">
             <Link
               to="/login"
-              className="inline-flex items-center justify-center gap-2 bg-gradient-to-r from-primary-600 to-secondary-600 text-white py-3 px-6 rounded-lg font-semibold hover:from-primary-700 hover:to-secondary-700 transition-all"
+              className="inline-flex items-center justify-center gap-2 bg-gradient-to-r from-primary-600 to-secondary-600 text-black py-3 px-6 rounded-lg font-semibold hover:from-primary-700 hover:to-secondary-700 transition-all"
             >
               Sign in
             </Link>
             <Link
               to="/signup"
-              className="inline-flex items-center justify-center py-3 px-6 rounded-lg font-medium border border-dark-500 text-white/80 hover:bg-white/5 transition-all"
+              className="inline-flex items-center justify-center py-3 px-6 rounded-lg font-medium border border-dark-500 text-black/80 hover:bg-white/5 transition-all"
             >
               Create an account
             </Link>
@@ -320,7 +320,7 @@ const Onboarding: React.FC = () => {
   if (!user) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-dark-900 via-dark-800 to-primary-900 flex items-center justify-center">
-        <div className="flex flex-col items-center gap-3 text-white/40">
+        <div className="flex flex-col items-center gap-3 text-black/40">
           <Loader2 size={28} className="animate-spin" />
           <p className="text-sm">Setting up your account…</p>
         </div>
@@ -386,13 +386,13 @@ const Onboarding: React.FC = () => {
                   <Mic2 size={24} className="text-dark-500 group-hover:text-primary-400 transition-colors" />
                 )}
                 <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                  <Camera size={18} className="text-white" />
+                  <Camera size={18} className="text-black" />
                 </div>
               </button>
               <input ref={avatarInputRef} type="file" accept="image/*" className="hidden" onChange={onAvatarChange} />
               <div>
-                <p className="text-sm font-medium text-white">Profile photo</p>
-                <p className="text-xs text-white/40 mt-0.5">Optional · JPG, PNG, WebP · Max 5 MB</p>
+                <p className="text-sm font-medium text-black">Profile photo</p>
+                <p className="text-xs text-black/40 mt-0.5">Optional · JPG, PNG, WebP · Max 5 MB</p>
                 {avatarPreview && (
                   <button
                     type="button"
@@ -407,7 +407,7 @@ const Onboarding: React.FC = () => {
 
             {/* Display name */}
             <div>
-              <label className="block text-sm font-medium text-white mb-2">
+              <label className="block text-sm font-medium text-black mb-2">
                 Display name <span className="text-red-400">*</span>
               </label>
               <input
@@ -416,15 +416,15 @@ const Onboarding: React.FC = () => {
                 onChange={e => setDisplayName(e.target.value)}
                 placeholder="Your artist or stage name"
                 maxLength={60}
-                className="w-full px-4 py-3 bg-dark-700 border border-dark-600 rounded-lg text-white placeholder-dark-400 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all"
+                className="w-full px-4 py-3 bg-dark-700 border border-dark-600 rounded-lg text-black placeholder-dark-400 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all"
               />
             </div>
 
             {/* Handle */}
             <div>
-              <label className="block text-sm font-medium text-white mb-2">
+              <label className="block text-sm font-medium text-black mb-2">
                 Handle <span className="text-red-400">*</span>
-                <span className="ml-2 text-xs font-normal text-white/30">· your URL: remixr.app/@handle</span>
+                <span className="ml-2 text-xs font-normal text-black/30">· your URL: re-mixed.net/@handle</span>
               </label>
               <div className="relative">
                 <AtSign size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-dark-400" />
@@ -434,7 +434,7 @@ const Onboarding: React.FC = () => {
                   onChange={e => onHandleChange(e.target.value)}
                   placeholder="yourhandle"
                   maxLength={24}
-                  className={`w-full pl-9 pr-9 py-3 bg-dark-700 border rounded-lg text-white placeholder-dark-400 focus:outline-none focus:ring-2 focus:border-transparent transition-all ${
+                  className={`w-full pl-9 pr-9 py-3 bg-dark-700 border rounded-lg text-black placeholder-dark-400 focus:outline-none focus:ring-2 focus:border-transparent transition-all ${
                     handleStatus === 'taken'
                       ? 'border-red-500/60 focus:ring-red-500'
                       : handleStatus === 'available'
@@ -447,21 +447,21 @@ const Onboarding: React.FC = () => {
                 </div>
               </div>
               <div className="mt-1 flex justify-between">
-                <p className={`text-xs ${handleStatus === 'taken' ? 'text-red-400' : handleStatus === 'available' ? 'text-emerald-400' : handleStatus === 'invalid' ? 'text-red-400' : 'text-white/0'}`}>
+                <p className={`text-xs ${handleStatus === 'taken' ? 'text-red-400' : handleStatus === 'available' ? 'text-emerald-400' : handleStatus === 'invalid' ? 'text-red-400' : 'text-black/0'}`}>
                   {handleStatus === 'taken' && 'Handle already taken'}
                   {handleStatus === 'available' && 'Handle is available'}
                   {handleStatus === 'invalid' && '3–24 chars · letters, numbers, underscores'}
                   {(handleStatus === 'idle' || handleStatus === 'checking') && '.'}
                 </p>
-                <p className="text-xs text-white/25">{handle.length}/24</p>
+                <p className="text-xs text-black/25">{handle.length}/24</p>
               </div>
             </div>
 
             {/* Bio */}
             <div>
-              <label className="block text-sm font-medium text-white mb-2">
+              <label className="block text-sm font-medium text-black mb-2">
                 Bio
-                <span className="ml-2 text-xs font-normal text-white/30">· optional</span>
+                <span className="ml-2 text-xs font-normal text-black/30">· optional</span>
               </label>
               <textarea
                 value={bio}
@@ -469,16 +469,16 @@ const Onboarding: React.FC = () => {
                 placeholder="One or two lines about your sound…"
                 rows={3}
                 maxLength={200}
-                className="w-full px-4 py-3 bg-dark-700 border border-dark-600 rounded-lg text-white placeholder-dark-400 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all resize-none"
+                className="w-full px-4 py-3 bg-dark-700 border border-dark-600 rounded-lg text-black placeholder-dark-400 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all resize-none"
               />
-              <p className="text-xs text-white/25 text-right mt-1">{bio.length}/200</p>
+              <p className="text-xs text-black/25 text-right mt-1">{bio.length}/200</p>
             </div>
 
             {/* Genres */}
             <div>
-              <label className="block text-sm font-medium text-white mb-1">
+              <label className="block text-sm font-medium text-black mb-1">
                 Genres
-                <span className="ml-2 text-xs font-normal text-white/30">· pick up to {MAX_GENRES}</span>
+                <span className="ml-2 text-xs font-normal text-black/30">· pick up to {MAX_GENRES}</span>
               </label>
               <div className="flex flex-wrap gap-2 mt-2">
                 {GENRES.map(g => {
@@ -495,7 +495,7 @@ const Onboarding: React.FC = () => {
                           ? 'border-primary-500 bg-primary-500/15 text-primary-300'
                           : disabled
                           ? 'border-dark-700 text-dark-600 cursor-not-allowed'
-                          : 'border-dark-600 text-dark-300 hover:border-dark-400 hover:text-white'
+                          : 'border-dark-600 text-dark-300 hover:border-dark-400 hover:text-black'
                       }`}
                     >
                       {g}
@@ -511,7 +511,7 @@ const Onboarding: React.FC = () => {
               disabled={isSaving || handleStatus === 'taken' || handleStatus === 'checking'}
               whileHover={{ scale: isSaving ? 1 : 1.02 }}
               whileTap={{ scale: isSaving ? 1 : 0.98 }}
-              className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-primary-600 to-secondary-600 text-white py-3 px-6 rounded-lg font-semibold hover:from-primary-700 hover:to-secondary-700 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 focus:ring-offset-dark-800 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-primary-600 to-secondary-600 text-black py-3 px-6 rounded-lg font-semibold hover:from-primary-700 hover:to-secondary-700 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 focus:ring-offset-dark-800 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isSaving ? (
                 <><Loader2 size={16} className="animate-spin" /> Saving…</>
@@ -521,7 +521,7 @@ const Onboarding: React.FC = () => {
             </motion.button>
 
             {/* Skip */}
-            <p className="text-center text-xs text-white/25">
+            <p className="text-center text-xs text-black/25">
               <button
                 type="button"
                 onClick={() => {
@@ -529,7 +529,7 @@ const Onboarding: React.FC = () => {
                   if (user) clearOnboardingPending(user.id);
                   navigate('/onboarding/upload');
                 }}
-                className="hover:text-white/50 transition-colors underline underline-offset-2"
+                className="hover:text-black/50 transition-colors underline underline-offset-2"
               >
                 Skip for now
               </button>

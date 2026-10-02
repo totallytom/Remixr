@@ -141,7 +141,7 @@ export const SnippetEditor: React.FC<SnippetEditorProps> = ({
         <button
           type="button"
           onClick={handlePlayPause}
-          className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-violet-500 text-white text-sm font-medium hover:bg-violet-600 transition-colors shadow-sm"
+          className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-violet-500 text-black text-sm font-medium hover:bg-violet-600 transition-colors shadow-sm"
         >
           {isPlaying ? <Pause size={18} /> : <Play size={18} />}
           {isPlaying ? 'Pause' : 'Play'} snippet

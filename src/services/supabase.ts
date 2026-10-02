@@ -98,6 +98,7 @@ export interface Database {
           is_verified: boolean;
           is_private: boolean;
           is_admin?: boolean;
+          suspended_at?: string | null;
           is_verified_artist?: boolean;
           artist_name?: string;
           bio?: string;
@@ -199,6 +200,8 @@ export interface Database {
           updated_at: string;
           preview_start_sec?: number;
           preview_duration_sec?: number;
+          status: TrackStatus;
+          audio_path: string | null;
         };
         Insert: {
           id?: string;
@@ -670,11 +673,97 @@ export interface Database {
           }
         ];
       };
+      track_rights: {
+        Row: TrackRightsRow;
+        Insert: never; // submit-track-rights Edge Function only
+        Update: never;
+        Relationships: [];
+      };
+      takedown_requests: {
+        Row: TakedownRequestRow;
+        Insert: {
+          source: 'user_report';
+          reason: TakedownReason;
+          track_id: string;
+          reporter_user_id: string;
+          details?: string | null;
+        };
+        Update: Partial<Pick<TakedownRequestRow, 'status' | 'actioned_at' | 'actioned_by'>>; // admins
+        Relationships: [];
+      };
+      counter_notices: {
+        Row: CounterNoticeRow;
+        Insert: never; // submit-counter-notice Edge Function only
+        Update: { lawsuit_filed?: boolean }; // admins
+        Relationships: [];
+      };
+      strikes: {
+        Row: StrikeRow;
+        Insert: never;
+        Update: never;
+        Relationships: [];
+      };
+      notifications: {
+        Row: NotificationRow;
+        Insert: never;
+        Update: { read_at?: string | null };
+        Relationships: [];
+      };
+      push_tokens: {
+        Row: PushTokenRow;
+        Insert: { user_id: string; expo_push_token: string; platform: PushPlatform };
+        Update: { platform?: PushPlatform };
+        Relationships: [];
+      };
+      audit_log: {
+        Row: AuditLogRow;
+        Insert: never;
+        Update: never;
+        Relationships: [];
+      };
+      dmca_notices_legacy: {
+        Row: {
+          id: string;
+          claimant_name: string;
+          claimant_email: string;
+          claimant_address: string | null;
+          infringing_url: string;
+          original_work: string;
+          sworn_statement: boolean;
+          track_id: string | null;
+          status: string;
+          submitted_at: string;
+          resolved_at: string | null;
+        };
+        Insert: never;
+        Update: never;
+        Relationships: [];
+      };
     };
     Views: {
       [_ in never]: never;
     };
     Functions: {
+      submit_track_report: {
+        Args: { p_track_id: string; p_reason: string; p_details?: string | null };
+        Returns: 'ok' | 'already_reported';
+      };
+      get_takedown_for_uploader: {
+        Args: { p_request_id: string };
+        Returns: UploaderTakedownView[];
+      };
+      register_push_token: {
+        Args: { p_token: string; p_platform: PushPlatform };
+        Returns: undefined;
+      };
+      active_strike_count: {
+        Args: { p_user_id: string };
+        Returns: number;
+      };
+      strike_limit: {
+        Args: Record<string, never>;
+        Returns: number;
+      };
       get_recommended_tracks: {
         Args: {
           user_uuid: string;
@@ -758,7 +847,164 @@ export interface Database {
       };
     };
     Enums: {
-      [_ in never]: never;
+      rights_ownership_type: RightsOwnershipType;
+      rights_samples: RightsSamples;
+      rights_verification_status: RightsVerificationStatus;
+      takedown_source: TakedownSource;
+      takedown_reason: TakedownReason;
+      takedown_status: TakedownStatus;
+      notification_type: NotificationType;
     };
   };
+}
+
+// ─── Copyright compliance types (mirror supabase/migrations/20260926*) ───────
+
+/** tracks.status — TEXT column with a CHECK constraint (not a Postgres enum). */
+export type TrackStatus = 'pending_review' | 'published' | 'disabled' | 'removed';
+export type RightsOwnershipType = 'original' | 'on_behalf' | 'remix';
+export type RightsSamples = 'none' | 'royalty_free' | 'cleared' | 'uncleared';
+export type RightsVerificationStatus = 'auto_passed' | 'flagged' | 'approved' | 'rejected';
+export type TakedownSource = 'dmca_notice' | 'user_report';
+export type TakedownReason = 'copyright' | 'impersonation' | 'other';
+export type TakedownStatus = 'received' | 'removed' | 'rejected' | 'counter_noticed' | 'restored';
+export type NotificationType =
+  | 'track_flagged'
+  | 'track_removed'
+  | 'track_restored'
+  | 'strike_added'
+  | 'account_suspended';
+export type PushPlatform = 'ios' | 'android' | 'web';
+
+export interface TrackRightsRow {
+  track_id: string;
+  ownership_type: RightsOwnershipType;
+  songwriters: string[];
+  samples: RightsSamples;
+  sample_source: string | null;
+  permission_proof_path: string | null;
+  legal_name: string;
+  attested_at: string;
+  attestation_version: string;
+  isrc: string | null;
+  already_released: boolean;
+  distributor: string | null;
+  release_url: string | null;
+  p_line: string | null;
+  c_line: string | null;
+  pro: string | null;
+  ipi: string | null;
+  copyright_reg_number: string | null;
+  verification_status: RightsVerificationStatus;
+  verification_notes: Record<string, unknown>;
+  reviewed_by: string | null;
+  reviewed_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface TakedownRequestRow {
+  id: string;
+  source: TakedownSource;
+  reason: TakedownReason;
+  track_id: string | null;
+  track_owner_id: string | null;
+  reporter_user_id: string | null;
+  claimant_name: string | null;
+  claimant_company: string | null;
+  claimant_email: string | null;
+  claimant_phone: string | null;
+  claimant_address: string | null;
+  copyrighted_work_description: string | null;
+  infringing_url: string | null;
+  good_faith_statement: boolean | null;
+  accuracy_statement: boolean | null;
+  signature: string | null;
+  details: string | null;
+  status: TakedownStatus;
+  received_at: string;
+  actioned_at: string | null;
+  actioned_by: string | null;
+  legacy_notice_id: string | null;
+  updated_at: string;
+}
+
+export interface CounterNoticeRow {
+  id: string;
+  takedown_request_id: string;
+  user_id: string;
+  full_name: string;
+  address: string;
+  phone: string;
+  email: string;
+  removed_material_description: string;
+  perjury_statement: boolean;
+  jurisdiction_consent: boolean;
+  service_of_process_consent: boolean;
+  signature: string;
+  submitted_at: string;
+  forwarded_to_claimant_at: string | null;
+  restore_after: string | null;
+  lawsuit_filed: boolean;
+  restored_at: string | null;
+  updated_at: string;
+}
+
+export interface StrikeRow {
+  id: string;
+  user_id: string;
+  track_id: string | null;
+  takedown_request_id: string;
+  created_at: string;
+  voided_at: string | null;
+}
+
+export interface NotificationRow {
+  id: string;
+  user_id: string;
+  type: NotificationType;
+  track_id: string | null;
+  title: string;
+  body: string;
+  link_url: string | null;
+  read_at: string | null;
+  created_at: string;
+}
+
+export interface PushTokenRow {
+  id: string;
+  user_id: string;
+  expo_push_token: string;
+  platform: PushPlatform;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AuditLogRow {
+  id: number;
+  actor_id: string | null;
+  action: string;
+  entity_type: string;
+  entity_id: string | null;
+  metadata: Record<string, unknown>;
+  created_at: string;
+}
+
+/** Row returned by the get_takedown_for_uploader RPC (no claimant contact details). */
+export interface UploaderTakedownView {
+  id: string;
+  source: TakedownSource;
+  reason: TakedownReason;
+  status: TakedownStatus;
+  claimant_name: string | null;
+  claimant_company: string | null;
+  copyrighted_work_description: string | null;
+  infringing_url: string | null;
+  details: string | null;
+  received_at: string;
+  actioned_at: string | null;
+  track_id: string | null;
+  track_title: string | null;
+  track_artist: string | null;
+  has_counter_notice: boolean;
 } 

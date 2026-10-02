@@ -9,7 +9,6 @@ import {
   Mail,
   Lock,
   Shield,
-  Bell,
   Palette,
   LogOut,
   Eye,
@@ -21,7 +20,14 @@ import {
   Globe,
   EyeOff as InvisibleIcon,
   Star,
+  Camera,
+  KeyRound,
+  Smartphone,
+  Trash2,
+  Sparkles,
+  CreditCard,
 } from 'lucide-react';
+import { BrutalButton, BrutalToggle, Sticker, brutalInput, hardShadow } from '../ui/brutal';
 import { useStore } from '../../store/useStore';
 import { applyTheme, themeConfigs } from '../../data/themeConfig';
 import { AuthService } from '../../services/authService';
@@ -32,7 +38,7 @@ import { supabase } from '../../services/supabase';
 
 interface SettingsModalProps {
   isOpen: boolean;
-  initialTab?: 'account' | 'security' | 'notifications' | 'appearance' | 'pro';
+  initialTab?: 'account' | 'security' | 'appearance' | 'pro';
 }
 
 interface ChangeEmailForm {
@@ -47,10 +53,120 @@ interface ChangePasswordForm {
   confirmPassword: string;
 }
 
+// ─── Layout helpers ───────────────────────────────────────────────────────────
+
+const Section: React.FC<{
+  icon: React.ComponentType<{ size?: number; className?: string }>;
+  title: string;
+  description?: React.ReactNode;
+  tone?: 'default' | 'danger';
+  aside?: React.ReactNode;
+  children?: React.ReactNode;
+}> = ({ icon: Icon, title, description, tone = 'default', aside, children }) => (
+  <section
+    className={`border-2 border-black rounded-2xl p-5 ${tone === 'danger' ? 'bg-red-50' : 'bg-white'}`}
+    style={hardShadow(4)}
+  >
+    <div className="flex items-start gap-3">
+      <span
+        className={`flex-shrink-0 w-9 h-9 rounded-lg border-2 border-black flex items-center justify-center ${
+          tone === 'danger' ? 'bg-red-300' : 'bg-teal-300'
+        }`}
+      >
+        <Icon size={18} className="text-black" />
+      </span>
+      <div className="flex-1 min-w-0">
+        <h3 className="text-base font-bold text-black leading-tight">{title}</h3>
+        {description && <p className="text-sm text-black/60 mt-0.5">{description}</p>}
+      </div>
+      {aside}
+    </div>
+    {children && <div className="mt-4">{children}</div>}
+  </section>
+);
+
+const FieldLabel: React.FC<{ htmlFor?: string; children: React.ReactNode }> = ({ htmlFor, children }) => (
+  <label htmlFor={htmlFor} className="block text-xs font-bold uppercase tracking-wide text-black/70 mb-1.5">
+    {children}
+  </label>
+);
+
+/** Row of pill buttons where one is selected. */
+function ChoiceChips<T extends string>({
+  options,
+  value,
+  onChange,
+  label,
+}: {
+  options: { value: T; label: string; dot?: string; icon?: React.ReactNode }[];
+  value: T;
+  onChange: (v: T) => void;
+  label: string;
+}) {
+  return (
+    <div role="radiogroup" aria-label={label} className="flex flex-wrap gap-2">
+      {options.map((o) => {
+        const active = o.value === value;
+        return (
+          <button
+            key={o.value}
+            type="button"
+            role="radio"
+            aria-checked={active}
+            onClick={() => onChange(o.value)}
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl border-2 border-black text-sm font-bold transition-all ${
+              active ? 'bg-black text-white shadow-none translate-x-[2px] translate-y-[2px]' : 'bg-white text-black shadow-[2px_2px_0_0_#000] hover:bg-teal-50'
+            }`}
+          >
+            {o.dot && <span className={`w-2.5 h-2.5 rounded-full border border-black ${o.dot}`} aria-hidden />}
+            {o.icon}
+            {o.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+const PasswordInput: React.FC<{
+  id: string;
+  value: string;
+  onChange: (v: string) => void;
+  placeholder: string;
+  visible: boolean;
+  onToggleVisible: () => void;
+}> = ({ id, value, onChange, placeholder, visible, onToggleVisible }) => (
+  <div className="relative">
+    <input
+      id={id}
+      type={visible ? 'text' : 'password'}
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      className={`${brutalInput} pr-11`}
+      placeholder={placeholder}
+      required
+    />
+    <button
+      type="button"
+      onClick={onToggleVisible}
+      className="absolute right-3 top-1/2 -translate-y-1/2 text-black/50 hover:text-black"
+      aria-label={visible ? 'Hide password' : 'Show password'}
+    >
+      {visible ? <EyeOff size={16} /> : <Eye size={16} />}
+    </button>
+  </div>
+);
+
+const Spinner: React.FC<{ light?: boolean }> = ({ light }) => (
+  <span className={`w-4 h-4 border-2 ${light ? 'border-white' : 'border-black'} border-t-transparent rounded-full animate-spin`} />
+);
+
+// ─── Modal ────────────────────────────────────────────────────────────────────
+
 const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, initialTab }) => {
   const { user, setSettingsOpen, theme, setTheme, setUserAvatar, updateProfile, changePassword, togglePrivateAccount, logout, userStatus, setUserStatus, refreshUser } = useStore();
   const { t } = useTranslation();
-  const [activeTab, setActiveTab] = useState<'account' | 'security' | 'notifications' | 'appearance' | 'pro'>(initialTab || 'account');
+  const [activeTab, setActiveTab] = useState<'account' | 'security' | 'appearance' | 'pro'>(initialTab || 'account');
   const navigate = useNavigate();
   const [showCurrentPassword, setShowCurrentPassword] = useState(false);
   const [showNewPassword, setShowNewPassword] = useState(false);
@@ -101,8 +217,8 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, initialTab }) => 
         // patch the store so Pro UI and feature gates work for this session.
         if (sub && (sub.status === 'active' || sub.status === 'past_due')) {
           const storeUser = useStore.getState().user;
-          if (storeUser && storeUser.subscriptionTier !== 'pro') {
-            useStore.setState({ user: { ...storeUser, subscriptionTier: 'pro' } });
+          if (storeUser && storeUser.subscriptionTier !== 'artist') {
+            useStore.setState({ user: { ...storeUser, subscriptionTier: 'artist' } });
           }
         }
       })
@@ -195,7 +311,6 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, initialTab }) => 
   const tabs = [
     { id: 'account', label: t('settings.tabs.account'), icon: User },
     { id: 'security', label: t('settings.tabs.security'), icon: Shield },
-    { id: 'notifications', label: t('settings.tabs.notifications'), icon: Bell },
     { id: 'pro', label: t('settings.tabs.subscription'), icon: Star },
   ];
 
@@ -213,8 +328,8 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, initialTab }) => 
     setErrorMessage('');
     
     try {
-      await updateProfile({ email: emailForm.newEmail });
-      setSuccessMessage('Email updated successfully!');
+      await AuthService.changeEmail(emailForm.newEmail, emailForm.password);
+      setSuccessMessage(`Check ${emailForm.newEmail} for a confirmation link — your email changes once you click it.`);
       setEmailForm(prev => ({ ...prev, newEmail: '', password: '' }));
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : 'Failed to update email');
@@ -377,522 +492,294 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, initialTab }) => 
   };
 
   const renderAccountTab = () => (
-    <div className="space-y-6">
-      <div className="bg-gray-50 rounded-lg p-6 border border-gray-200">
-        <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center">
-          <User className="mr-2 text-blue-600" />
-          <span className="text-base font-semibold">Profile Information</span>
-        </h3>
-        <div className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Profile Picture</label>
-            <div className="flex items-center space-x-4">
-              <img
-                src={getAvatarUrl(avatarPreview ?? user?.avatar)}
-                alt="Profile Preview"
-                className="w-16 h-16 rounded-full object-cover border-2 border-primary-500"
-              />
-              <input
-                type="file"
-                accept="image/*"
-                onChange={handleAvatarChange}
-                className="block text-xs text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-primary-50 file:text-primary-700 hover:file:bg-primary-100"
-              />
-              {avatarFile && (
-                <button
-                  onClick={handleAvatarSave}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-                >
-                  Save
-                </button>
-              )}
-              <button
-                onClick={handleRemoveAvatar}
-                className="px-2 py-1 text-xs border border-red-500 text-red-500 rounded hover:bg-red-50 hover:text-red-700 transition-colors ml-2"
-                type="button"
-              >
-                Remove Photo
-              </button>
-            </div>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Username</label>
-            <input
-              type="text"
-              value={user?.username || ''}
-              disabled
-              className="w-full px-4 py-3 bg-gray-100 border border-gray-300 rounded-lg text-gray-600 opacity-50 cursor-not-allowed"
-            />
-            <p className="text-sm text-gray-500 mt-1">Username cannot be changed</p>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Current Email</label>
-            <input
-              type="email"
-              value={user?.email || ''}
-              disabled
-              className="w-full px-4 py-3 bg-gray-100 border border-gray-300 rounded-lg text-gray-600 opacity-50 cursor-not-allowed"
-            />
-          </div>
-        </div>
-      </div>
-
-      {/* Manual Status: Online, Idle, Invisible */}
-      <div className="bg-gray-50 rounded-lg p-6 border border-gray-200">
-        <p className="text-lg font-semibold text-gray-800 mb-2 flex items-center">
-          <Circle className="mr-2 text-blue-600" size={20} />
-          Status
-        </p>
-        <p className="text-gray-600 text-sm mb-4">Choose how you appear to others in chat and across the app.</p>
-        <div className="flex flex-wrap gap-3">
-          <button
-            type="button"
-            onClick={() => setUserStatus('online')}
-            className={`flex items-center gap-2 px-4 py-2.5 rounded-lg font-medium transition-colors border ${
-              userStatus === 'online'
-                ? 'bg-green-600 text-white border-green-600'
-                : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
-            }`}
-          >
-            <span className="w-2.5 h-2.5 rounded-full bg-green-500" aria-hidden />
-            Online
-          </button>
-          <button
-            type="button"
-            onClick={() => setUserStatus('idle')}
-            className={`flex items-center gap-2 px-4 py-2.5 rounded-lg font-medium transition-colors border ${
-              userStatus === 'idle'
-                ? 'bg-amber-600 text-white border-amber-600'
-                : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
-            }`}
-          >
-            <Moon className="w-4 h-4" />
-            Idle
-          </button>
-          <button
-            type="button"
-            onClick={() => setUserStatus('invisible')}
-            className={`flex items-center gap-2 px-4 py-2.5 rounded-lg font-medium transition-colors border ${
-              userStatus === 'invisible'
-                ? 'bg-gray-600 text-white border-gray-600'
-                : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
-            }`}
-          >
-            <InvisibleIcon className="w-4 h-4" />
-            Offline
-          </button>
-        </div>
-      </div>
-
-      {/* Privacy Toggle */}
-      <div className="bg-gray-50 rounded-lg p-6 flex items-center justify-between border border-gray-200">
-        <div>
-          <p className="text-lg font-semibold text-gray-800 mb-1 flex items-center">
-            <Shield className="mr-2 text-blue-600" />
-            Private Account
-          </p>
-          <p className="text-gray-600 text-sm">Only approved followers can see your profile and uploads.</p>
-        </div>
-        <button
-          onClick={handlePrivacyToggle}
-          disabled={privacyLoading}
-          className={`ml-4 px-4 py-2 rounded-lg font-semibold transition-colors ${user?.isPrivate ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700'} ${privacyLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
-        >
-          {privacyLoading ? 'Saving...' : user?.isPrivate ? 'Private' : 'Public'}
-        </button>
-      </div>
-      {/* Delete Account */}
-      <div className="bg-gray-50 rounded-lg p-6 border border-gray-200">
-        <p className="text-lg font-semibold text-red-600 mb-2 flex items-center">
-          <LogOut className="mr-2" />
-          Delete Account
-        </p>
-        <p className="text-gray-600 mb-4">Permanently delete your account and all data. This action cannot be undone.</p>
-        <button
-          onClick={() => setShowDeleteConfirm(true)}
-          className="px-6 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors flex items-center space-x-2"
-          disabled={deleteLoading}
-        >
-          {deleteLoading ? 'Deleting...' : 'Delete Account'}
-        </button>
-        {showDeleteConfirm && (
-          <div className="mt-4 p-4 bg-gray-100 rounded-lg border border-gray-200">
-            <p className="text-gray-800 mb-2">Are you sure you want to delete your account? This cannot be undone.</p>
-            <div className="flex space-x-2">
-              <button
-                onClick={handleDeleteAccount}
-                className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700"
-                disabled={deleteLoading}
-              >
-                Yes, Delete
-              </button>
-              <button
-                onClick={() => setShowDeleteConfirm(false)}
-                className="px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600"
-                disabled={deleteLoading}
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Language Switcher */}
-      <div className="bg-gray-50 rounded-lg p-6 border border-gray-200">
-        <p className="text-lg font-semibold text-gray-800 mb-1 flex items-center">
-          <Globe className="mr-2 text-blue-600" size={20} />
-          {t('settings.language.title')}
-        </p>
-        <p className="text-gray-600 text-sm mb-4">{t('settings.language.subtitle')}</p>
-        <div className="flex flex-wrap gap-2">
-          {(['en', 'ko', 'ja'] as const).map((lang) => (
-            <button
-              key={lang}
-              type="button"
-              onClick={() => i18n.changeLanguage(lang)}
-              className={`px-4 py-2 rounded-lg font-medium text-sm transition-colors border ${
-                i18n.language === lang
-                  ? 'bg-blue-600 text-white border-blue-600'
-                  : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
-              }`}
+    <div className="space-y-5">
+      <Section icon={User} title="Profile" description="How you appear across Re-Mixed.">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-4 mb-5">
+          <img
+            src={getAvatarUrl(avatarPreview ?? user?.avatar)}
+            alt="Profile picture"
+            className="w-20 h-20 rounded-2xl object-cover border-2 border-black bg-white"
+            style={hardShadow(3)}
+          />
+          <div className="flex flex-wrap items-center gap-2">
+            <label
+              className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border-2 border-black bg-white text-xs font-bold cursor-pointer shadow-[2px_2px_0_0_#000] active:translate-x-[2px] active:translate-y-[2px] active:shadow-none transition-all"
             >
-              {t(`settings.language.${lang}`)}
+              <Camera size={14} />
+              Change photo
+              <input type="file" accept="image/*" onChange={handleAvatarChange} className="sr-only" />
+            </label>
+            {avatarFile && (
+              <BrutalButton size="sm" tone="teal" onClick={handleAvatarSave}>
+                <Save size={14} /> Save photo
+              </BrutalButton>
+            )}
+            <button
+              type="button"
+              onClick={handleRemoveAvatar}
+              className="px-2 py-1.5 text-xs font-bold text-red-600 hover:underline"
+            >
+              Remove
             </button>
-          ))}
+          </div>
         </div>
-      </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div>
+            <FieldLabel htmlFor="settings-username">Username</FieldLabel>
+            <input id="settings-username" type="text" value={user?.username || ''} disabled className={brutalInput} />
+            <p className="text-xs text-black/50 mt-1">Usernames can't be changed.</p>
+          </div>
+          <div>
+            <FieldLabel htmlFor="settings-email">Email</FieldLabel>
+            <input id="settings-email" type="email" value={user?.email || ''} disabled className={brutalInput} />
+          </div>
+        </div>
+      </Section>
 
-      <div className="bg-gray-50 rounded-lg p-6 border border-gray-200">
-        <p className="text-lg font-semibold text-gray-800 mb-4 flex items-center">
-          <Mail className="mr-2 text-blue-600" />
-          Change Email
-        </p>
+      <Section icon={Circle} title="Status" description="How you appear to others in chat and across the app.">
+        <ChoiceChips
+          label="Status"
+          value={userStatus}
+          onChange={(s) => setUserStatus(s)}
+          options={[
+            { value: 'online', label: 'Online', dot: 'bg-green-500' },
+            { value: 'idle', label: 'Idle', icon: <Moon size={14} /> },
+            { value: 'invisible', label: 'Offline', icon: <InvisibleIcon size={14} /> },
+          ]}
+        />
+      </Section>
+
+      <Section
+        icon={Shield}
+        title="Private account"
+        description="Only approved followers can see your profile and uploads."
+        aside={
+          <div className="flex items-center gap-2">
+            {privacyLoading && <Spinner />}
+            <BrutalToggle
+              label="Private account"
+              checked={Boolean(user?.isPrivate)}
+              onChange={() => handlePrivacyToggle()}
+              disabled={privacyLoading}
+            />
+          </div>
+        }
+      />
+
+      <Section icon={Globe} title={t('settings.language.title')} description={t('settings.language.subtitle')}>
+        <ChoiceChips
+          label={t('settings.language.title')}
+          value={(['en', 'ko', 'ja'].includes(i18n.language) ? i18n.language : 'en') as 'en' | 'ko' | 'ja'}
+          onChange={(lang) => i18n.changeLanguage(lang)}
+          options={(['en', 'ko', 'ja'] as const).map((lang) => ({ value: lang, label: t(`settings.language.${lang}`) }))}
+        />
+      </Section>
+
+      <Section icon={Mail} title="Change email">
         <form onSubmit={handleEmailSubmit} className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">New Email</label>
+            <FieldLabel htmlFor="settings-new-email">New email</FieldLabel>
             <input
+              id="settings-new-email"
               type="email"
               value={emailForm.newEmail}
               onChange={(e) => handleEmailChange('newEmail', e.target.value)}
-              className="w-full px-4 py-3 bg-white border border-gray-300 rounded-lg text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              placeholder="Enter new email"
+              className={brutalInput}
+              placeholder="you@example.com"
               required
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Current Password</label>
+            <FieldLabel htmlFor="settings-email-password">Current password</FieldLabel>
             <input
+              id="settings-email-password"
               type="password"
               value={emailForm.password}
               onChange={(e) => handleEmailChange('password', e.target.value)}
-              className="w-full px-4 py-3 bg-white border border-gray-300 rounded-lg text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className={brutalInput}
               placeholder="Enter current password"
               required
             />
           </div>
-          <button
-            type="submit"
-            disabled={isLoading}
-            className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors flex items-center space-x-2"
-          >
-            {isLoading ? (
-              <>
-                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                <span>Updating...</span>
-              </>
-            ) : (
-              <>
-                <Save size={16} />
-                <span>Update Email</span>
-              </>
-            )}
-          </button>
+          <BrutalButton type="submit" disabled={isLoading}>
+            {isLoading ? <><Spinner light /> Updating…</> : <><Save size={16} /> Update email</>}
+          </BrutalButton>
         </form>
-      </div>
+      </Section>
+
+      <Section
+        icon={Trash2}
+        tone="danger"
+        title="Delete account"
+        description="Permanently delete your account and all your data. This can't be undone."
+      >
+        {!showDeleteConfirm ? (
+          <BrutalButton tone="danger" onClick={() => setShowDeleteConfirm(true)} disabled={deleteLoading}>
+            <Trash2 size={16} /> Delete account
+          </BrutalButton>
+        ) : (
+          <div className="p-4 rounded-xl border-2 border-black bg-white space-y-3">
+            <p className="text-sm font-bold text-black">Are you sure? Your profile, tracks and messages will be deleted for good.</p>
+            <div className="flex flex-wrap gap-2">
+              <BrutalButton tone="danger" onClick={handleDeleteAccount} disabled={deleteLoading}>
+                {deleteLoading ? <><Spinner /> Deleting…</> : 'Yes, delete my account'}
+              </BrutalButton>
+              <BrutalButton tone="white" onClick={() => setShowDeleteConfirm(false)} disabled={deleteLoading}>
+                Cancel
+              </BrutalButton>
+            </div>
+          </div>
+        )}
+      </Section>
     </div>
   );
 
   const renderSecurityTab = () => (
-    <div className="space-y-6">
-      <div className="bg-gray-50 rounded-lg p-6 border border-gray-200">
-        <p className="text-lg font-semibold text-gray-800 mb-4 flex items-center">
-          <Lock className="mr-2 text-blue-600" />
-          Change Password
-        </p>
+    <div className="space-y-5">
+      <Section icon={Lock} title="Change password">
         <form onSubmit={handlePasswordSubmit} className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Current Password</label>
-            <div className="relative">
-              <input
-                type={showCurrentPassword ? 'text' : 'password'}
-                value={passwordForm.currentPassword}
-                onChange={(e) => handlePasswordChange('currentPassword', e.target.value)}
-                className="w-full px-4 py-3 pr-10 bg-white border border-gray-300 rounded-lg text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="Enter current password"
-                required
-              />
-              <button
-                type="button"
-                onClick={() => setShowCurrentPassword(!showCurrentPassword)}
-                className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-500 hover:text-gray-700"
-              >
-                {showCurrentPassword ? <EyeOff size={16} /> : <Eye size={16} />}
-              </button>
-            </div>
+            <FieldLabel htmlFor="settings-current-password">Current password</FieldLabel>
+            <PasswordInput
+              id="settings-current-password"
+              value={passwordForm.currentPassword}
+              onChange={(v) => handlePasswordChange('currentPassword', v)}
+              placeholder="Enter current password"
+              visible={showCurrentPassword}
+              onToggleVisible={() => setShowCurrentPassword(!showCurrentPassword)}
+            />
           </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">New Password</label>
-            <div className="relative">
-              <input
-                type={showNewPassword ? 'text' : 'password'}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <FieldLabel htmlFor="settings-new-password">New password</FieldLabel>
+              <PasswordInput
+                id="settings-new-password"
                 value={passwordForm.newPassword}
-                onChange={(e) => handlePasswordChange('newPassword', e.target.value)}
-                className="w-full px-4 py-3 pr-10 bg-white border border-gray-300 rounded-lg text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="Enter new password"
-                required
+                onChange={(v) => handlePasswordChange('newPassword', v)}
+                placeholder="New password"
+                visible={showNewPassword}
+                onToggleVisible={() => setShowNewPassword(!showNewPassword)}
               />
-              <button
-                type="button"
-                onClick={() => setShowNewPassword(!showNewPassword)}
-                className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-500 hover:text-gray-700"
-              >
-                {showNewPassword ? <EyeOff size={16} /> : <Eye size={16} />}
-              </button>
             </div>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Confirm New Password</label>
-            <div className="relative">
-              <input
-                type={showConfirmPassword ? 'text' : 'password'}
+            <div>
+              <FieldLabel htmlFor="settings-confirm-password">Confirm new password</FieldLabel>
+              <PasswordInput
+                id="settings-confirm-password"
                 value={passwordForm.confirmPassword}
-                onChange={(e) => handlePasswordChange('confirmPassword', e.target.value)}
-                className="w-full px-4 py-3 pr-10 bg-white border border-gray-300 rounded-lg text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="Confirm new password"
-                required
+                onChange={(v) => handlePasswordChange('confirmPassword', v)}
+                placeholder="Repeat new password"
+                visible={showConfirmPassword}
+                onToggleVisible={() => setShowConfirmPassword(!showConfirmPassword)}
               />
-              <button
-                type="button"
-                onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-500 hover:text-gray-700"
-              >
-                {showConfirmPassword ? <EyeOff size={16} /> : <Eye size={16} />}
-              </button>
             </div>
           </div>
-          <button
-            type="submit"
-            disabled={isLoading}
-            className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors flex items-center space-x-2"
-          >
-            {isLoading ? (
-              <>
-                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                <span>Updating...</span>
-              </>
-            ) : (
-              <>
-                <Save size={16} />
-                <span>Update Password</span>
-              </>
-            )}
-          </button>
+          <BrutalButton type="submit" disabled={isLoading}>
+            {isLoading ? <><Spinner light /> Updating…</> : <><Save size={16} /> Update password</>}
+          </BrutalButton>
         </form>
-      </div>
+      </Section>
 
-      {/* Forgot password - reset via email */}
-      <div className="bg-gray-50 rounded-lg p-6 border border-gray-200">
-        <p className="text-lg font-semibold text-gray-800 mb-2 flex items-center">
-          <Mail className="mr-2 text-blue-600" />
-          Forgot your password?
-        </p>
-        <p className="text-gray-600 text-sm mb-4">
-          Enter your account email and we&apos;ll send you a link to reset your password.
-        </p>
+      <Section
+        icon={KeyRound}
+        title="Forgot your password?"
+        description="We'll email you a link to reset it."
+      >
         {resetPasswordSent ? (
-          <div className="p-3 bg-green-50 border border-green-200 rounded-lg text-green-800 text-sm flex items-center space-x-2">
-            <Check size={16} />
-            <span>Check your email for a link to reset your password. The link will expire after a short time.</span>
+          <div className="flex items-start gap-2 p-3 rounded-xl border-2 border-black bg-green-200 text-sm text-black">
+            <Check size={16} className="mt-0.5 flex-shrink-0" />
+            <span>Check your email for a reset link. It expires after a short time.</span>
           </div>
         ) : (
-          <form onSubmit={handleForgotPasswordSubmit} className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Email address</label>
+          <form onSubmit={handleForgotPasswordSubmit} className="flex flex-col sm:flex-row gap-3 sm:items-end">
+            <div className="flex-1">
+              <FieldLabel htmlFor="settings-reset-email">Email address</FieldLabel>
               <input
+                id="settings-reset-email"
                 type="email"
                 value={resetPasswordEmail}
                 onChange={(e) => setResetPasswordEmail(e.target.value)}
-                className="w-full px-4 py-3 bg-white border border-gray-300 rounded-lg text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className={brutalInput}
                 placeholder="Enter your email"
                 disabled={resetPasswordLoading}
               />
             </div>
-            {resetPasswordError && (
-              <p className="text-sm text-red-600">{resetPasswordError}</p>
-            )}
-            <button
-              type="submit"
-              disabled={resetPasswordLoading}
-              className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors flex items-center space-x-2"
-            >
-              {resetPasswordLoading ? (
-                <>
-                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                  <span>Sending...</span>
-                </>
-              ) : (
-                <>
-                  <Mail size={16} />
-                  <span>Send reset link</span>
-                </>
-              )}
-            </button>
+            <BrutalButton type="submit" tone="white" disabled={resetPasswordLoading}>
+              {resetPasswordLoading ? <><Spinner /> Sending…</> : <><Mail size={16} /> Send link</>}
+            </BrutalButton>
           </form>
         )}
-      </div>
+        {resetPasswordError && <p className="mt-2 text-sm font-semibold text-red-600">{resetPasswordError}</p>}
+      </Section>
 
-      {/* Two-Factor Authentication */}
-      <div className="bg-gray-50 rounded-lg p-6 border border-gray-200">
-        <p className="text-lg font-semibold text-gray-800 mb-2 flex items-center">
-          <Shield className="mr-2 text-blue-600" size={20} />
-          Two-Factor Authentication
-        </p>
-        <p className="text-gray-600 text-sm mb-4">
-          Add a second layer of security. You'll need an authenticator app (Google Authenticator, Authy) to sign in.
-        </p>
-
+      <Section
+        icon={Smartphone}
+        title="Two-factor authentication"
+        description="Use an authenticator app (Google Authenticator, Authy) as a second step when you sign in."
+        aside={mfaEnabled && mfaStep === 'idle' ? <Sticker rotate={3} className="!bg-green-300">On</Sticker> : undefined}
+      >
         {mfaStep === 'idle' && (
           mfaEnabled ? (
-            <div className="space-y-3">
-              <div className="flex items-center gap-2 text-green-600 text-sm font-medium">
-                <Check size={16} />
-                Two-factor authentication is enabled
-              </div>
-              <button
-                onClick={handleDisableMFA}
-                disabled={mfaLoading}
-                className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50 text-sm transition-colors"
-              >
-                {mfaLoading ? 'Disabling...' : 'Disable 2FA'}
-              </button>
-            </div>
+            <BrutalButton tone="danger" onClick={handleDisableMFA} disabled={mfaLoading}>
+              {mfaLoading ? <><Spinner /> Turning off…</> : 'Turn off 2FA'}
+            </BrutalButton>
           ) : (
-            <button
-              onClick={handleEnableMFA}
-              disabled={mfaLoading}
-              className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 text-sm transition-colors"
-            >
-              {mfaLoading ? 'Setting up...' : 'Enable 2FA'}
-            </button>
+            <BrutalButton tone="teal" onClick={handleEnableMFA} disabled={mfaLoading}>
+              {mfaLoading ? <><Spinner /> Setting up…</> : <><Shield size={16} /> Turn on 2FA</>}
+            </BrutalButton>
           )
         )}
 
         {mfaStep === 'setup' && mfaQRCode && (
-          <div className="space-y-4">
-            <p className="text-sm text-gray-700">Scan this QR code with your authenticator app:</p>
+          <div className="flex flex-col sm:flex-row gap-5">
             <img
               src={mfaQRCode}
-              alt="2FA QR Code"
-              className="w-40 h-40 rounded-lg border border-gray-200 bg-white p-2"
+              alt="2FA QR code"
+              className="w-40 h-40 rounded-xl border-2 border-black bg-white p-2 flex-shrink-0"
+              style={hardShadow(3)}
             />
-            {mfaSecret && (
-              <p className="text-xs text-gray-500">
-                Can't scan? Manual code: <span className="font-mono font-medium text-gray-800 select-all">{mfaSecret}</span>
-              </p>
-            )}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Enter the 6-digit code to confirm setup
-              </label>
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  inputMode="numeric"
-                  maxLength={6}
-                  value={mfaCode}
-                  onChange={(e) => setMfaCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                  placeholder="000000"
-                  className="w-32 px-3 py-2 border border-gray-300 rounded-lg text-center font-mono text-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-                <button
-                  onClick={handleVerifyMFA}
-                  disabled={mfaLoading || mfaCode.length !== 6}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 text-sm transition-colors"
-                >
-                  {mfaLoading ? 'Verifying...' : 'Verify & Enable'}
-                </button>
-                <button
-                  onClick={() => { setMfaStep('idle'); setMfaQRCode(null); setMfaCode(''); setMfaError(null); }}
-                  className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 text-sm transition-colors"
-                >
-                  Cancel
-                </button>
+            <div className="space-y-3 flex-1">
+              <p className="text-sm text-black">1. Scan this QR code with your authenticator app.</p>
+              {mfaSecret && (
+                <p className="text-xs text-black/60">
+                  Can't scan? Enter this code: <span className="font-mono font-bold text-black select-all break-all">{mfaSecret}</span>
+                </p>
+              )}
+              <div>
+                <FieldLabel htmlFor="settings-mfa-code">2. Enter the 6-digit code</FieldLabel>
+                <div className="flex flex-wrap gap-2">
+                  <input
+                    id="settings-mfa-code"
+                    type="text"
+                    inputMode="numeric"
+                    maxLength={6}
+                    value={mfaCode}
+                    onChange={(e) => setMfaCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                    placeholder="000000"
+                    className={`${brutalInput} !w-36 text-center font-mono text-lg tracking-[0.3em]`}
+                  />
+                  <BrutalButton onClick={handleVerifyMFA} disabled={mfaLoading || mfaCode.length !== 6}>
+                    {mfaLoading ? <><Spinner light /> Verifying…</> : 'Verify & turn on'}
+                  </BrutalButton>
+                  <BrutalButton
+                    tone="white"
+                    onClick={() => { setMfaStep('idle'); setMfaQRCode(null); setMfaCode(''); setMfaError(null); }}
+                  >
+                    Cancel
+                  </BrutalButton>
+                </div>
               </div>
             </div>
           </div>
         )}
 
-        {mfaError && <p className="mt-3 text-sm text-red-600">{mfaError}</p>}
-      </div>
+        {mfaError && <p className="mt-3 text-sm font-semibold text-red-600">{mfaError}</p>}
+      </Section>
 
-      <div className="bg-gray-50 rounded-lg p-6 border border-gray-200">
-        <p className="text-lg font-semibold text-gray-800 mb-4 flex items-center">
-          <LogOut className="mr-2 text-red-600" />
-          Logout
-        </p>
-        <p className="text-gray-600 mb-4">Sign out of your account</p>
-        <button
-          onClick={handleLogout}
-          className="px-6 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors flex items-center space-x-2"
-        >
-          <LogOut size={16} />
-          <span>Logout</span>
-        </button>
-      </div>
-    </div>
-  );
-
-  const renderNotificationsTab = () => (
-    <div className="space-y-6">
-      <div className="bg-gray-50 rounded-lg p-6 border border-gray-200">
-        <p className="text-lg font-semibold text-gray-800 mb-4 flex items-center">
-          <Bell className="mr-2 text-blue-600" />
-          Notification Preferences
-        </p>
-        <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-gray-800 font-medium">New Music</p>
-              <p className="text-gray-600 text-sm">Get notified when artists you follow release new music</p>
-            </div>
-            <label className="relative inline-flex items-center cursor-pointer">
-              <input type="checkbox" defaultChecked className="sr-only peer" />
-              <div className="w-11 h-6 bg-gray-300 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
-            </label>
-          </div>
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-gray-800 font-medium">Comments</p>
-              <p className="text-gray-600 text-sm">Get notified when someone comments on your posts</p>
-            </div>
-            <label className="relative inline-flex items-center cursor-pointer">
-              <input type="checkbox" defaultChecked className="sr-only peer" />
-              <div className="w-11 h-6 bg-gray-300 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
-            </label>
-          </div>
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-gray-800 font-medium">Messages</p>
-              <p className="text-gray-600 text-sm">Get notified when you receive new messages</p>
-            </div>
-            <label className="relative inline-flex items-center cursor-pointer">
-              <input type="checkbox" className="sr-only peer" />
-              <div className="w-11 h-6 bg-gray-300 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
-            </label>
-          </div>
-        </div>
-      </div>
+      <Section icon={LogOut} title="Log out" description="Sign out of Re-Mixed on this device.">
+        <BrutalButton tone="white" onClick={handleLogout}>
+          <LogOut size={16} /> Log out
+        </BrutalButton>
+      </Section>
     </div>
   );
 
@@ -900,8 +787,9 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, initialTab }) => 
     // Use the DB subscription record as ground truth — the store's subscriptionTier
     // can be stale if the webhook hasn't updated it yet.
     const isPro =
-      user?.subscriptionTier === 'pro' ||
+      user?.subscriptionTier === 'artist' ||
       Boolean(proSubscription && (proSubscription.status === 'active' || proSubscription.status === 'past_due'));
+    const isComplimentaryAdmin = Boolean((user as { isAdmin?: boolean })?.isAdmin && !proSubscription);
 
     const handleOpenPortal = async () => {
       setPortalLoading(true);
@@ -917,47 +805,39 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, initialTab }) => 
 
     if (proSubLoading) {
       return (
-        <div className="flex items-center justify-center py-16 gap-2 text-gray-400 text-sm">
-          <div className="w-4 h-4 border-2 border-gray-400 border-t-transparent rounded-full animate-spin" />
-          Loading subscription…
+        <div className="flex items-center justify-center py-16 gap-2 text-black/60 text-sm">
+          <Spinner /> Loading subscription…
         </div>
       );
     }
 
     return (
-      <div className="space-y-4">
-
-        {/* Current plan card */}
-        <div className={`rounded-xl border p-5 ${isPro ? 'bg-yellow-50 border-yellow-200' : 'bg-gray-50 border-gray-200'}`}>
-          <div className="flex items-center justify-between mb-1">
-            <div className="flex items-center gap-2">
-              <div className={`w-8 h-8 rounded-full flex items-center justify-center ${isPro ? 'bg-yellow-100' : 'bg-gray-200'}`}>
-                <Star size={15} className={isPro ? 'text-yellow-500' : 'text-gray-400'} />
-              </div>
-              <p className="font-semibold text-gray-800">{isPro ? 'Remixr Pro' : 'Free plan'}</p>
-            </div>
-            <span className={`text-xs px-2.5 py-1 rounded-full font-semibold ${isPro ? 'bg-green-100 text-green-700' : 'bg-gray-200 text-gray-600'}`}>
-              {isPro ? 'Active' : 'Free'}
-            </span>
-          </div>
+      <div className="space-y-5">
+        {/* Current plan */}
+        <div
+          className={`relative rounded-2xl border-2 border-black p-5 ${isPro ? 'bg-teal-300' : 'bg-white'}`}
+          style={hardShadow(5)}
+        >
+          {isPro && (
+            <Sticker rotate={6} className="absolute -top-3 right-5">
+              <Sparkles size={12} /> {proSubscription?.status === 'past_due' ? 'Payment due' : 'Active'}
+            </Sticker>
+          )}
+          <p className="text-xs font-bold uppercase tracking-widest text-black/70">Your plan</p>
+          <p className="font-kotra text-3xl text-black mt-1">{isPro ? 'Re-Mixed Pro' : 'Free'}</p>
           {isPro && proSubscription && (
-            <p className="text-sm text-gray-500 capitalize ml-10">
-              {proSubscription.plan} plan
-              {' · '}
-              {proSubscription.cancelAtPeriodEnd ? 'Cancels' : 'Renews'}{' '}
+            <p className="text-sm text-black/80 mt-1 capitalize">
+              {proSubscription.plan} plan · {proSubscription.cancelAtPeriodEnd ? 'ends' : 'renews'}{' '}
               {new Date(proSubscription.currentPeriodEnd).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
             </p>
           )}
-          {!isPro && (
-            <p className="text-sm text-gray-500 ml-10">Up to 10 tracks · 2 albums · core features</p>
-          )}
+          {!isPro && <p className="text-sm text-black/60 mt-1">Up to 10 tracks · 2 albums · core features</p>}
         </div>
 
-        {/* Cancellation notice */}
         {isPro && proSubscription?.cancelAtPeriodEnd && (
-          <div className="flex items-start gap-3 bg-amber-50 border border-amber-200 rounded-xl p-4">
-            <Star size={16} className="text-amber-500 flex-shrink-0 mt-0.5" />
-            <p className="text-sm text-amber-700">
+          <div className="flex items-start gap-3 p-4 rounded-xl border-2 border-black bg-yellow-200">
+            <Star size={16} className="flex-shrink-0 mt-0.5" />
+            <p className="text-sm text-black">
               Your Pro access ends on{' '}
               <strong>
                 {new Date(proSubscription.currentPeriodEnd).toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' })}
@@ -967,67 +847,56 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, initialTab }) => 
           </div>
         )}
 
-        {/* Manage subscription (Pro users) */}
         {isPro && (
-          <div className="bg-gray-50 border border-gray-200 rounded-xl p-5 space-y-3">
-            <div>
-              <p className="text-sm font-semibold text-gray-800 mb-0.5">Manage subscription</p>
-              <p className="text-xs text-gray-500">
-                {(user as { isAdmin?: boolean })?.isAdmin && !proSubscription
-                  ? 'Admin account — Pro access is permanent and requires no billing.'
-                  : 'Update your payment method, download invoices, or cancel — all through the Stripe billing portal.'}
-              </p>
-            </div>
-            {!((user as { isAdmin?: boolean })?.isAdmin && !proSubscription) && (
+          <Section
+            icon={CreditCard}
+            title="Billing"
+            description={
+              isComplimentaryAdmin
+                ? 'Admin account — Pro access is permanent and needs no billing.'
+                : 'Update your payment method, download invoices, or cancel in the Stripe billing portal.'
+            }
+          >
+            {!isComplimentaryAdmin && (
               <>
-                <button
-                  onClick={handleOpenPortal}
-                  disabled={portalLoading}
-                  className="flex items-center gap-2 px-4 py-2.5 bg-green-300 hover:bg-orange-600 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
-                >
-                  {portalLoading ? (
-                    <><div className="w-3.5 h-3.5 border-2 border-white/60 border-t-transparent rounded-full animate-spin" /> Opening portal…</>
-                  ) : (
-                    <>Open billing portal <span aria-hidden>↗</span></>
-                  )}
-                </button>
+                <BrutalButton tone="white" onClick={handleOpenPortal} disabled={portalLoading}>
+                  {portalLoading ? <><Spinner /> Opening portal…</> : <>Open billing portal <span aria-hidden>↗</span></>}
+                </BrutalButton>
                 {portalError && (
-                  <div className="space-y-1.5">
-                    <p className="text-xs text-red-500">{portalError}</p>
-                    <p className="text-xs text-gray-500">
-                      If the portal won't open, contact support with the email on your account.
+                  <div className="mt-3 space-y-1">
+                    <p className="text-sm font-semibold text-red-600">{portalError}</p>
+                    <p className="text-xs text-black/60">
+                      If the portal won't open, email remix.official0714@gmail.com from the address on your account.
                     </p>
                   </div>
                 )}
               </>
             )}
-          </div>
+          </Section>
         )}
 
-        {/* Upgrade CTA (Free users) */}
         {!isPro && (
-          <div className="bg-gray-50 border border-gray-200 rounded-xl p-5 space-y-4">
+          <div className="rounded-2xl border-2 border-black bg-white p-5 space-y-4" style={hardShadow(4)}>
             <div>
-              <p className="text-sm font-semibold text-gray-800 mb-1">Unlock Remixr Pro</p>
-              <p className="text-xs text-gray-500">Unlimited uploads, priority Discover placement, analytics, enhanced profile, and more.</p>
+              <p className="text-base font-bold text-black">Unlock Re-Mixed Pro</p>
+              <p className="text-sm text-black/60">Unlimited uploads, priority in Discover, analytics, an enhanced profile and more.</p>
             </div>
-            <div className="flex gap-2 text-sm">
-              <div className="flex-1 bg-white border border-gray-200 rounded-lg px-3 py-2 text-center">
-                <p className="font-bold text-gray-900">{PRICING.monthly.display}</p>
-                <p className="text-xs text-gray-500">per month</p>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="rounded-xl border-2 border-black bg-white px-3 py-3 text-center">
+                <p className="font-kotra text-2xl text-black">{PRICING.monthly.display}</p>
+                <p className="text-xs text-black/60">per month</p>
               </div>
-              <div className="flex-1 bg-yellow-50 border border-yellow-200 rounded-lg px-3 py-2 text-center relative">
-                <span className="absolute -top-2 left-1/2 -translate-x-1/2 text-[10px] bg-yellow-400 text-yellow-900 px-1.5 py-0.5 rounded-full font-bold whitespace-nowrap">2 months free</span>
-                <p className="font-bold text-gray-900 mt-1">{PRICING.yearly.display}</p>
-                <p className="text-xs text-gray-500">per month, billed yearly</p>
+              <div className="relative rounded-xl border-2 border-black bg-teal-300 px-3 py-3 text-center">
+                <Sticker rotate={5} className="absolute -top-3 left-1/2 -translate-x-1/2 !text-[10px] !px-2 !py-0.5 whitespace-nowrap">
+                  2 months free
+                </Sticker>
+                <p className="font-kotra text-2xl text-black">{PRICING.yearly.display}</p>
+                <p className="text-xs text-black/70">per month, billed yearly</p>
               </div>
             </div>
-            <button
-              onClick={() => { setSettingsOpen(false); navigate('/upgrade'); }}
-              className="w-full py-2.5 bg-yellow-500 hover:bg-yellow-400 text-gray-900 rounded-lg font-semibold text-sm transition-colors"
-            >
-              View plans and upgrade
-            </button>
+            <BrutalButton className="w-full" onClick={() => { setSettingsOpen(false); navigate('/upgrade'); }}>
+              <Sparkles size={16} /> See plans & upgrade
+            </BrutalButton>
           </div>
         )}
       </div>
@@ -1040,8 +909,6 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, initialTab }) => 
         return renderAccountTab();
       case 'security':
         return renderSecurityTab();
-      case 'notifications':
-        return renderNotificationsTab();
       case 'pro':
         return renderProTab();
       default:
@@ -1049,82 +916,129 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, initialTab }) => 
     }
   };
 
+  const activeTabLabel = tabs.find((tb) => tb.id === activeTab)?.label ?? '';
+
   return (
     <AnimatePresence>
       {isOpen && (
-        <div className="fixed inset-0 bg-black bg-opacity-70 z-50 flex items-center justify-center p-4">
+        <motion.div
+          className="fixed inset-0 bg-black/60 backdrop-blur-[2px] z-50 flex items-center justify-center p-3 sm:p-4"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          onClick={(e) => { if (e.target === e.currentTarget) setSettingsOpen(false); }}
+        >
           <motion.div
-            initial={{ opacity: 0, scale: 0.9 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.9 }}
-            className="bg-white rounded-lg shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-hidden border-2 border-gray-200"
+            role="dialog"
+            aria-modal="true"
+            aria-label={t('settings.title')}
+            initial={{ opacity: 0, y: 24, scale: 0.97 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 24, scale: 0.97 }}
+            transition={{ type: 'spring', stiffness: 320, damping: 28 }}
+            className="relative w-full max-w-3xl max-h-[92vh] md:h-[min(720px,88vh)] flex flex-col overflow-hidden rounded-2xl border-2 border-black bg-[#faf6ec]"
+            style={hardShadow(8)}
           >
             {/* Header */}
-            <div className="flex items-center justify-between p-6 border-b border-gray-200">
-              <p className="text-2xl font-bold text-gray-800">{t('settings.title')}</p>
+            <div className="flex items-center gap-3 px-5 py-4 border-b-2 border-black bg-white">
+              <img
+                src={getAvatarUrl(user?.avatar)}
+                alt=""
+                className="w-10 h-10 rounded-xl object-cover border-2 border-black"
+              />
+              <div className="flex-1 min-w-0">
+                <p className="font-kotra text-2xl text-black leading-none">{t('settings.title')}</p>
+                {user?.username && <p className="text-xs text-black/60 truncate mt-1">@{user.username}</p>}
+              </div>
               <button
+                type="button"
                 onClick={() => setSettingsOpen(false)}
-                className="p-2 rounded-lg hover:bg-gray-100 transition-colors"
+                className="p-2 rounded-xl border-2 border-black bg-white shadow-[2px_2px_0_0_#000] active:translate-x-[2px] active:translate-y-[2px] active:shadow-none transition-all"
+                aria-label="Close settings"
               >
-                <X size={24} className="text-gray-600" />
+                <X size={18} className="text-black" />
               </button>
             </div>
 
-            {/* Success Message */}
-            {successMessage && (
-              <motion.div
-                initial={{ opacity: 0, y: -10 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="mx-6 mt-4 p-3 bg-green-600 text-white rounded-lg flex items-center space-x-2"
+            <div className="flex flex-col md:flex-row flex-1 min-h-0">
+              {/* Tabs — sidebar on desktop, scrollable row on phones */}
+              <nav
+                aria-label="Settings sections"
+                className="flex md:flex-col gap-2 p-3 md:p-4 md:w-52 flex-shrink-0 overflow-x-auto border-b-2 md:border-b-0 md:border-r-2 border-black bg-white/60"
               >
-                <Check size={16} />
-                <span>{successMessage}</span>
-              </motion.div>
-            )}
+                {tabs.map((tab) => {
+                  const Icon = tab.icon;
+                  const active = activeTab === tab.id;
+                  return (
+                    <button
+                      key={tab.id}
+                      type="button"
+                      onClick={() => setActiveTab(tab.id as typeof activeTab)}
+                      aria-current={active ? 'page' : undefined}
+                      className={`flex items-center gap-2.5 px-3 py-2.5 rounded-xl border-2 text-sm font-bold whitespace-nowrap transition-all ${
+                        active
+                          ? 'bg-black text-white border-black'
+                          : 'bg-transparent text-black border-transparent hover:border-black hover:bg-white'
+                      }`}
+                    >
+                      <Icon size={16} />
+                      {tab.label}
+                      {tab.id === 'pro' && user?.subscriptionTier === 'artist' && (
+                        <span className={`ml-auto text-[10px] px-1.5 py-0.5 rounded border ${active ? 'border-white/60' : 'border-black bg-teal-300'}`}>
+                          PRO
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+              </nav>
 
-            {/* Error Message */}
-            {errorMessage && (
-              <motion.div
-                initial={{ opacity: 0, y: -10 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="mx-6 mt-4 p-3 bg-red-600 text-white rounded-lg flex items-center space-x-2"
-              >
-                <X size={16} />
-                <span>{errorMessage}</span>
-              </motion.div>
-            )}
+              {/* Content */}
+              <div className="flex-1 min-h-0 overflow-y-auto p-4 sm:p-6">
+                <h2 className="sr-only">{activeTabLabel}</h2>
 
-            {/* Tabs */}
-            <div className="flex border-b border-gray-200">
-              {tabs.map((tab) => {
-                const Icon = tab.icon;
-                return (
-                  <button
-                    key={tab.id}
-                    onClick={() => setActiveTab(tab.id as any)}
-                    className={`flex-1 flex items-center justify-center px-4 py-3 font-medium text-sm transition-colors ${
-                      activeTab === tab.id
-                        ? 'bg-blue-600 text-white border-b-2 border-blue-600'
-                        : 'bg-gray-50 text-gray-600 hover:bg-gray-100 hover:text-gray-800'
-                    }`}
-                  >
-                    <Icon size={16} className="mr-2" />
-                    <span className="text-sm">{tab.label}</span>
-                  </button>
-                );
-              })}
-            </div>
+                <AnimatePresence>
+                  {successMessage && (
+                    <motion.div
+                      initial={{ opacity: 0, y: -8 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -8 }}
+                      role="status"
+                      className="mb-5 flex items-center gap-2 p-3 rounded-xl border-2 border-black bg-green-300 text-sm font-bold text-black"
+                      style={hardShadow(3)}
+                    >
+                      <Check size={16} /> {successMessage}
+                    </motion.div>
+                  )}
+                  {errorMessage && (
+                    <motion.div
+                      initial={{ opacity: 0, y: -8 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -8 }}
+                      role="alert"
+                      className="mb-5 flex items-center gap-2 p-3 rounded-xl border-2 border-black bg-red-300 text-sm font-bold text-black"
+                      style={hardShadow(3)}
+                    >
+                      <X size={16} /> {errorMessage}
+                    </motion.div>
+                  )}
+                </AnimatePresence>
 
-            {/* Content */}
-            <div className="p-6 overflow-y-auto max-h-[60vh]">
-              {renderTabContent()}
+                <motion.div
+                  key={activeTab}
+                  initial={{ opacity: 0, x: 8 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ duration: 0.15 }}
+                >
+                  {renderTabContent()}
+                </motion.div>
+              </div>
             </div>
           </motion.div>
-        </div>
+        </motion.div>
       )}
     </AnimatePresence>
   );
 };
 
-export default SettingsModal; 
-
+export default SettingsModal;

@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { createStorefrontCheckout, getDownloadUrl as apiGetDownloadUrl } from './api';
 
 export type LicenseType = 'personal' | 'commercial' | 'exclusive';
 export type StoreSortBy = 'newest' | 'popular' | 'price_asc' | 'price_desc';
@@ -74,18 +75,6 @@ export interface CreateListingData {
 }
 
 const TABLE_MISSING = 'does not exist';
-
-// Parses a fetch Response as JSON defensively. Avoids "Unexpected end of JSON
-// input" when the server returns an empty body or an HTML error page.
-async function parseJsonResponse(response: Response, fallbackMessage: string): Promise<any> {
-  const text = await response.text();
-  let payload: any = {};
-  try { if (text) payload = JSON.parse(text); } catch {}
-  if (!response.ok) {
-    throw new Error(payload.error ?? `${fallbackMessage} (${response.status})`);
-  }
-  return payload;
-}
 
 export class StorefrontService {
   static async getListings(filters?: Partial<StoreFilters>): Promise<StoreListing[]> {
@@ -229,33 +218,12 @@ export class StorefrontService {
   // The buyer is redirected to Stripe; on success Stripe redirects back to
   // /storefront?checkout_success=1&listing_id=<id>.
   static async initiateStripeCheckout(listingId: string): Promise<{ url: string; sessionId: string }> {
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session?.access_token) throw new Error('Not authenticated');
-
-    const response = await fetch('/api/create-storefront-checkout', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${session.access_token}`,
-      },
-      body: JSON.stringify({ listingId }),
-    });
-
-    const payload = await parseJsonResponse(response, 'Checkout failed');
-    return payload;
+    return createStorefrontCheckout(listingId);
   }
 
   // Returns a 1-hour signed download URL for a listing the buyer already owns.
   static async getDownloadUrl(listingId: string): Promise<{ downloadUrl: string; filename: string; expiresAt: string }> {
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session?.access_token) throw new Error('Not authenticated');
-
-    const response = await fetch(`/api/download-purchase?listing_id=${encodeURIComponent(listingId)}`, {
-      headers: { 'Authorization': `Bearer ${session.access_token}` },
-    });
-
-    const payload = await parseJsonResponse(response, 'Download failed');
-    return payload;
+    return apiGetDownloadUrl(listingId);
   }
 
   static async getPurchaseHistory(buyerId: string): Promise<StorePurchaseWithDetails[]> {
@@ -264,6 +232,7 @@ export class StorefrontService {
         .from('store_purchases' as any)
         .select(`
           id, listing_id, price, license_type, purchased_at,
+          track_title, track_artist, track_cover,
           store_listings:listing_id (
             tracks:track_id (title, artist, cover),
             users:seller_id (username, artist_name)
@@ -288,9 +257,11 @@ export class StorefrontService {
           price:            Number(r.price),
           licenseType:      r.license_type as LicenseType,
           purchasedAt:      r.purchased_at,
-          title:            track.title       ?? 'Unknown Track',
-          artist:           track.artist      ?? 'Unknown Artist',
-          cover:            track.cover       ?? null,
+          // Live track data first; the snapshot saved at purchase time covers
+          // delisted listings and tracks hidden by moderation.
+          title:            track.title  ?? r.track_title  ?? 'Unknown Track',
+          artist:           track.artist ?? r.track_artist ?? 'Unknown Artist',
+          cover:            track.cover  ?? r.track_cover  ?? null,
           sellerUsername:   seller.username   ?? '',
           sellerArtistName: seller.artist_name ?? null,
         };
@@ -340,16 +311,4 @@ export class StorefrontService {
     };
   }
 
-  private static transformPurchase(r: any): StorePurchase {
-    return {
-      id: r.id,
-      listingId: r.listing_id,
-      buyerId: r.buyer_id,
-      sellerId: r.seller_id,
-      price: Number(r.price),
-      licenseType: r.license_type as LicenseType,
-      paymentIntentId: r.payment_intent_id,
-      purchasedAt: r.purchased_at,
-    };
-  }
 }

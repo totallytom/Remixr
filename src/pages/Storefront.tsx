@@ -16,16 +16,23 @@ import {
   Percent,
   Download,
   Receipt,
+  ArrowLeft,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useStore } from '../store/useStore';
-import { supabase } from '../services/supabase';
+import {
+  createStripeAccount,
+  getStripeAccountStatus,
+  getStripeDashboardLink,
+  StripeAccountStatus,
+} from '../services/api';
 import { useBrowseStorefront, useArtistStorefront, usePurchaseHistory } from '../hooks/useStorefront';
 import { StoreListing, LicenseType, CreateListingData, StorePurchaseWithDetails, StorefrontService } from '../services/storefrontService';
 import StoreTrackCard from '../components/storefront/StoreTrackCard';
 import PurchaseModal from '../components/storefront/PurchaseModal';
 import StoreFiltersBar from '../components/storefront/StoreFilters';
 import { useAlerts } from '../contexts/AlertContext';
+import { REFUND_POLICY_FULL, STOREFRONT_SALES_ENABLED, SALES_PAUSED_MESSAGE } from '../config/storefrontPolicy';
 
 // ─── Add Listing Form ──────────────────────────────────────────────────────────
 
@@ -68,7 +75,7 @@ const AddListingForm: React.FC<AddListingFormProps> = ({ unlistedTracks, onAdd, 
       onSubmit={handleSubmit}
       className="p-4 bg-dark-700/50 rounded-xl border border-white/10 space-y-3"
     >
-      <h3 className="text-sm font-semibold text-white">List a Track for Sale</h3>
+      <h3 className="text-sm font-semibold text-black">List a Track for Sale</h3>
 
       {unlistedTracks.length === 0 ? (
         <p className="text-xs text-black py-2">All your tracks are already listed.</p>
@@ -83,7 +90,7 @@ const AddListingForm: React.FC<AddListingFormProps> = ({ unlistedTracks, onAdd, 
 
           <div className="flex gap-2">
             <div className="flex-1">
-              <label className="text-xs text-white mb-1 block">Price (USD)</label>
+              <label className="text-xs text-black mb-1 block">Price (USD)</label>
               <input
                 type="number"
                 min="0.99"
@@ -95,7 +102,7 @@ const AddListingForm: React.FC<AddListingFormProps> = ({ unlistedTracks, onAdd, 
               />
             </div>
             <div className="flex-1">
-              <label className="text-xs text-white/40 mb-1 block">License</label>
+              <label className="text-xs text-black/40 mb-1 block">License</label>
               <select
                 value={licenseType}
                 onChange={e => setLicenseType(e.target.value as LicenseType)}
@@ -114,14 +121,14 @@ const AddListingForm: React.FC<AddListingFormProps> = ({ unlistedTracks, onAdd, 
             <button
               type="button"
               onClick={onCancel}
-              className="flex-1 py-2 rounded-lg text-sm text-white/50 hover:text-white bg-white/5 hover:bg-white/10 transition-colors"
+              className="flex-1 py-2 rounded-lg text-sm text-black/50 hover:text-black bg-white/5 hover:bg-white/10 transition-colors"
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={isSubmitting}
-              className="flex-1 py-2 rounded-lg text-sm font-semibold text-white bg-primary-500 hover:bg-primary-400 transition-colors disabled:opacity-50"
+              className="flex-1 py-2 rounded-lg text-sm font-semibold text-black bg-primary-500 hover:bg-primary-400 transition-colors disabled:opacity-50"
             >
               {isSubmitting ? 'Listing…' : 'List Track'}
             </button>
@@ -155,14 +162,14 @@ const ListingRow: React.FC<ListingRowProps> = ({ listing, onToggle, onEditPrice 
           <img src={listing.cover} alt={listing.title} className="w-full h-full object-cover" />
         ) : (
           <div className="w-full h-full flex items-center justify-center">
-            <Music className="w-4 h-4 text-white/20" />
+            <Music className="w-4 h-4 text-black/20" />
           </div>
         )}
       </div>
 
       <div className="flex-1 min-w-0">
-        <p className="text-sm font-medium text-white truncate">{listing.title}</p>
-        <p className="text-xs text-white/40">
+        <p className="text-sm font-medium text-black truncate">{listing.title}</p>
+        <p className="text-xs text-black/40">
           ${listing.price.toFixed(2)} · {listing.licenseType} · {listing.salesCount} sold
         </p>
       </div>
@@ -170,7 +177,7 @@ const ListingRow: React.FC<ListingRowProps> = ({ listing, onToggle, onEditPrice 
       <div className="flex items-center gap-1.5 flex-shrink-0">
         <button
           onClick={() => onEditPrice(listing)}
-          className="p-1.5 rounded-lg hover:bg-white/10 text-white/40 hover:text-white transition-colors"
+          className="p-1.5 rounded-lg hover:bg-white/10 text-black/40 hover:text-black transition-colors"
           title="Edit price"
         >
           <Edit2 className="w-3.5 h-3.5" />
@@ -184,7 +191,7 @@ const ListingRow: React.FC<ListingRowProps> = ({ listing, onToggle, onEditPrice 
           {listing.isActive ? (
             <ToggleRight className="w-4 h-4 text-green-400" />
           ) : (
-            <ToggleLeft className="w-4 h-4 text-white/30" />
+            <ToggleLeft className="w-4 h-4 text-black/30" />
           )}
         </button>
       </div>
@@ -302,18 +309,18 @@ const PurchaseRow: React.FC<{ purchase: StorePurchaseWithDetails }> = ({ purchas
           <img src={purchase.cover} alt={purchase.title} className="w-full h-full object-cover" />
         ) : (
           <div className="w-full h-full flex items-center justify-center">
-            <Music className="w-5 h-5 text-white/20" />
+            <Music className="w-5 h-5 text-black/20" />
           </div>
         )}
       </div>
 
       <div className="flex-1 min-w-0">
-        <p className="text-sm font-medium text-white truncate">{purchase.title}</p>
+        <p className="text-sm font-medium text-black truncate">{purchase.title}</p>
         <div className="flex items-center gap-2 mt-0.5">
-          <p className="text-xs text-white/40 truncate">
+          <p className="text-xs text-black/40 truncate">
             {purchase.sellerArtistName || purchase.sellerUsername}
           </p>
-          <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full flex-shrink-0 ${LICENSE_BADGE[purchase.licenseType] ?? 'text-white/40 bg-white/10'}`}>
+          <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full flex-shrink-0 ${LICENSE_BADGE[purchase.licenseType] ?? 'text-black/40 bg-white/10'}`}>
             {purchase.licenseType}
           </span>
         </div>
@@ -321,13 +328,13 @@ const PurchaseRow: React.FC<{ purchase: StorePurchaseWithDetails }> = ({ purchas
       </div>
 
       <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
-        <p className="text-[10px] text-white/30">
+        <p className="text-[10px] text-black/30">
           {new Date(purchase.purchasedAt).toLocaleDateString()}
         </p>
         <button
           onClick={handleDownload}
           disabled={downloading}
-          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white bg-primary-500/20 hover:bg-primary-500/30 border border-primary-500/30 rounded-lg transition-colors disabled:opacity-50"
+          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-black bg-primary-500/20 hover:bg-primary-500/30 border border-primary-500/30 rounded-lg transition-colors disabled:opacity-50"
         >
           {downloading ? (
             <div className="w-3 h-3 border border-white border-t-transparent rounded-full animate-spin" />
@@ -360,44 +367,65 @@ const Storefront: React.FC = () => {
   const [showAddForm, setShowAddForm] = useState(false);
 
   // ── Payments tab state ───────────────────────────────────────────────────────
-  const [stripeAccountId, setStripeAccountId] = useState<string | null>(null);
+  // Checked live against Stripe: an account exists (connected) vs. it can
+  // actually take payments and pay out (ready).
+  const [payoutStatus, setPayoutStatus] = useState<StripeAccountStatus | null>(null);
   const [isConnecting, setIsConnecting] = useState(false);
   const [connectError, setConnectError] = useState<string | null>(null);
+  const payoutReady = Boolean(payoutStatus?.ready);
+
+  const refreshPayoutStatus = useCallback(async () => {
+    if (!user?.id) return;
+    try {
+      setPayoutStatus(await getStripeAccountStatus(user.id));
+    } catch (err) {
+      setConnectError(err instanceof Error ? err.message : 'Could not check your payout account');
+    }
+  }, [user?.id]);
 
   useEffect(() => {
     if (!user?.id || !isMusicianUser) return;
-    supabase
-      .from('users')
-      .select('stripe_account_id')
-      .eq('id', user.id)
-      .single()
-      .then(({ data }) => setStripeAccountId(data?.stripe_account_id ?? null))
-      .catch(() => {});
-  }, [user?.id, isMusicianUser]);
+    refreshPayoutStatus();
+  }, [user?.id, isMusicianUser, refreshPayoutStatus]);
+
+  // Back from Stripe onboarding (?stripe=return) or an expired link (?stripe=refresh).
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const stripeParam = params.get('stripe');
+    if (stripeParam !== 'return' && stripeParam !== 'refresh') return;
+    setActiveTab('payments');
+    window.history.replaceState({}, '', window.location.pathname);
+    if (stripeParam === 'refresh') {
+      setConnectError('Your Stripe setup link expired. Click the button below to continue where you left off.');
+    }
+  }, []);
 
   const handleConnectStripe = useCallback(async () => {
     if (!user?.id) return;
     setIsConnecting(true);
     setConnectError(null);
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session?.access_token) throw new Error('Not authenticated');
-      const response = await fetch('/api/create-stripe-account', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session.access_token}`,
-        },
-        body: JSON.stringify({ userId: user.id }),
-      });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error ?? 'Failed to start Stripe onboarding');
-      // Redirect to Stripe Express onboarding
-      window.location.href = data.url;
+      const { url } = await createStripeAccount(user.id);
+      if (url) {
+        window.location.href = url;
+        return;
+      }
+      await refreshPayoutStatus(); // already fully set up
     } catch (err) {
       setConnectError(err instanceof Error ? err.message : 'Could not connect Stripe account');
     } finally {
       setIsConnecting(false);
+    }
+  }, [user?.id, refreshPayoutStatus]);
+
+  const handleOpenStripeDashboard = useCallback(async () => {
+    if (!user?.id) return;
+    setConnectError(null);
+    try {
+      const { url } = await getStripeDashboardLink(user.id);
+      window.open(url, '_blank', 'noopener,noreferrer');
+    } catch (err) {
+      setConnectError(err instanceof Error ? err.message : 'Could not open the Stripe dashboard');
     }
   }, [user?.id]);
 
@@ -436,22 +464,50 @@ const Storefront: React.FC = () => {
   } = useArtistStorefront();
 
   // Detect return from Stripe Checkout (?checkout_success=1&listing_id=…).
-  // Runs once on mount — the webhook fires in the background; we optimistically
-  // mark the listing purchased and schedule a server refresh to confirm.
+  // The purchase is recorded by the Stripe webhook, which can land a few
+  // seconds after the redirect, so poll until it shows up.
+  const [finishingListingId, setFinishingListingId] = useState<string | null>(null);
+  const [finishingTimedOut, setFinishingTimedOut] = useState(false);
+
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     if (params.get('checkout_success') !== '1') return;
     const listingId = params.get('listing_id');
-    if (listingId) {
-      markPurchased(listingId);
-      reloadPurchaseHistory();
-      setTimeout(refreshPurchasedIds, 8000);
-      setTimeout(reloadPurchaseHistory, 8000);
-    }
-    addAlert('Purchase successful! Check My Purchases to download your track.', 'success');
     setActiveTab('purchases');
     window.history.replaceState({}, '', window.location.pathname);
+    if (listingId) {
+      markPurchased(listingId);
+      setFinishingListingId(listingId);
+    }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (!finishingListingId) return;
+    const POLL_MS = 2000;
+    const TIMEOUT_MS = 60_000;
+    const startedAt = Date.now();
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout>;
+
+    const poll = async () => {
+      const rows = await reloadPurchaseHistory(true);
+      if (cancelled) return;
+      if (rows.some(p => p.listingId === finishingListingId)) {
+        setFinishingListingId(null);
+        refreshPurchasedIds();
+        addAlert('Purchase complete! Your track is ready to download.', 'success');
+        return;
+      }
+      if (Date.now() - startedAt >= TIMEOUT_MS) {
+        setFinishingListingId(null);
+        setFinishingTimedOut(true);
+        return;
+      }
+      timer = setTimeout(poll, POLL_MS);
+    };
+    poll();
+    return () => { cancelled = true; clearTimeout(timer); };
+  }, [finishingListingId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handlePlay = useCallback(
     (listing: StoreListing) => {
@@ -501,12 +557,19 @@ const Storefront: React.FC = () => {
     <div className="px-4 py-6 lg:px-6 max-w-5xl mx-auto space-y-6">
       {/* Header */}
       <div className="flex items-center gap-3">
+        <button
+          onClick={() => navigate('/')}
+          className="flex items-center justify-center w-9 h-9 rounded-xl text-black/60 hover:text-black hover:bg-gray-100 active:scale-95 transition-all duration-200 flex-shrink-0"
+          aria-label="Back to Home"
+        >
+          <ArrowLeft size={20} strokeWidth={2} />
+        </button>
         <div className="p-2 bg-primary-500/10 rounded-xl">
           <ShoppingBag className="w-5 h-5 text-primary-400" />
         </div>
         <div>
-          <h1 className="text-xl font-bold text-white">Storefront</h1>
-          <p className="text-xs text-white/40">Buy and sell music directly</p>
+          <h1 className="text-xl font-bold text-black">Storefront</h1>
+          <p className="text-xs text-black/40">Buy and sell music directly</p>
         </div>
       </div>
 
@@ -526,8 +589,8 @@ const Storefront: React.FC = () => {
               onClick={() => setActiveTab(id)}
               className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors ${
                 activeTab === id
-                  ? 'bg-primary-500 text-white'
-                  : 'text-white/50 hover:text-white'
+                  ? 'bg-primary-500 text-black'
+                  : 'text-black/50 hover:text-black'
               }`}
             >
               {label}
@@ -539,6 +602,12 @@ const Storefront: React.FC = () => {
       {/* ── Browse Tab ── */}
       {activeTab === 'browse' && (
         <div className="space-y-5">
+          {!STOREFRONT_SALES_ENABLED && (
+            <div className="flex items-start gap-2 p-3 rounded-xl border border-yellow-500/20 bg-yellow-500/5 text-sm text-black/70">
+              <AlertCircle className="w-4 h-4 text-yellow-400 flex-shrink-0 mt-0.5" />
+              <span>{SALES_PAUSED_MESSAGE} You can still browse and preview tracks, and past purchases stay downloadable.</span>
+            </div>
+          )}
           <StoreFiltersBar filters={filters} genres={genres} onChange={updateFilters} />
 
           {isLoading ? (
@@ -546,11 +615,11 @@ const Storefront: React.FC = () => {
               <div className="w-8 h-8 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" />
             </div>
           ) : error ? (
-            <div className="text-center py-16 text-white/40 text-sm">{error}</div>
+            <div className="text-center py-16 text-black/40 text-sm">{error}</div>
           ) : listings.length === 0 ? (
             <div className="text-center py-16 space-y-3">
-              <ShoppingBag className="w-10 h-10 text-white/20 mx-auto" />
-              <p className="text-white/40 text-sm">No tracks for sale yet.</p>
+              <ShoppingBag className="w-10 h-10 text-black/20 mx-auto" />
+              <p className="text-black/40 text-sm">No tracks for sale yet.</p>
               {isMusicianUser && (
                 <button
                   onClick={() => setActiveTab('my-store')}
@@ -585,22 +654,38 @@ const Storefront: React.FC = () => {
         <div className="space-y-3">
           <div className="flex items-center gap-2">
             <Receipt className="w-4 h-4 text-primary-400" />
-            <h2 className="text-sm font-semibold text-white">My Purchases</h2>
+            <h2 className="text-sm font-semibold text-black">My Purchases</h2>
             {purchaseHistory.length > 0 && (
-              <span className="text-xs text-white/30">{purchaseHistory.length} track{purchaseHistory.length !== 1 ? 's' : ''}</span>
+              <span className="text-xs text-black/30">{purchaseHistory.length} track{purchaseHistory.length !== 1 ? 's' : ''}</span>
             )}
           </div>
+
+          {finishingListingId && (
+            <div className="flex items-center gap-3 p-4 rounded-xl border border-primary-500/20 bg-primary-500/5 text-sm text-black/70">
+              <div className="w-4 h-4 border-2 border-primary-500 border-t-transparent rounded-full animate-spin flex-shrink-0" />
+              Payment received — finishing your purchase. Your download will appear here in a moment.
+            </div>
+          )}
+          {finishingTimedOut && (
+            <div className="flex items-start gap-3 p-4 rounded-xl border border-yellow-500/20 bg-yellow-500/5 text-sm text-black/70">
+              <AlertCircle className="w-4 h-4 text-yellow-400 flex-shrink-0 mt-0.5" />
+              <span>
+                Your payment went through, but we're still processing the purchase. Refresh this page in a
+                minute. If it still isn't here, contact support with your Stripe receipt — you won't be charged twice.
+              </span>
+            </div>
+          )}
 
           {purchaseHistoryLoading ? (
             <div className="flex items-center justify-center min-h-[240px]">
               <div className="w-8 h-8 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" />
             </div>
           ) : purchaseHistoryError ? (
-            <div className="text-center py-16 text-white/40 text-sm">{purchaseHistoryError}</div>
-          ) : purchaseHistory.length === 0 ? (
+            <div className="text-center py-16 text-black/40 text-sm">{purchaseHistoryError}</div>
+          ) : purchaseHistory.length === 0 && !finishingListingId ? (
             <div className="text-center py-16 space-y-3">
-              <ShoppingBag className="w-10 h-10 text-white/20 mx-auto" />
-              <p className="text-white/40 text-sm">You haven't purchased any tracks yet.</p>
+              <ShoppingBag className="w-10 h-10 text-black/20 mx-auto" />
+              <p className="text-black/40 text-sm">You haven't purchased any tracks yet.</p>
               <button
                 onClick={() => setActiveTab('browse')}
                 className="text-primary-400 text-sm underline underline-offset-2"
@@ -615,6 +700,11 @@ const Storefront: React.FC = () => {
               ))}
             </div>
           )}
+
+          <p className="text-xs text-black/40 pt-2">
+            <span className="font-medium text-black/50">Refund policy: </span>
+            {REFUND_POLICY_FULL}
+          </p>
         </div>
       )}
 
@@ -623,22 +713,28 @@ const Storefront: React.FC = () => {
         <div className="space-y-5">
 
           {/* Stripe Connect gate */}
-          {!stripeAccountId && !user?.isAdmin && (
+          {!payoutReady && !user?.isAdmin && (
             <div className="p-6 bg-dark-800/50 rounded-2xl border border-yellow-500/20 text-center space-y-3">
               <Building2 className="w-8 h-8 text-yellow-400 mx-auto" />
-              <p className="text-white font-semibold">Connect Stripe to start selling</p>
-              <p className="text-white/40 text-sm">You need a connected payout account before you can list tracks or receive payments.</p>
+              <p className="text-black font-semibold">
+                {payoutStatus?.connected ? 'Finish your Stripe setup to start selling' : 'Connect Stripe to start selling'}
+              </p>
+              <p className="text-black/40 text-sm">
+                {payoutStatus?.connected
+                  ? 'Stripe still needs a few details before you can receive payments.'
+                  : 'You need a connected payout account before you can list tracks or receive payments.'}
+              </p>
               <button
                 onClick={() => setActiveTab('payments')}
-                className="px-5 py-2.5 bg-[#635BFF] hover:bg-[#7A73FF] text-white text-sm font-semibold rounded-xl transition-colors"
+                className="px-5 py-2.5 bg-[#635BFF] hover:bg-[#7A73FF] text-black text-sm font-semibold rounded-xl transition-colors"
               >
-                Go to Payments → Connect Stripe
+                {payoutStatus?.connected ? 'Go to Payments → Finish setup' : 'Go to Payments → Connect Stripe'}
               </button>
             </div>
           )}
 
           {/* Stats */}
-          {(stripeAccountId || user?.isAdmin) && (<>
+          {(payoutReady || user?.isAdmin) && (<>
           <div className="grid grid-cols-3 gap-3">
             {[
               { label: 'Listings', value: artistListings.length },
@@ -649,8 +745,8 @@ const Storefront: React.FC = () => {
                 key={stat.label}
                 className="p-4 bg-dark-800/50 rounded-xl border border-white/5 text-center"
               >
-                <p className="text-xl font-bold text-white">{stat.value}</p>
-                <p className="text-xs text-white/40 mt-0.5">{stat.label}</p>
+                <p className="text-xl font-bold text-black">{stat.value}</p>
+                <p className="text-xs text-black/40 mt-0.5">{stat.label}</p>
               </div>
             ))}
           </div>
@@ -681,8 +777,8 @@ const Storefront: React.FC = () => {
             <p className="text-sm text-red-400">{artistError}</p>
           ) : artistListings.length === 0 ? (
             <div className="text-center py-12 space-y-2">
-              <Store className="w-10 h-10 text-white/20 mx-auto" />
-              <p className="text-sm text-white/40">You haven't listed any tracks yet.</p>
+              <Store className="w-10 h-10 text-black/20 mx-auto" />
+              <p className="text-sm text-black/40">You haven't listed any tracks yet.</p>
             </div>
           ) : (
             <div className="space-y-2">
@@ -708,39 +804,41 @@ const Storefront: React.FC = () => {
           <div className="p-5 bg-dark-800/50 rounded-2xl border border-white/5 space-y-4">
             <div className="flex items-center gap-2">
               <Building2 className="w-4 h-4 text-primary-400" />
-              <h2 className="text-sm font-semibold text-white">Payout Account</h2>
+              <h2 className="text-sm font-semibold text-black">Payout Account</h2>
             </div>
 
-            {stripeAccountId ? (
+            {payoutReady ? (
               <div className="space-y-3">
                 <div className="flex items-center gap-2 text-green-400 text-sm">
                   <CheckCircle2 className="w-4 h-4 flex-shrink-0" />
-                  <span>Stripe account connected</span>
+                  <span>Stripe account connected — ready to sell</span>
                 </div>
-                <p className="text-xs text-white/40">
+                <p className="text-xs text-black/40">
                   Track sale revenue is automatically deposited to your connected bank account
                   after Stripe's standard payout schedule (typically 2 business days).
                 </p>
-                <a
-                  href="https://dashboard.stripe.com"
-                  target="_blank"
-                  rel="noopener noreferrer"
+                {connectError && (
+                  <p className="text-xs text-red-400">{connectError}</p>
+                )}
+                <button
+                  onClick={handleOpenStripeDashboard}
                   className="inline-flex items-center gap-1.5 text-xs text-primary-400 hover:text-primary-300 transition-colors"
                 >
-                  Manage in Stripe Dashboard
+                  Manage payouts in Stripe
                   <ExternalLink className="w-3 h-3" />
-                </a>
+                </button>
               </div>
             ) : (
               <div className="space-y-3">
                 <div className="flex items-start gap-2 text-yellow-400/80 text-xs">
                   <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
                   <span>
-                    No payout account connected. You won't receive earnings from sales until
-                    you complete Stripe onboarding.
+                    {payoutStatus?.connected
+                      ? "Your Stripe setup isn't finished yet. Buyers can't purchase your tracks until Stripe has everything it needs."
+                      : "No payout account connected. You won't receive earnings from sales until you complete Stripe onboarding."}
                   </span>
                 </div>
-                <p className="text-xs text-white/40">
+                <p className="text-xs text-black/40">
                   Stripe Express lets you receive direct bank deposits. Setup takes about
                   5 minutes and requires your bank details and ID verification.
                 </p>
@@ -750,14 +848,16 @@ const Storefront: React.FC = () => {
                 <button
                   onClick={handleConnectStripe}
                   disabled={isConnecting}
-                  className="flex items-center gap-2 px-4 py-2.5 bg-[#635BFF] hover:bg-[#7A73FF] text-white text-sm font-semibold rounded-xl transition-colors disabled:opacity-50"
+                  className="flex items-center gap-2 px-4 py-2.5 bg-[#635BFF] hover:bg-[#7A73FF] text-black text-sm font-semibold rounded-xl transition-colors disabled:opacity-50"
                 >
                   {isConnecting ? (
                     <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
                   ) : (
                     <Building2 className="w-4 h-4" />
                   )}
-                  {isConnecting ? 'Redirecting to Stripe…' : 'Connect with Stripe'}
+                  {isConnecting
+                    ? 'Redirecting to Stripe…'
+                    : payoutStatus?.connected ? 'Continue Stripe setup' : 'Connect with Stripe'}
                 </button>
               </div>
             )}
@@ -767,7 +867,7 @@ const Storefront: React.FC = () => {
           <div className="p-5 bg-dark-800/50 rounded-2xl border border-white/5 space-y-4">
             <div className="flex items-center gap-2">
               <CreditCard className="w-4 h-4 text-primary-400" />
-              <h2 className="text-sm font-semibold text-white">Accepted Payment Methods</h2>
+              <h2 className="text-sm font-semibold text-black">Accepted Payment Methods</h2>
             </div>
 
             <div className="space-y-2">
@@ -781,15 +881,15 @@ const Storefront: React.FC = () => {
                   className="flex items-center justify-between py-2.5 border-b border-white/5 last:border-0"
                 >
                   <div>
-                    <p className="text-sm text-white">{method.label}</p>
-                    <p className="text-xs text-white/40">{method.detail}</p>
+                    <p className="text-sm text-black">{method.label}</p>
+                    <p className="text-xs text-black/40">{method.detail}</p>
                   </div>
                   <span className="text-xs font-medium text-green-400">Active</span>
                 </div>
               ))}
             </div>
 
-            <p className="text-xs text-white/30">
+            <p className="text-xs text-black/30">
               Payment methods are managed by Stripe and enabled based on the buyer's
               device and region.
             </p>
@@ -799,7 +899,7 @@ const Storefront: React.FC = () => {
           <div className="p-5 bg-dark-800/50 rounded-2xl border border-white/5 space-y-4">
             <div className="flex items-center gap-2">
               <Percent className="w-4 h-4 text-primary-400" />
-              <h2 className="text-sm font-semibold text-white">Transaction Settings</h2>
+              <h2 className="text-sm font-semibold text-black">Transaction Settings</h2>
             </div>
 
             <div className="space-y-3">
@@ -830,17 +930,17 @@ const Storefront: React.FC = () => {
                   className="flex items-start justify-between py-2.5 border-b border-white/5 last:border-0 gap-4"
                 >
                   <div>
-                    <p className="text-sm text-white">{row.label}</p>
-                    <p className="text-xs text-white/40">{row.detail}</p>
+                    <p className="text-sm text-black">{row.label}</p>
+                    <p className="text-xs text-black/40">{row.detail}</p>
                   </div>
-                  <span className="text-sm font-semibold text-white flex-shrink-0">{row.value}</span>
+                  <span className="text-sm font-semibold text-black flex-shrink-0">{row.value}</span>
                 </div>
               ))}
             </div>
 
             <div className="p-3 bg-white/5 rounded-lg">
-              <p className="text-xs text-white/40">
-                Example: on a <span className="text-white">$10.00</span> sale you receive approximately{' '}
+              <p className="text-xs text-black/40">
+                Example: on a <span className="text-black">$10.00</span> sale you receive approximately{' '}
                 <span className="text-green-400 font-medium">
                   ${(10 - 10 * (PLATFORM_FEE_PCT / 100) - 10 * 0.029 - 0.30).toFixed(2)}
                 </span>{' '}

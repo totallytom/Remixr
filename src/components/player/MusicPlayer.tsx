@@ -1,11 +1,12 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { 
-  Play, 
-  Pause, 
-  SkipBack, 
-  SkipForward, 
-  Volume2, 
+import {
+  Play,
+  Pause,
+  SkipBack,
+  SkipForward,
+  Volume2,
   VolumeX,
   Bookmark,
   Share2,
@@ -18,10 +19,13 @@ import {
   RotateCcw,
   X,
   Maximize2,
-  Minimize2
+  Minimize2,
+  Disc3
 } from 'lucide-react';
 import { useStore } from '../../store/useStore';
 import { Track } from '../../store/useStore';
+import { useHype } from '../../services/hypeService';
+import { HypeStrip, HypeButton } from './Hype';
 
 const DEFAULT_TRACK_COVER = 'https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?w=400&h=400&fit=crop';
 
@@ -60,14 +64,21 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
     addToQueue,
     removeFromQueue,
     setUser,
-    setUserAvatar
+    setUserAvatar,
+    user,
   } = useStore();
+  const navigate = useNavigate();
 
   const [showQueue, setShowQueue] = useState(false);
   const [isBookmarked, setIsBookmarked] = useState(false);
   const [showVolume, setShowVolume] = useState(false);
   const [showFullScreen, setShowFullScreen] = useState(false);
   const [showPreviewEnded, setShowPreviewEnded] = useState(false);
+
+  // Hype moments: heat map along the progress bar + 🔥 button.
+  const { map: hypeMap, hype, lastResult: hypeResult } = useHype(currentTrack?.id, duration);
+  const canHype = Boolean(user) && Boolean(currentTrack) && !currentTrack?.previewOnly;
+  const hypeNow = () => { if (canHype) hype(currentTime); };
 
   // Clear the preview-ended banner whenever a non-preview track starts.
   useEffect(() => {
@@ -119,16 +130,16 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
   const getRepeatIconColor = () => {
     switch (player.repeatMode) {
       case 'one':
-        return 'text-var(--color-warm)';
+        return 'text-[var(--color-warm)]';
       case 'all':
-        return 'text-var(--color-secondary)';
+        return 'text-[var(--color-secondary)]';
       default:
-        return 'text-var(--color-text-secondary)';
+        return 'text-[var(--color-text-secondary)]';
     }
   };
 
   const getShuffleIconColor = () => {
-    return player.shuffle ? 'text-var(--color-warm)' : 'text-var(--color-text-secondary)';
+    return player.shuffle ? 'text-[var(--color-warm)]' : 'text-[var(--color-text-secondary)]';
   };
 
   // Full Screen YouTube Music-like Player
@@ -158,7 +169,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                 onClick={() => setShowFullScreen(false)}
                 className="w-10 h-10 bg-white bg-opacity-20 backdrop-blur-sm rounded-full flex items-center justify-center hover:bg-white hover:bg-opacity-30 transition-all duration-300"
               >
-                <X size={20} className="text-white" />
+                <X size={20} className="text-b" />
               </button>
               
               <div className="text-center">
@@ -175,17 +186,20 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
             </div>
 
             {/* Main Content */}
-            <div className="flex-1 flex flex-col items-center justify-center px-6">
+            <div className="flex-1 min-h-0 flex flex-col items-center justify-center px-6 overflow-y-auto py-4">
               {/* Album Art */}
-              <div className="relative mb-8">
-                <div className="w-64 h-64 lg:w-80 lg:h-80 bg-gradient-to-br from-var(--color-surface) to-var(--color-background) border-4 border-white border-opacity-20 rounded-2xl overflow-hidden shadow-2xl">
+              <div className="relative mb-4 flex-shrink-0">
+                <div
+                  className="bg-gradient-to-br from-[var(--color-surface)] to-[var(--color-background)] border-4 border-white border-opacity-20 rounded-2xl overflow-hidden shadow-2xl"
+                  style={{ width: 'clamp(9rem, 32vh, 20rem)', height: 'clamp(9rem, 32vh, 20rem)' }}
+                >
                   <img
                     src={currentTrack.cover || DEFAULT_TRACK_COVER}
                     alt={currentTrack.title}
                     className="w-full h-full object-cover"
                   />
                 </div>
-                
+
                 {/* Loading indicator */}
                 {player.isBuffering && (
                   <div className="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center rounded-2xl">
@@ -195,7 +209,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
               </div>
 
               {/* Track Info */}
-              <div className="text-center mb-8 max-w-md">
+              <div className="text-center mb-4 max-w-md flex-shrink-0">
                 <h1 className="text-2xl lg:text-3xl font-bold text-white mb-2 font-kotra">
                   {currentTrack.title}
                 </h1>
@@ -208,13 +222,14 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
               </div>
 
               {/* Progress Bar */}
-              <div className="w-full max-w-md mb-8">
+              <div className="w-full max-w-md mb-4 flex-shrink-0">
                 <div className="flex items-center space-x-4">
                   <span className="text-white text-opacity-80 font-kyobo text-sm min-w-[3rem]">
                     {formatTime(currentTime)}
                   </span>
-                  
+
                   <div className="flex-1 relative">
+                    <HypeStrip map={hypeMap} tone="dark" height={18} className="absolute left-0 right-0 bottom-full mb-1" />
                     <input
                       type="range"
                       min="0"
@@ -227,7 +242,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                       }}
                     />
                   </div>
-                  
+
                   <span className="text-white text-opacity-80 font-kyobo text-sm min-w-[3rem]">
                     {formatTime(duration)}
                   </span>
@@ -235,7 +250,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
               </div>
 
               {/* Main Controls */}
-              <div className="flex items-center space-x-6 mb-8">
+              <div className="flex items-center space-x-6 mb-4 flex-shrink-0">
                 {/* Shuffle Button */}
                 <button
                   onClick={toggleShuffle}
@@ -258,7 +273,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                 <button
                   onClick={onPlayPause}
                   disabled={player.isBuffering}
-                  className="w-20 h-20 bg-var(--color-warm) rounded-full flex items-center justify-center hover:bg-var(--color-secondary) transition-all duration-300 transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed shadow-2xl"
+                  className="w-20 h-20 bg-[var(--color-warm)] rounded-full flex items-center justify-center hover:bg-[var(--color-secondary)] transition-all duration-300 transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed shadow-2xl"
                   title={isPlaying ? "Pause" : "Play"}
                 >
                   {player.isBuffering ? (
@@ -287,7 +302,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                 >
                   <Repeat size={20} className="text-white" />
                   {player.repeatMode === 'one' && (
-                    <div className="absolute -bottom-1 -right-1 w-3 h-3 bg-var(--color-warm) rounded-full text-xs flex items-center justify-center">
+                    <div className="absolute -bottom-1 -right-1 w-3 h-3 bg-[var(--color-warm)] rounded-full text-xs flex items-center justify-center">
                       <span className="text-xs text-white">1</span>
                     </div>
                   )}
@@ -295,7 +310,16 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
               </div>
 
               {/* Secondary Controls */}
-              <div className="flex items-center space-x-4">
+              <div className="flex items-center space-x-4 flex-shrink-0">
+                {/* Hype this moment */}
+                <HypeButton
+                  onHype={hypeNow}
+                  lastResult={hypeResult}
+                  disabled={!canHype}
+                  disabledReason={user ? 'Hype isn’t available for previews' : 'Sign in to hype moments'}
+                  count={hypeMap.total}
+                  className="h-10 px-3 bg-white bg-opacity-20 backdrop-blur-sm rounded-full text-white hover:bg-opacity-30"
+                />
                 {/* Bookmark Button */}
                 <button
                   onClick={handleBookmark}
@@ -308,12 +332,12 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                 {/* Queue Button */}
                 <button
                   onClick={() => setShowQueue(!showQueue)}
-                  className={`w-10 h-10 bg-white bg-opacity-20 backdrop-blur-sm rounded-full flex items-center justify-center hover:bg-white hover:bg-opacity-30 transition-all duration-300 ${showQueue ? 'text-var(--color-warm)' : 'text-white'}`}
+                  className={`w-10 h-10 bg-white bg-opacity-20 backdrop-blur-sm rounded-full flex items-center justify-center hover:bg-white hover:bg-opacity-30 transition-all duration-300 ${showQueue ? 'text-[var(--color-warm)]' : 'text-white'}`}
                   title="Queue"
                 >
                   <List size={18} />
                   {player.queue.length > 0 && (
-                    <div className="absolute -top-1 -right-1 w-4 h-4 bg-var(--color-warm) rounded-full text-xs flex items-center justify-center">
+                    <div className="absolute -top-1 -right-1 w-4 h-4 bg-[var(--color-warm)] rounded-full text-xs flex items-center justify-center">
                       <span className="text-xs text-white">{player.queue.length}</span>
                     </div>
                   )}
@@ -370,7 +394,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                   Queue ({player.queue.length})
                 </h3>
                 {player.shuffle && (
-                  <span className="text-var(--color-warm) text-sm font-medium">
+                  <span className="text-[var(--color-warm)] text-sm font-medium">
                     SHUFFLED
                   </span>
                 )}
@@ -430,7 +454,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
       <div className="fixed z-50 lg:bottom-4 lg:right-4 bottom-16 right-4">
         <button
           onClick={onToggleVisibility}
-          className="w-12 h-12 bg-white border-2 border-var(--color-warm) flex items-center justify-center hover:bg-var(--color-warm) hover:text-white transition-all duration-300 transform hover:scale-105 rounded-full shadow-lg"
+          className="w-12 h-12 bg-white border border-gray-200 flex items-center justify-center hover:bg-gray-50 transition-all duration-200 hover:scale-105 active:scale-95 rounded-full shadow-lg"
           title="Show Music Player"
         >
           <ChevronUp size={20} className="text-black" />
@@ -441,19 +465,19 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
 
   if (!currentTrack) {
     return (
-      <div className="music-player glass-effect">
+      <div className="bg-white border-t border-gray-200 shadow-[0_-2px_12px_rgba(0,0,0,0.08)]">
         <div className="flex items-center justify-between">
           <div className="flex items-center justify-center h-16 flex-1">
-            <div className="text-var(--color-text-secondary) font-kyobo text-sm">
+            <div className="text-gray-500 font-kyobo text-sm">
               No track selected
             </div>
           </div>
           <button
             onClick={onToggleVisibility}
-            className="w-8 h-8 bg-var(--color-surface) border-2 border-var(--color-border) flex items-center justify-center hover:border-var(--color-warm) transition-all duration-300 mr-4"
+            className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center hover:bg-gray-200 transition-all duration-200 mr-4"
             title="Hide Music Player"
           >
-            <ChevronDown size={16} className="text-var(--color-text-secondary)" />
+            <ChevronDown size={16} className="text-gray-500" />
           </button>
         </div>
       </div>
@@ -521,15 +545,15 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
         <button
           onClick={onPlayPause}
           disabled={player.isBuffering}
-          className="w-11 h-11 flex items-center justify-center rounded-full bg-[var(--color-electric-blue,#0ea5e9)] active:scale-95 transition-all disabled:opacity-50"
+          className="w-11 h-11 flex items-center justify-center rounded-full bg-primary-600 shadow-md active:scale-95 transition-all disabled:opacity-50"
           aria-label={isPlaying ? 'Pause' : 'Play'}
         >
           {player.isBuffering ? (
-            <Loader2 size={20} className="animate-spin text-white" />
+            <Loader2 size={20} className="animate-spin text-black" />
           ) : isPlaying ? (
-            <Pause size={20} className="text-white" />
+            <Pause size={20} className="text-black" />
           ) : (
-            <Play size={20} className="text-white ml-0.5" />
+            <Play size={20} className="text-black ml-0.5" />
           )}
         </button>
 
@@ -541,6 +565,16 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
         >
           <SkipForward size={20} className="text-black" />
         </button>
+
+        {/* Turntables — open the dedicated spinning-record view (disabled until the page is finished)
+        <button
+          onClick={() => navigate('/turntables')}
+          className="w-9 h-9 flex items-center justify-center rounded-full active:bg-gray-100 transition-colors flex-shrink-0"
+          aria-label="Open Turntables"
+        >
+          <Disc3 size={19} className="text-black" />
+        </button>
+        */}
 
         {/* Dismiss / hide player */}
         <button
@@ -555,17 +589,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
 
     {/* ── Desktop player bar ── hidden on mobile */}
     <div className="hidden lg:block">
-    <div className="music-player glass-effect">
-      {/* Cozy Background Pattern */}
-      <div className="absolute inset-0 opacity-5">
-        <div className="w-full h-full" style={{
-          backgroundImage: `
-            linear-gradient(45deg, var(--color-warm) 1px, transparent 1px),
-            linear-gradient(-45deg, var(--color-secondary) 1px, transparent 1px)
-          `,
-          backgroundSize: '20px 20px'
-        }} />
-      </div>
+    <div className="relative bg-white border-t border-gray-200 shadow-[0_-2px_12px_rgba(0,0,0,0.08)] px-4 py-3">
 
       <div className="relative z-10 flex items-center space-x-1 lg:space-x-4">
         {/* Album Art - Clickable for Full Screen */}
@@ -574,24 +598,23 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
             onClick={() => setShowFullScreen(true)}
             className="relative block group"
           >
-            <div className="w-9 h-10 lg:w-16 lg:h-16 bg-gradient-to-br from-var(--color-surface) to-var(--color-background) border-2 border-var(--color-warm) overflow-hidden">
+            <div className="w-9 h-10 lg:w-16 lg:h-16 rounded-lg ring-1 ring-black/10 overflow-hidden">
               <img
                 src={currentTrack.cover || DEFAULT_TRACK_COVER}
                 alt={currentTrack.title}
-                className="w-full h-full object-cover pixelated"
-                style={{ imageRendering: 'pixelated' }}
+                className="w-full h-full object-cover"
               />
             </div>
-            
+
             {/* Full Screen Icon Overlay */}
-            <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-30 transition-all duration-300 flex items-center justify-center">
+            <div className="absolute inset-0 rounded-lg bg-black bg-opacity-0 group-hover:bg-opacity-30 transition-all duration-300 flex items-center justify-center">
               <Maximize2 size={16} className="text-white opacity-0 group-hover:opacity-100 transition-all duration-300" />
             </div>
           </button>
-          
+
           {/* Loading indicator */}
           {player.isBuffering && (
-            <div className="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center">
+            <div className="absolute inset-0 rounded-lg bg-black bg-opacity-50 flex items-center justify-center">
               <Loader2 size={14} className="text-white animate-spin lg:w-5 lg:h-5" />
             </div>
           )}
@@ -599,19 +622,19 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
 
         {/* Track Info */}
         <div className="flex-1 min-w-0 flex-shrink">
-          <p className="font-kotra text-xs lg:text-sm text-var(--color-text) truncate leading-tight">
+          <p className="font-kotra text-xs lg:text-sm text-black truncate leading-tight">
             {currentTrack.title}
           </p>
           {showPreviewEnded ? (
-            <p className="font-kyobo text-xs font-semibold text-amber-400 truncate">
+            <p className="font-kyobo text-xs font-semibold text-amber-500 truncate">
               Preview ended · buy to unlock
             </p>
           ) : (
-            <p className="font-kyobo text-xs text-var(--color-text-secondary) truncate">
+            <p className="font-kyobo text-xs text-gray-500 truncate">
               {currentTrack.artist}
             </p>
           )}
-          <p className="font-kyobo text-xs text-var(--color-text-secondary) opacity-80 truncate hidden lg:block">
+          <p className="font-kyobo text-xs text-gray-400 truncate hidden lg:block">
             {currentTrack.album}
           </p>
         </div>
@@ -621,64 +644,64 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
           {/* Shuffle Button */}
           <button
             onClick={toggleShuffle}
-            className={`w-5 h-5 lg:w-8 lg:h-8 bg-var(--color-surface) border-2 border-var(--color-border) flex items-center justify-center hover:border-var(--color-warm) transition-all duration-300 ${getShuffleIconColor()}`}
+            className={`w-7 h-7 lg:w-9 lg:h-9 rounded-full bg-gray-100 flex items-center justify-center hover:bg-gray-200 transition-all duration-200 hover:scale-105 active:scale-95 ${getShuffleIconColor()}`}
             title="Shuffle"
           >
-            <Shuffle size={10} className="lg:w-3.5 lg:h-3.5" />
+            <Shuffle size={13} className="lg:w-4 lg:h-4" />
           </button>
 
           {/* Rewind Button - Hidden on mobile */}
           <button
             onClick={handleRewind}
-            className="w-8 h-8 lg:w-10 lg:h-10 bg-var(--color-surface) border-2 border-var(--color-border) flex items-center justify-center hover:border-var(--color-warm) hover:bg-var(--color-warm) hover:text-var(--color-background) transition-all duration-300 group hidden lg:flex"
+            className="w-9 h-9 lg:w-10 lg:h-10 rounded-full bg-gray-100 items-center justify-center text-gray-500 hover:text-black hover:bg-gray-200 transition-all duration-200 hover:scale-105 active:scale-95 hidden lg:flex"
             title="Rewind"
           >
-            <RotateCcw size={16} className="lg:w-[18px] lg:h-[18px]" />
+            <RotateCcw size={17} className="lg:w-[18px] lg:h-[18px]" />
           </button>
 
           {/* Previous Button */}
           <button
             onClick={onPrevious}
-            className="w-6 h-6 lg:w-10 lg:h-10 bg-var(--color-surface) border-2 border-var(--color-border) flex items-center justify-center hover:border-var(--color-warm) hover:bg-var(--color-warm) hover:text-var(--color-background) transition-all duration-300 group"
+            className="w-8 h-8 lg:w-10 lg:h-10 rounded-full bg-gray-100 flex items-center justify-center text-gray-500 hover:text-black hover:bg-gray-200 transition-all duration-200 hover:scale-105 active:scale-95"
             title="Previous"
           >
-            <SkipBack size={12} className="lg:w-[18px] lg:h-[18px]" />
+            <SkipBack size={14} className="lg:w-[18px] lg:h-[18px]" />
           </button>
 
           {/* Play/Pause Button */}
           <button
             onClick={onPlayPause}
             disabled={player.isBuffering}
-            className="w-8 h-8 lg:w-12 lg:h-12 bg-var(--color-warm) border-2 border-white flex items-center justify-center hover:bg-var(--color-secondary) transition-all duration-300 transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="w-10 h-10 lg:w-12 lg:h-12 rounded-full bg-primary-600 shadow-md flex items-center justify-center hover:bg-primary-700 hover:shadow-lg transition-all duration-200 hover:scale-105 active:scale-95 disabled:opacity-50 disabled:hover:scale-100"
             title={isPlaying ? "Pause" : "Play"}
           >
             {player.isBuffering ? (
-              <Loader2 size={14} className="text-white animate-spin lg:w-5 lg:h-5" />
+              <Loader2 size={16} className="text-black animate-spin lg:w-5 lg:h-5" />
             ) : isPlaying ? (
-              <Pause size={16} className="text-black lg:w-6 lg:h-6" />
+              <Pause size={18} className="text-black lg:w-6 lg:h-6" />
             ) : (
-              <Play size={16} className="text-black lg:w-6 lg:h-6" />
+              <Play size={18} className="text-black lg:w-6 lg:h-6" />
             )}
           </button>
 
           {/* Next Button */}
           <button
             onClick={onNext}
-            className="w-6 h-6 lg:w-10 lg:h-10 bg-var(--color-surface) border-2 border-var(--color-border) flex items-center justify-center hover:border-var(--color-warm) hover:bg-var(--color-warm) hover:text-var(--color-background) transition-all duration-300 group"
+            className="w-8 h-8 lg:w-10 lg:h-10 rounded-full bg-gray-100 flex items-center justify-center text-gray-500 hover:text-black hover:bg-gray-200 transition-all duration-200 hover:scale-105 active:scale-95"
             title="Next"
           >
-            <SkipForward size={12} className="lg:w-[18px] lg:h-[18px]" />
+            <SkipForward size={14} className="lg:w-[18px] lg:h-[18px]" />
           </button>
 
           {/* Repeat Button */}
           <button
             onClick={toggleRepeat}
-            className={`w-5 h-5 lg:w-8 lg:h-8 bg-var(--color-surface) border-2 border-var(--color-border) flex items-center justify-center hover:border-var(--color-warm) transition-all duration-300 ${getRepeatIconColor()}`}
+            className={`relative w-7 h-7 lg:w-9 lg:h-9 rounded-full bg-gray-100 flex items-center justify-center hover:bg-gray-200 transition-all duration-200 hover:scale-105 active:scale-95 ${getRepeatIconColor()}`}
             title={`Repeat: ${player.repeatMode}`}
           >
-            <Repeat size={10} className="lg:w-3.5 lg:h-3.5" />
+            <Repeat size={13} className="lg:w-4 lg:h-4" />
             {player.repeatMode === 'one' && (
-              <div className="absolute -bottom-1 -right-1 w-1 h-1 lg:w-2 lg:h-2 bg-var(--color-warm) rounded-full text-xs">1</div>
+              <div className="absolute -bottom-1 -right-1 w-3 h-3 bg-primary-600 rounded-full text-black text-[8px] leading-3 font-bold">1</div>
             )}
           </button>
         </div>
@@ -686,27 +709,26 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
         {/* Progress Bar - Hidden on mobile, visible on desktop */}
         <div className="flex-1 max-w-md hidden lg:block">
           <div className="flex items-center space-x-2">
-            <span className="font-kyobo text-xs text-var(--color-text-secondary) min-w-[2rem]">
+            <span className="font-kyobo text-xs text-gray-500 min-w-[2rem]">
               {formatTime(currentTime)}
             </span>
-            
+
             <div className="flex-1 relative">
+              <HypeStrip map={hypeMap} height={10} className="absolute left-0 right-0 bottom-full mb-0.5" />
               <input
                 type="range"
                 min="0"
                 max={duration || 100}
                 value={currentTime}
                 onChange={handleSeek}
-                className="w-full h-2 bg-var(--color-border) appearance-none cursor-pointer relative"
+                className="w-full h-1.5 bg-gray-200 rounded-full appearance-none cursor-pointer relative"
                 style={{
-                  background: `linear-gradient(to right, var(--color-warm) 0%, var(--color-warm) ${(currentTime / (duration || 1)) * 100}%, var(--color-border) ${(currentTime / (duration || 1)) * 100}%, var(--color-border) 100%)`
+                  background: `linear-gradient(to right, var(--color-primary) 0%, var(--color-primary) ${(currentTime / (duration || 1)) * 100}%, #e5e7eb ${(currentTime / (duration || 1)) * 100}%, #e5e7eb 100%)`
                 }}
               />
-              <div className="absolute top-0 left-0 h-2 bg-var(--color-warm) transition-all duration-100" 
-                   style={{ width: `${(currentTime / (duration || 1)) * 100}%` }} />
             </div>
-            
-            <span className="font-kyobo text-xs text-var(--color-text-secondary) min-w-[2rem]">
+
+            <span className="font-kyobo text-xs text-gray-500 min-w-[2rem]">
               {formatTime(duration)}
             </span>
           </div>
@@ -714,25 +736,35 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
 
         {/* Action Buttons - Visible on mobile but compact */}
         <div className="flex items-center space-x-1 lg:space-x-2">
+          <span className="hidden lg:inline-flex">
+            <HypeButton
+              onHype={hypeNow}
+              lastResult={hypeResult}
+              disabled={!canHype}
+              disabledReason={user ? 'Hype isn’t available for previews' : 'Sign in to hype moments'}
+              className="w-9 h-9 lg:w-10 lg:h-10 rounded-full bg-gray-100 hover:bg-orange-100"
+              size={16}
+            />
+          </span>
           {/* Bookmark Button */}
           <button
             onClick={handleBookmark}
-            className={`w-6 h-6 lg:w-8 lg:h-8 bg-var(--color-surface) border-2 border-var(--color-border) flex items-center justify-center hover:border-var(--color-warm) transition-all duration-300 ${isBookmarked ? 'text-blue-400' : 'text-var(--color-text-secondary)'}`}
+            className={`w-7 h-7 lg:w-9 lg:h-9 rounded-full bg-gray-100 flex items-center justify-center hover:bg-gray-200 transition-all duration-200 hover:scale-105 active:scale-95 ${isBookmarked ? 'text-blue-500' : 'text-gray-500 hover:text-black'}`}
             title="Bookmark"
           >
-            <Bookmark size={12} className="lg:w-3.5 lg:h-3.5" fill={isBookmarked ? 'currentColor' : 'none'} />
+            <Bookmark size={13} className="lg:w-4 lg:h-4" fill={isBookmarked ? 'currentColor' : 'none'} />
           </button>
 
           {/* Queue Button */}
           <button
             onClick={() => setShowQueue(!showQueue)}
-            className={`w-6 h-6 lg:w-8 lg:h-8 bg-var(--color-surface) border-2 border-var(--color-border) flex items-center justify-center hover:border-var(--color-warm) transition-all duration-300 ${showQueue ? 'text-var(--color-warm)' : 'text-var(--color-text-secondary)'}`}
+            className={`relative w-7 h-7 lg:w-9 lg:h-9 rounded-full bg-gray-100 flex items-center justify-center hover:bg-gray-200 transition-all duration-200 hover:scale-105 active:scale-95 ${showQueue ? 'text-primary-600' : 'text-gray-500 hover:text-black'}`}
             title="Queue"
           >
-            <List size={12} className="lg:w-3.5 lg:h-3.5" />
+            <List size={13} className="lg:w-4 lg:h-4" />
             {player.queue.length > 0 && (
-              <div className="absolute -top-1 -right-1 w-2 h-2 lg:w-3 lg:h-3 bg-var(--color-warm) rounded-full text-xs flex items-center justify-center">
-                <span className="text-xs text-white">{player.queue.length}</span>
+              <div className="absolute -top-1 -right-1 w-3.5 h-3.5 bg-primary-600 rounded-full text-black text-[8px] leading-[14px] font-bold">
+                {player.queue.length}
               </div>
             )}
           </button>
@@ -741,7 +773,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
           <div className="relative">
             <button
               onClick={() => setShowVolume(!showVolume)}
-              className="w-6 h-6 lg:w-8 lg:h-8 bg-var(--color-surface) border-2 border-var(--color-border) flex items-center justify-center hover:border-var(--color-warm) transition-all duration-300"
+              className="w-7 h-7 lg:w-9 lg:h-9 rounded-full bg-gray-100 flex items-center justify-center text-gray-500 hover:text-black hover:bg-gray-200 transition-all duration-200 hover:scale-105 active:scale-95"
             >
               <div className="w-3 h-3 lg:w-4 lg:h-4 relative">
                 <div className="absolute bottom-0 left-0 w-0.5 h-2 lg:w-1 lg:h-3 bg-current" />
@@ -751,91 +783,66 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                 {player.volume > 0.75 && <div className="absolute bottom-0 left-4 w-0.5 h-3 lg:w-1 lg:h-5 bg-current" />}
               </div>
             </button>
-            
+
             {showVolume && (
-              <div className="absolute bottom-full right-0 mb-2 p-2 lg:p-3 bg-var(--color-surface) border-2 border-var(--color-warm) glass-effect">
+              <div className="absolute bottom-full right-0 mb-2 p-3 bg-white border border-gray-200 rounded-xl shadow-lg">
                 <input
                   type="range"
                   min="0"
                   max="100"
                   value={Math.round(player.volume * 100)}
                   onChange={handleVolumeChange}
-                  className="w-16 lg:w-20 h-2 bg-var(--color-border) appearance-none cursor-pointer"
+                  className="w-16 lg:w-20 h-1.5 bg-gray-200 rounded-full appearance-none cursor-pointer"
                   style={{
-                    background: `linear-gradient(to top, var(--color-warm) 0%, var(--color-warm) ${player.volume * 100}%, var(--color-border) ${player.volume * 100}%, var(--color-border) 100%)`
+                    background: `linear-gradient(to top, var(--color-primary) 0%, var(--color-primary) ${player.volume * 100}%, #e5e7eb ${player.volume * 100}%, #e5e7eb 100%)`
                   }}
                 />
               </div>
             )}
           </div>
 
+          {/* Turntables — open the dedicated spinning-record view (disabled until the page is finished)
+          <button
+            onClick={() => navigate('/turntables')}
+            className="w-7 h-7 lg:w-9 lg:h-9 rounded-full bg-gray-100 flex items-center justify-center text-gray-500 hover:text-black hover:bg-gray-200 transition-all duration-200 hover:scale-105 active:scale-95"
+            title="Open Turntables"
+          >
+            <Disc3 size={13} className="lg:w-4 lg:h-4" />
+          </button>
+          */}
+
           {/* Hide Button */}
           <button
             onClick={onToggleVisibility}
-            className="w-6 h-6 lg:w-8 lg:h-8 bg-var(--color-surface) border-2 border-var(--color-border) flex items-center justify-center hover:border-var(--color-warm) transition-all duration-300"
+            className="w-7 h-7 lg:w-9 lg:h-9 rounded-full bg-gray-100 flex items-center justify-center hover:bg-gray-200 transition-all duration-200 hover:scale-105 active:scale-95"
             title="Hide Music Player"
           >
-            <ChevronDown size={12} className="lg:w-3.5 lg:h-3.5 text-var(--color-text-secondary)" />
+            <ChevronDown size={13} className="lg:w-4 lg:h-4 text-gray-500" />
           </button>
         </div>
       </div>
 
-      {/* Cozy Bottom Border */}
-      <div className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-var(--color-warm) via-var(--color-secondary) to-var(--color-warm)" />
-      
-      {/* Gentle Particle Effect */}
-      <div className="absolute inset-0 pointer-events-none">
-        <div className="absolute top-1/4 left-1/4 w-1 h-1 bg-var(--color-glow) opacity-30 animate-ping" style={{ animationDelay: '0s' }} />
-        <div className="absolute bottom-1/4 right-1/4 w-1 h-1 bg-var(--color-secondary) opacity-25 animate-ping" style={{ animationDelay: '2s' }} />
-      </div>
-
-      {/* Enhanced Queue Panel */}
+      {/* Queue Panel */}
       {showQueue && (
         <motion.div
           initial={{ y: 100, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
           exit={{ y: 100, opacity: 0 }}
-          className="absolute bottom-20 left-0 right-0 p-4 max-h-64 overflow-y-auto"
-          style={{
-            background: 'var(--color-surface)',
-            border: '2px solid var(--color-neon)',
-            boxShadow: '0 0 20px var(--color-neon)'
-          }}
+          className="absolute bottom-20 left-0 right-0 p-4 max-h-64 overflow-y-auto bg-white border border-gray-200 rounded-t-xl shadow-2xl"
         >
           <div className="flex items-center justify-between mb-3">
-            <h3 
-              className="text-sm font-medium"
-              style={{ 
-                color: 'var(--color-text)',
-                fontFamily: 'Press Start 2P, monospace',
-                fontSize: '10px'
-              }}
-            >
+            <h3 className="text-sm font-semibold text-black">
               Queue ({player.queue.length})
             </h3>
             {player.shuffle && (
-              <span 
-                className="text-xs"
-                style={{ 
-                  color: 'var(--color-warm)',
-                  fontFamily: 'Press Start 2P, monospace',
-                  fontSize: '8px'
-                }}
-              >
+              <span className="text-xs font-medium text-primary-600">
                 SHUFFLED
               </span>
             )}
           </div>
-          
+
           {player.queue.length === 0 ? (
-            <p 
-              className="text-sm"
-              style={{ 
-                color: 'var(--color-text-secondary)',
-                fontFamily: 'Press Start 2P, monospace',
-                fontSize: '8px'
-              }}
-            >
+            <p className="text-sm text-gray-500">
               No tracks in queue
             </p>
           ) : (
@@ -843,60 +850,22 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
               {player.queue.map((track, index) => (
                 <div
                   key={track.id}
-                  className="flex items-center space-x-3 p-2 cursor-pointer group"
-                  style={{
-                    background: 'var(--color-background)',
-                    border: '1px solid var(--color-border)',
-                    transition: 'all 0.3s ease'
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.borderColor = 'var(--color-neon)';
-                    e.currentTarget.style.boxShadow = '0 0 10px var(--color-neon)';
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.borderColor = 'var(--color-border)';
-                    e.currentTarget.style.boxShadow = 'none';
-                  }}
+                  className="flex items-center space-x-3 p-2 rounded-xl cursor-pointer group bg-gray-50 border border-gray-100 hover:border-primary-400 hover:bg-gray-100 transition-colors"
                   onClick={() => playTrack(track)}
                 >
-                  <span 
-                    className="text-xs w-6 text-center"
-                    style={{ 
-                      color: 'var(--color-text-secondary)',
-                      fontFamily: 'Press Start 2P, monospace',
-                      fontSize: '8px'
-                    }}
-                  >
+                  <span className="text-xs w-6 text-center text-gray-400">
                     {index + 1}
                   </span>
                   <img
                     src={track.cover}
                     alt={track.title}
-                    className="w-8 h-8 object-cover"
-                    style={{ 
-                      imageRendering: 'pixelated',
-                      border: '1px solid var(--color-border)'
-                    }}
+                    className="w-8 h-8 rounded-lg object-cover"
                   />
                   <div className="flex-1 min-w-0">
-                    <p 
-                      className="text-sm font-medium truncate font-kotra"
-                      style={{ 
-                        color: 'var(--color-text)',
-                        fontFamily: 'Press Start 2P, monospace',
-                        fontSize: '8px'
-                      }}
-                    >
+                    <p className="text-sm font-medium truncate text-black font-kotra">
                       {track.title}
                     </p>
-                    <p 
-                      className="text-xs truncate"
-                      style={{ 
-                        color: 'var(--color-text-secondary)',
-                        fontFamily: 'Press Start 2P, monospace',
-                        fontSize: '6px'
-                      }}
-                    >
+                    <p className="text-xs truncate text-gray-500">
                       {track.artist}
                     </p>
                   </div>
@@ -905,7 +874,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                       e.stopPropagation();
                       handleRemoveFromQueue(track.id);
                     }}
-                    className="opacity-0 group-hover:opacity-100 transition-opacity p-1 hover:bg-red-500 hover:text-white rounded"
+                    className="opacity-0 group-hover:opacity-100 transition-opacity p-1.5 rounded-full hover:bg-red-500 hover:text-white text-gray-400"
                     title="Remove from queue"
                   >
                     <span className="text-xs">×</span>

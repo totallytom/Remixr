@@ -24,7 +24,7 @@ function PageContent({ children }) {
       {children}
       {!isFullHeight && (
         <footer className="lg:hidden pb-16 pt-4 text-center">
-          <p className="text-[10px] text-white/30">© 2026 Amulet Studios LLC. All rights reserved.</p>
+          <p className="text-[10px] text-black/30">© 2026 Amulet Studios LLC. All rights reserved.</p>
         </footer>
       )}
     </div>
@@ -54,6 +54,7 @@ const Dmca = lazy(() => import('./pages/Dmca'));
 const Upgrade = lazy(() => import('./pages/Upgrade'));
 const AnalyticsPage = lazy(() => import('./pages/Analytics'));
 const Storefront = lazy(() => import('./pages/Storefront'));
+const Turntables = lazy(() => import('./pages/Turntables'));
 const SettingsModal = lazy(() => import('./components/layout/SettingsModal'));
 const MusicPlayer = lazy(() => import('./components/player/MusicPlayer'));
 
@@ -76,7 +77,6 @@ function OnboardingRedirectGuard() {
 function App() {
   const store = useStore() || {};
   const {
-    setChats = () => {},
     sidebarOpen = false,
     isSettingsOpen = false,
     settingsInitialTab = 'account',
@@ -98,7 +98,6 @@ function App() {
 
     togglePlayerVisibility = () => {},
 
-    checkAuth = () => {},
     initializeAuth = () => () => {},
 
     theme = {
@@ -118,7 +117,7 @@ function App() {
     return () => {
       cleanupAuth();
     };
-  }, [setChats, initializeAudio, initializeAuth, checkAuth]);
+  }, [initializeAudio, initializeAuth]);
 
   const handlePlayPause = () => {
     if (player.isPlaying) {
@@ -146,7 +145,7 @@ function App() {
       <Router>
         <OnboardingRedirectGuard />
         <div
-          className="flex h-dvh bg-dark-900 text-white"
+          className="flex h-dvh bg-dark-900 text-black"
           style={
             theme.customBackgroundColor
               ? { backgroundColor: theme.customBackgroundColor }
@@ -179,7 +178,7 @@ function App() {
           <div className="flex-1 flex flex-col min-w-0 main-content">
             <PageContent>
               <Suspense fallback={
-                <div className="flex items-center justify-center min-h-[40vh] text-white/70">Loading…</div>
+                <div className="flex items-center justify-center min-h-[40vh] text-black/70">Loading…</div>
               }>
                 <Routes>
                   <Route path="/" element={<Home />} />
@@ -210,6 +209,7 @@ function App() {
                   <Route path="/upgrade" element={<Upgrade />} />
                   <Route path="/analytics" element={<AnalyticsPage />} />
                   <Route path="/storefront" element={<Storefront />} />
+                  <Route path="/turntables" element={<Turntables />} />
                 </Routes>
               </Suspense>
             </PageContent>
@@ -227,7 +227,7 @@ function App() {
               className="fixed bottom-0 left-0 right-0 z-50"
             >
               <Suspense fallback={
-                <div className="h-20 bg-dark-800 flex items-center justify-center text-white/60 text-sm">Loading player…</div>
+                <div className="h-20 bg-dark-800 flex items-center justify-center text-black/60 text-sm">Loading player…</div>
               }>
                 <MusicPlayer
                   currentTrack={player.currentTrack}

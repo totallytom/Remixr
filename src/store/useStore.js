@@ -31,13 +31,9 @@ export const useStore = create((set, get) => ({
     trackHistory: [],
   },
 
-  chats: [],
-  activeChat: null,
-  comments: [],
   playlists: [],
 
   sidebarOpen: true,
-  currentView: 'home',
   isSettingsOpen: false,
   settingsInitialTab: 'account',
 
@@ -47,8 +43,6 @@ export const useStore = create((set, get) => ({
     customSecondaryColor: null,
     customBackgroundColor: null,
   },
-
-  playEvent: 0,
 
   // Manual status: 'online' | 'idle' | 'invisible' (persisted via storage)
   userStatus: 'online',
@@ -66,7 +60,6 @@ export const useStore = create((set, get) => ({
     if (s === 'idle' || s === 'invisible') set({ userStatus: s });
   },
   setAuthenticated: (isAuthenticated) => set({ isAuthenticated }),
-  setChats: (chats) => set({ chats }),
   setPlaylists: (playlists) => set({ playlists }),
   deletePlaylist: (playlistId) => set((s) => ({
     playlists: s.playlists.filter(p => p.id !== playlistId)
@@ -74,7 +67,6 @@ export const useStore = create((set, get) => ({
   setSettingsOpen: (isSettingsOpen) => set({ isSettingsOpen }),
   setSettingsInitialTab: (settingsInitialTab) => set({ settingsInitialTab }),
   toggleSidebar: () => set((s) => ({ sidebarOpen: !s.sidebarOpen })),
-  triggerPlayEvent: () => set((s) => ({ playEvent: s.playEvent + 1 })),
   setTheme: (theme) => set({ theme }),
 
   // --------------------
@@ -335,16 +327,11 @@ export const useStore = create((set, get) => ({
     try {
       const user = await AuthService.getCurrentUser();
       if (user) {
-        if (user.subscriptionTier !== 'pro') {
-          const { data: sub } = await supabase
-            .from('pro_subscriptions')
-            .select('status')
-            .eq('user_id', user.id)
-            .in('status', ['active', 'past_due'])
-            .maybeSingle();
-          if (sub) {
-            user.subscriptionTier = 'pro';
-            await supabase.from('users').update({ subscription_tier: 'pro' }).eq('id', user.id);
+        if (user.subscriptionTier !== 'artist') {
+          // The tier is derived server-side; if a webhook was slow, re-derive it.
+          const { data: tier } = await supabase.rpc('refresh_my_subscription_tier');
+          if (tier && tier !== user.subscriptionTier) {
+            user.subscriptionTier = tier;
             await storage.setJSON(STORAGE_KEYS.PROFILE_CACHE, user);
           }
         }
@@ -357,16 +344,11 @@ export const useStore = create((set, get) => ({
 
   initializeAuth: () => {
     const { data } = AuthService.onAuthStateChange(async (user) => {
-      if (user && user.subscriptionTier !== 'pro') {
-        const { data: sub } = await supabase
-          .from('pro_subscriptions')
-          .select('status')
-          .eq('user_id', user.id)
-          .in('status', ['active', 'past_due'])
-          .maybeSingle();
-        if (sub) {
-          user.subscriptionTier = 'pro';
-          await supabase.from('users').update({ subscription_tier: 'pro' }).eq('id', user.id);
+      if (user && user.subscriptionTier !== 'artist') {
+        // The tier is derived server-side; if a webhook was slow, re-derive it.
+        const { data: tier } = await supabase.rpc('refresh_my_subscription_tier');
+        if (tier && tier !== user.subscriptionTier) {
+          user.subscriptionTier = tier;
           await storage.setJSON(STORAGE_KEYS.PROFILE_CACHE, user);
         }
       }
