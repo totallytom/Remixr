@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Flag, Music, UserX, MessageSquareX, X } from 'lucide-react';
+import { Flag, Music, UserX, MessageSquareX, X, Ticket, CalendarX } from 'lucide-react';
 import { useAlerts } from '../../contexts/AlertContext';
 import { BrutalButton } from '../ui/brutal';
 import { Panel, Loading, Empty, ErrorText, Tag, TrackStatusBadge, timeAgo } from './shared';
@@ -16,6 +16,8 @@ import {
 const ACTION_CONFIRM: Record<ReportAction, (r: UserReport) => string> = {
   dismiss: () => 'Dismiss this report? No action will be taken.',
   remove_message: () => 'Delete this message for everyone? This also closes other open reports about it.',
+  remove_concert: (r) =>
+    `Delete the concert listing “${r.concert?.title ?? 'this concert'}” for everyone? This also closes other open reports about it.`,
   suspend_user: (r) =>
     `Suspend @${r.reported?.username ?? 'this user'}? They won't be able to upload, message, post or comment. This closes all open reports about them.`,
 };
@@ -58,6 +60,7 @@ const ReportsPanel: React.FC<{ onChanged?: () => void }> = ({ onChanged }) => {
       addAlert(
         action === 'dismiss' ? 'Report dismissed'
           : action === 'remove_message' ? 'Message removed'
+          : action === 'remove_concert' ? 'Concert listing removed'
           : `@${r.reported?.username ?? 'User'} suspended`,
         'success',
       );
@@ -106,9 +109,9 @@ const ReportsPanel: React.FC<{ onChanged?: () => void }> = ({ onChanged }) => {
   return (
     <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 items-start">
       {/* ── People & messages ── */}
-      <Panel title="People & messages" icon={Flag} count={userError ? '!' : userReports.length}>
+      <Panel title="People, messages & concerts" icon={Flag} count={userError ? '!' : userReports.length}>
         {userError ? <ErrorText>{userError}</ErrorText> : userReports.length === 0 ? (
-          <Empty>No open reports about users or messages. 🎉</Empty>
+          <Empty>No open reports about users, messages or concerts. 🎉</Empty>
         ) : (
           <ul className="divide-y-2 divide-black/10">
             {userReports.map((r) => {
@@ -117,12 +120,12 @@ const ReportsPanel: React.FC<{ onChanged?: () => void }> = ({ onChanged }) => {
                 <li key={r.id} className="px-4 py-4 space-y-2">
                   <div className="flex flex-wrap items-center gap-1.5 text-sm">
                     <Tag className="bg-red-300">{reasonLabel(r.reason)}</Tag>
-                    <Tag>{r.messageId ? 'Message' : 'User'}</Tag>
+                    <Tag>{r.concertId ? 'Concert' : r.messageId ? 'Message' : 'User'}</Tag>
                     {r.reported?.suspendedAt && <Tag className="bg-gray-300">Suspended</Tag>}
                     {r.reportCountForUser > 1 && <Tag className="bg-orange-300">{r.reportCountForUser} open reports</Tag>}
                   </div>
                   <p className="text-sm text-black">
-                    {r.messageId ? 'Message from ' : 'Reported user '}
+                    {r.concertId ? 'Concert listed by ' : r.messageId ? 'Message from ' : 'Reported user '}
                     <a href={`/profile/${r.reported?.id ?? ''}`} className="font-bold underline">@{r.reported?.username ?? 'deleted user'}</a>
                   </p>
                   {r.messageId && (
@@ -130,12 +133,42 @@ const ReportsPanel: React.FC<{ onChanged?: () => void }> = ({ onChanged }) => {
                       {r.messageExcerpt ?? <span className="italic text-black/40">Message text unavailable</span>}
                     </blockquote>
                   )}
+                  {r.concert && (
+                    <div className="border-2 border-black rounded-lg bg-violet-100 px-3 py-2 text-sm space-y-0.5">
+                      <p className="flex items-center gap-1.5 font-bold text-black">
+                        <Ticket size={14} className="flex-shrink-0" /> {r.concert.title}
+                      </p>
+                      <p className="text-black/70">
+                        {[
+                          r.concert.date && new Date(r.concert.date).toLocaleDateString(undefined, { timeZone: 'UTC' }),
+                          r.concert.venue,
+                          r.concert.location,
+                        ].filter(Boolean).join(' · ')}
+                      </p>
+                      {r.concert.ticketUrl && (
+                        <a
+                          href={r.concert.ticketUrl}
+                          target="_blank"
+                          rel="noopener noreferrer nofollow"
+                          className="block underline text-violet-800 break-all"
+                        >
+                          {r.concert.ticketUrl}
+                        </a>
+                      )}
+                      {r.concert.description && <p className="text-black/60 line-clamp-3">{r.concert.description}</p>}
+                    </div>
+                  )}
                   {r.details && <p className="text-sm text-black/70">“{r.details}”</p>}
                   <p className="text-xs text-black/50">Reported by @{r.reporter?.username ?? 'deleted user'} · {timeAgo(r.createdAt)}</p>
                   <div className="flex flex-wrap gap-2 pt-1">
                     <BrutalButton size="sm" tone="white" disabled={busy} onClick={() => resolveUser(r, 'dismiss')}>
                       <X size={14} /> Dismiss
                     </BrutalButton>
+                    {r.concertId && (
+                      <BrutalButton size="sm" tone="white" disabled={busy} onClick={() => resolveUser(r, 'remove_concert')}>
+                        <CalendarX size={14} /> Remove listing
+                      </BrutalButton>
+                    )}
                     {r.messageId && (
                       <BrutalButton size="sm" tone="white" disabled={busy} onClick={() => resolveUser(r, 'remove_message')}>
                         <MessageSquareX size={14} /> Remove message
