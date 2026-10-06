@@ -197,7 +197,8 @@ module.exports = async (req, res) => {
     if (rawArtist !== undefined && (typeof rawArtist !== 'string' || rawArtist.length > 200)) {
       return res.status(400).json({ error: 'Invalid artist' });
     }
-    if (rawHash !== undefined && (typeof rawHash !== 'string' || rawHash.length > 128)) {
+    // null = no hash (the mobile app can't compute one); same as leaving it out.
+    if (rawHash != null && (typeof rawHash !== 'string' || rawHash.length > 128)) {
       return res.status(400).json({ error: 'Invalid hash' });
     }
 
